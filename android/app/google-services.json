@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "240906268187",
+    "project_id": "app-do-fut",
+    "storage_bucket": "app-do-fut.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:240906268187:android:c95ad5df55c497c73f12be",
+        "android_client_info": {
+          "package_name": "com.example.app_do_fut"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2Nk0kxwN2lqUoqKHBogqPkQ5fFsfKS4w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

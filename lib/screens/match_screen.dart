@@ -1,0 +1,1470 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:app_do_fut/screens/ranking_screen.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+
+// --- WIDGET IMPORTS ---
+import '../widgets/match/match_scoreboard.dart';
+import '../widgets/match/player_field_slot.dart';
+import '../widgets/match/waitlist_card.dart';
+
+class MatchScreen extends StatefulWidget {
+  final String tournamentName;
+  final String tournamentId;
+
+  const MatchScreen({super.key, required this.tournamentId, required this.tournamentName});
+
+  @override
+  State<MatchScreen> createState() => _MatchScreenState();
+}
+
+class _MatchScreenState extends State<MatchScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  // --- DATA ---
+  List<Map<String, dynamic>> allSavedPlayers = [];
+  List<Map<String, dynamic>> presentPlayers = [];
+
+  // Teams (Now 4 players max)
+  List<Map<String, dynamic>> teamRed = [];
+  List<Map<String, dynamic>> teamWhite = [];
+
+  // Match State
+  int scoreRed = 0;
+  int scoreWhite = 0;
+  int totalPlayers = 4;
+  bool isMatchRunning = false;
+  bool isOvertime = false;
+  Timer? _matchTimer;
+
+  // Timer Variables
+  int _secondsPlayedBeforePause = 0;
+  DateTime? _lastStartTime;
+
+  // Getter to calculate total time live
+  int get totalSecondsElapsed {
+    // FIX: If the match is not running, strictly return the paused time.
+    if (!isMatchRunning || _lastStartTime == null) {
+      return _secondsPlayedBeforePause;
+    }
+    return _secondsPlayedBeforePause +
+        DateTime.now().difference(_lastStartTime!).inSeconds;
+  }
+
+  // Match Events Log
+  List<Map<String, dynamic>> matchEvents = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+    });
+    _loadMatchState();
+  }
+
+  @override
+  void dispose() {
+    _matchTimer?.cancel();
+    _tabController.dispose();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  // --- GETTERS ---
+  bool get _isReadyToStart {
+    return teamRed.length == totalPlayers && teamWhite.length == totalPlayers;
+  }
+
+  String _formatTime(int totalSeconds) {
+    int min = totalSeconds ~/ 60;
+    int sec = totalSeconds % 60;
+    return "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
+  }
+
+  // --- PERSISTENCE ---
+
+  Future<void> _saveMatchState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String id = widget.tournamentId; // Helper variable
+
+    await prefs.setString('present_players_$id', jsonEncode(presentPlayers));
+    await prefs.setString('team_red_$id', jsonEncode(teamRed));
+    await prefs.setString('team_white_$id', jsonEncode(teamWhite));
+    await prefs.setInt('score_red_$id', scoreRed);
+    await prefs.setInt('score_white_$id', scoreWhite);
+    await prefs.setString('match_events_$id', jsonEncode(matchEvents));
+    await prefs.setBool('is_overtime_$id', isOvertime);
+    await prefs.setInt('seconds_played_$id', _secondsPlayedBeforePause);
+    await prefs.setBool('is_running_$id', isMatchRunning);
+
+    if (_lastStartTime != null) {
+      await prefs.setString(
+        'start_timestamp_$id',
+        _lastStartTime!.toIso8601String(),
+      );
+    } else {
+      await prefs.remove('start_timestamp_$id');
+    }
+  }
+
+Future<void> _loadMatchState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String id = widget.tournamentId;
+
+    // GLOBAL DATABASE (No ID attached)
+    final String? dbData = prefs.getString('players_key');
+    if (dbData != null) {
+      allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
+    }
+
+    setState(() {
+      // TOURNAMENT SPECIFIC DATA (ID Attached)
+      if (prefs.containsKey('present_players_$id')) presentPlayers = List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('present_players_$id')!));
+      if (prefs.containsKey('team_red_$id')) teamRed = List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('team_red_$id')!));
+      if (prefs.containsKey('team_white_$id')) teamWhite = List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('team_white_$id')!));
+      if (prefs.containsKey('match_events_$id')) matchEvents = List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('match_events_$id')!));
+
+      scoreRed = prefs.getInt('score_red_$id') ?? 0;
+      scoreWhite = prefs.getInt('score_white_$id') ?? 0;
+      isOvertime = prefs.getBool('is_overtime_$id') ?? false;
+      _secondsPlayedBeforePause = prefs.getInt('seconds_played_$id') ?? 0;
+      isMatchRunning = prefs.getBool('is_running_$id') ?? false;
+
+      String? stamp = prefs.getString('start_timestamp_$id');
+      _lastStartTime = stamp != null ? DateTime.parse(stamp) : null;
+
+      if (isMatchRunning && _lastStartTime != null) {
+        _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          setState(() {
+            if (totalSecondsElapsed >= 480 && !isOvertime) {
+              isOvertime = true;
+              try { _audioPlayer.play(AssetSource('audio/end.mp3')); } catch (e) {}
+            }
+          });
+        });
+      }
+    });
+  }
+  // --- MATCH LOGIC ---
+
+  void _startMatch() async {
+    if (isMatchRunning) return;
+
+    setState(() {
+      isMatchRunning = true;
+      _lastStartTime = DateTime.now();
+    });
+
+    try {
+      await _audioPlayer.play(AssetSource('audio/start.mp3'));
+    } catch (e) {
+      debugPrint("Audio error: $e");
+    }
+
+    _saveMatchState();
+
+    _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        if (totalSecondsElapsed >= 480 && !isOvertime) {
+          isOvertime = true;
+          try {
+            _audioPlayer.play(AssetSource('audio/end.mp3'));
+          } catch (e) {}
+        }
+      });
+    });
+  }
+
+  void _pauseMatch() {
+    _matchTimer?.cancel();
+    setState(() {
+      isMatchRunning = false;
+      if (_lastStartTime != null) {
+        _secondsPlayedBeforePause += DateTime.now()
+            .difference(_lastStartTime!)
+            .inSeconds;
+        _lastStartTime = null;
+      }
+    });
+    _saveMatchState();
+  }
+
+  void _requestStopMatch() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: Text("Atenção", style: TextStyle(color: AppColors.textWhite)),
+        content: const Text(
+          "Deseja realmente finalizar a partida?",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              "Cancelar",
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _finishMatch();
+            },
+            child: const Text(
+              "Finalizar",
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateScore(bool isRed, int delta) {
+    setState(() {
+      if (isRed)
+        scoreRed = max(0, scoreRed + delta);
+      else
+        scoreWhite = max(0, scoreWhite + delta);
+    });
+
+    if (isMatchRunning && (scoreRed >= 3 || scoreWhite >= 3)) {
+      _requestStopMatch();
+    } else {
+      _saveMatchState();
+    }
+  }
+
+  // --- TEAM MANAGEMENT LOGIC ---
+
+  void _sortearTeams() {
+    if (presentPlayers.length < 2) return;
+
+    setState(() {
+      List<Map<String, dynamic>> pool = List.from(presentPlayers);
+      pool.shuffle(Random());
+
+      teamRed.clear();
+      teamWhite.clear();
+
+      for (int i = 0; i < totalPlayers && pool.isNotEmpty; i++)
+        teamRed.add(pool.removeAt(0));
+      for (int i = 0; i < totalPlayers && pool.isNotEmpty; i++)
+        teamWhite.add(pool.removeAt(0));
+    });
+    _saveMatchState();
+  }
+
+  void _addToTeam(Map<String, dynamic> player, bool isRedTeam) {
+    List<Map<String, dynamic>> target = isRedTeam ? teamRed : teamWhite;
+    List<Map<String, dynamic>> other = isRedTeam ? teamWhite : teamRed;
+
+    setState(() {
+      if (target.any((p) => p['name'] == player['name']) ||
+          other.any((p) => p['name'] == player['name'])) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("${player['name']} já está jogando!")),
+        );
+        return;
+      }
+      if (target.length >= totalPlayers) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("O time já está cheio (Máx 4)!")),
+        );
+        return;
+      }
+      target.add(player);
+    });
+    _saveMatchState();
+  }
+
+  void _removePlayerFromMatch(Map<String, dynamic> player) {
+    setState(() {
+      teamRed.removeWhere((p) => p['name'] == player['name']);
+      teamWhite.removeWhere((p) => p['name'] == player['name']);
+    });
+    _saveMatchState();
+  }
+
+  void _addPlayersToArrivalList(List<Map<String, dynamic>> selected) {
+    setState(() {
+      for (var p in selected) {
+        if (!presentPlayers.any((e) => e['name'] == p['name'])) {
+          presentPlayers.add(p);
+        }
+      }
+    });
+    _saveMatchState();
+  }
+
+  void _clearList() {
+    _matchTimer?.cancel(); // FIX: Kill any ghost timer running in background
+
+    setState(() {
+      presentPlayers.clear();
+      teamRed.clear();
+      teamWhite.clear();
+      scoreRed = 0;
+      scoreWhite = 0;
+      _secondsPlayedBeforePause = 0;
+      _lastStartTime = null;
+      isMatchRunning = false;
+      isOvertime = false;
+      matchEvents.clear();
+    });
+    _saveMatchState();
+  }
+
+  // --- UI BUILDERS ---
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.deepBlue,
+      appBar: AppBar(
+        backgroundColor: AppColors.headerBlue,
+        iconTheme: IconThemeData(color: AppColors.textWhite),
+        title: Text(
+          widget.tournamentName,
+          style: TextStyle(color: AppColors.textWhite),
+        ),
+        centerTitle: true,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.leaderboard, color: Colors.amber),
+            tooltip: "Ranking",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RankingScreen(tournamentId: widget.tournamentId,)),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          MatchScoreboard(
+            scoreRed: scoreRed,
+            scoreWhite: scoreWhite,
+            timeString: _formatTime(totalSecondsElapsed),
+            isMatchRunning: isMatchRunning,
+            isOvertime: isOvertime,
+            isReadyToStart: _isReadyToStart,
+            redTeamRating: _calculateTeamRating(teamRed),
+            whiteTeamRating: _calculateTeamRating(teamWhite),
+            onUpdateScore: _updateScore,
+            onStart: _startMatch,
+            onPause: _pauseMatch,
+            onStop: _requestStopMatch,
+          ),
+
+          // --- NEW: GOAL SCORERS LIST ---
+          _buildGoalScorers(),
+
+          Container(
+            color: AppColors.headerBlue,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.accentBlue,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: AppColors.accentBlue,
+              tabs: const [
+                Tab(text: "CHEGADA"),
+                Tab(text: "PARTIDA"),
+                Tab(text: "PROXIMOS"),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOrderArrivalTab(),
+                _buildMatchTab(),
+                _buildNextTeamsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              onPressed: _showActionSheet,
+              child: Icon(Icons.add, color: AppColors.textWhite),
+            )
+          : null,
+    );
+  }
+
+  // --- GOAL SCORERS UI ---
+  Widget _buildGoalScorers() {
+    List<Widget> redScorers = [];
+    List<Widget> whiteScorers = [];
+
+    for (var ev in matchEvents) {
+      if (ev['type'] == 'goal') {
+        if (ev['team'] == 'Vermelho') {
+          redScorers.add(
+            Text(
+              "⚽ ${ev['player']} (${ev['time']})",
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        } else {
+          whiteScorers.add(
+            Text(
+              "⚽ ${ev['player']} (${ev['time']})",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }
+      } else if (ev['type'] == 'own_goal') {
+        if (ev['team'] == 'Vermelho') {
+          // Red scored own goal -> goes to White column
+          whiteScorers.add(
+            Text(
+              "⚽ ${ev['player']} (GC) (${ev['time']})",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          );
+        } else {
+          // White scored own goal -> goes to Red column
+          redScorers.add(
+            Text(
+              "⚽ ${ev['player']} (GC) (${ev['time']})",
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    if (redScorers.isEmpty && whiteScorers.isEmpty)
+      return const SizedBox.shrink();
+
+    return Container(
+      color: AppColors.headerBlue,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: redScorers,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: whiteScorers,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- TAB 1: ARRIVAL ---
+  Widget _buildOrderArrivalTab() {
+    if (presentPlayers.isEmpty) {
+      return const Center(
+        child: Text("Lista vazia.", style: TextStyle(color: Colors.white38)),
+      );
+    }
+    return ReorderableListView(
+      padding: const EdgeInsets.all(16),
+      onReorder: (oldIndex, newIndex) {
+        setState(() {
+          if (newIndex > oldIndex) newIndex -= 1;
+          final item = presentPlayers.removeAt(oldIndex);
+          presentPlayers.insert(newIndex, item);
+        });
+        _saveMatchState();
+      },
+      children: [
+        for (int i = 0; i < presentPlayers.length; i++)
+          Container(
+            key: ValueKey(presentPlayers[i]['name']),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppColors.headerBlue,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.white10,
+                foregroundColor: AppColors.textWhite,
+                child: Text("${i + 1}º"),
+              ),
+              title: Row(
+                children: [
+                  // Show stars if the rating exists
+                  // Player Name
+                  Expanded(
+                    child: Text(
+                      presentPlayers[i]['name'],
+                      style: const TextStyle(color: AppColors.textWhite),
+                      overflow: TextOverflow
+                          .ellipsis, // Prevents text overflow errors
+                    ),
+                  ),
+
+                  if (presentPlayers[i]['rating'] != null) ...[
+                    RatingBarIndicator(
+                      rating: (presentPlayers[i]['rating'] as num).toDouble(),
+                      itemBuilder: (context, index) =>
+                          const Icon(Icons.star, color: Colors.amber),
+                      itemCount: 5,
+                      itemSize: 14.0,
+                      unratedColor: Colors.white24,
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ), // Small space between stars and name
+                  ],
+                ],
+              ),
+              trailing: const Icon(Icons.more_vert, color: Colors.white24),
+              onTap: () => _showChegadaOptions(presentPlayers[i]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // --- TAB 2: MATCH ---
+  Widget _buildMatchTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: totalPlayers, // Now it loops 4 times
+            itemBuilder: (context, index) {
+              final redPlayer = (index < teamRed.length)
+                  ? teamRed[index]
+                  : null;
+              final whitePlayer = (index < teamWhite.length)
+                  ? teamWhite[index]
+                  : null;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                height: 70,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: PlayerFieldSlot(
+                        player: redPlayer,
+                        isRed: true,
+                        onTap: () {
+                          if (redPlayer == null) return;
+                          if (isMatchRunning)
+                            _showInGameOptions(redPlayer, true);
+                          else
+                            _showRemovePopup(redPlayer);
+                        },
+                      ),
+                    ),
+                    Container(
+                      width: 30,
+                      alignment: Alignment.center,
+                      child: const Text(
+                        "VS",
+                        style: TextStyle(color: Colors.grey, fontSize: 10),
+                      ),
+                    ),
+                    Expanded(
+                      child: PlayerFieldSlot(
+                        player: whitePlayer,
+                        isRed: false,
+                        onTap: () {
+                          if (whitePlayer == null) return;
+                          if (isMatchRunning)
+                            _showInGameOptions(whitePlayer, false);
+                          else
+                            _showRemovePopup(whitePlayer);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- TAB 3: NEXT TEAMS ---
+  Widget _buildNextTeamsTab() {
+    final waiting = presentPlayers.where((p) {
+      final n = p['name'];
+      bool inRed = teamRed.any((t) => t['name'] == n);
+      bool inWhite = teamWhite.any((t) => t['name'] == n);
+      return !inRed && !inWhite;
+    }).toList();
+
+    if (waiting.isEmpty) {
+      return const Center(
+        child: Text(
+          "Todos os jogadores estão jogando!",
+          style: TextStyle(color: Colors.white38),
+        ),
+      );
+    }
+
+    return ReorderableListView(
+      padding: const EdgeInsets.all(16),
+      onReorder: (oldIndex, newIndex) {
+        setState(() {
+          if (newIndex > oldIndex) newIndex -= 1;
+          final playerMoving = waiting[oldIndex];
+          presentPlayers.remove(playerMoving);
+
+          int targetMainIndex;
+          if (newIndex >= waiting.length - 1) {
+            targetMainIndex = presentPlayers.length;
+          } else {
+            final playerAtTarget = waiting[newIndex];
+            targetMainIndex = presentPlayers.indexOf(playerAtTarget);
+          }
+
+          if (targetMainIndex > presentPlayers.length)
+            targetMainIndex = presentPlayers.length;
+          presentPlayers.insert(targetMainIndex, playerMoving);
+        });
+        _saveMatchState();
+      },
+      children: [
+        for (int index = 0; index < waiting.length; index++)
+          WaitlistCard(
+            key: ValueKey(waiting[index]['name']),
+            totalPlayers: totalPlayers,
+            player: waiting[index],
+            index: index,
+            onTap: () => _showChegadaOptions(waiting[index]),
+          ),
+      ],
+    );
+  }
+
+  // --- DIALOGS ---
+
+  void _showChegadaOptions(Map<String, dynamic> player) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.deepBlue,
+      builder: (ctx) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.shield, color: Colors.redAccent),
+            title: Text(
+              "Add Vermelho",
+              style: TextStyle(color: AppColors.textWhite),
+            ),
+            onTap: () {
+              Navigator.pop(ctx);
+              _addToTeam(player, true);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.shield, color: Colors.white),
+            title: Text(
+              "Add Branco",
+              style: TextStyle(color: AppColors.textWhite),
+            ),
+            onTap: () {
+              Navigator.pop(ctx);
+              _addToTeam(player, false);
+            },
+          ),
+          const Divider(color: Colors.white24),
+          ListTile(
+            leading: const Icon(Icons.exit_to_app, color: Colors.red),
+            title: const Text(
+              "Desistiu (Remover)",
+              style: TextStyle(color: Colors.red),
+            ),
+            onTap: () => _confirmGiveUp(player),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemovePopup(Map<String, dynamic> player) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: Text("Remover?", style: TextStyle(color: AppColors.textWhite)),
+        content: Text(
+          "Tirar ${player['name']} do time?",
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            child: const Text(
+              "Cancelar",
+              style: TextStyle(color: Colors.white54),
+            ),
+            onPressed: () => Navigator.pop(c),
+          ),
+          TextButton(
+            child: const Text(
+              "Remover",
+              style: TextStyle(color: Colors.redAccent),
+            ),
+            onPressed: () {
+              _removePlayerFromMatch(player);
+              Navigator.pop(c);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmGiveUp(Map<String, dynamic> player) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: Text(
+          "Desistência",
+          style: TextStyle(color: AppColors.textWhite),
+        ),
+        content: const Text(
+          "Vai sair da lista?",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            child: const Text(
+              "Cancelar",
+              style: TextStyle(color: Colors.white54),
+            ),
+            onPressed: () => Navigator.pop(c),
+          ),
+          TextButton(
+            child: const Text(
+              "Confirmar",
+              style: TextStyle(color: Colors.redAccent),
+            ),
+            onPressed: () {
+              setState(() {
+                presentPlayers.removeWhere((p) => p['name'] == player['name']);
+                _removePlayerFromMatch(player);
+              });
+              _saveMatchState();
+              Navigator.pop(c);
+              Navigator.pop(context); // Close the BottomSheet too
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMultiSelectDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? dbData = prefs.getString('players_key');
+
+    if (dbData != null) {
+      setState(() {
+        allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
+      });
+    }
+
+    if (allSavedPlayers.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (c) => AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          title: const Text(
+            "Nenhum Jogador Cadastrado",
+            style: TextStyle(color: Colors.redAccent),
+          ),
+          content: const Text(
+            "Você precisa cadastrar jogadores na tela 'Jogadores' antes de adicioná-los à partida.",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text("OK", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    List<Map<String, dynamic>> tempSelected = [];
+    final available = allSavedPlayers
+        .where(
+          (p) => !presentPlayers.any((present) => present['name'] == p['name']),
+        )
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, st) => AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          title: Text(
+            "Adicionar Jogadores",
+            style: TextStyle(color: AppColors.textWhite),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+            child: available.isEmpty
+                ? const Center(
+                    child: Text(
+                      "Todos os jogadores já foram adicionados!",
+                      style: TextStyle(color: Colors.white54),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: available.length,
+                    itemBuilder: (c, i) => CheckboxListTile(
+                      activeColor: AppColors.accentBlue,
+                      checkColor: AppColors.textWhite,
+                      title: Text(
+                        available[i]['name'],
+                        style: TextStyle(color: AppColors.textWhite),
+                      ),
+                      value: tempSelected.contains(available[i]),
+                      onChanged: (v) => st(
+                        () => v!
+                            ? tempSelected.add(available[i])
+                            : tempSelected.remove(available[i]),
+                      ),
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text(
+                "Cancelar",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+            if (available.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  _addPlayersToArrivalList(tempSelected);
+                  Navigator.pop(c);
+                },
+                child: Text(
+                  "OK",
+                  style: TextStyle(
+                    color: AppColors.accentBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showActionSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.headerBlue,
+      builder: (c) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person_add, color: Colors.greenAccent),
+            title: Text(
+              'Adicionar',
+              style: TextStyle(color: AppColors.textWhite),
+            ),
+            onTap: () {
+              Navigator.pop(c);
+              _showMultiSelectDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.shuffle, color: Colors.orangeAccent),
+            title: Text(
+              'Sortear Linha',
+              style: TextStyle(color: AppColors.textWhite),
+            ),
+            onTap: () {
+              Navigator.pop(c);
+              _sortearTeams();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.redAccent),
+            title: Text(
+              'Limpar Tudo',
+              style: TextStyle(color: AppColors.textWhite),
+            ),
+            onTap: () {
+              Navigator.pop(c);
+              _clearList();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- IN-GAME EVENT LOGIC ---
+
+  void _handleGoal(Map<String, dynamic> player, bool isRedTeam) {
+    List<Map<String, dynamic>> teammates = isRedTeam
+        ? List.from(teamRed)
+        : List.from(teamWhite);
+    teammates.removeWhere((p) => p['name'] == player['name']);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text(
+          "Quem deu o passe?",
+          style: TextStyle(color: Colors.white),
+        ),
+        children: [
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            child: const Text(
+              "Sem Assistência / Jogada Individual",
+              style: TextStyle(color: Colors.grey),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _registerEvent("goal", player, isRedTeam, assist: null);
+            },
+          ),
+          const Divider(color: Colors.white12),
+          ...teammates
+              .map(
+                (teammate) => SimpleDialogOption(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 24,
+                  ),
+                  child: Text(
+                    teammate['name'],
+                    style: TextStyle(color: AppColors.textWhite, fontSize: 16),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _registerEvent(
+                      "goal",
+                      player,
+                      isRedTeam,
+                      assist: teammate['name'],
+                    );
+                  },
+                ),
+              )
+              .toList(),
+        ],
+      ),
+    );
+  }
+
+  void _registerEvent(
+    String type,
+    Map<String, dynamic> player,
+    bool isRedTeam, {
+    String? assist,
+  }) async {
+    try {
+      if (type == "goal")
+        await _audioPlayer.play(AssetSource('audio/goal.mp3'));
+      else if (type == "own_goal")
+        await _audioPlayer.play(AssetSource('audio/own_goal.mp3'));
+    } catch (e) {
+      debugPrint("Audio error: $e");
+    }
+
+    setState(() {
+      if (type == "goal") {
+        if (isRedTeam)
+          scoreRed++;
+        else
+          scoreWhite++;
+      } else if (type == "own_goal") {
+        if (isRedTeam)
+          scoreWhite++;
+        else
+          scoreRed++;
+      }
+
+      matchEvents.add({
+        "type": type,
+        "player": player['name'],
+        "assist": assist,
+        "team": isRedTeam ? "Vermelho" : "Branco",
+        "time": _formatTime(totalSecondsElapsed),
+      });
+    });
+
+    if (scoreRed >= 3 || scoreWhite >= 3) {
+      _handleAutomaticWin(scoreRed >= 3);
+    } else {
+      _saveMatchState();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Evento registrado!"),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showInGameOptions(Map<String, dynamic> player, bool isRedTeam) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.deepBlue,
+      builder: (ctx) {
+        return Wrap(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                "Ações para ${player['name']}",
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.sports_soccer,
+                color: Colors.greenAccent,
+              ),
+              title: Text(
+                "Fez Gol",
+                style: TextStyle(color: AppColors.textWhite),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _handleGoal(player, isRedTeam);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.error_outline, color: Colors.redAccent),
+              title: Text(
+                "Gol Contra",
+                style: TextStyle(color: AppColors.textWhite),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _registerEvent("own_goal", player, isRedTeam);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.style, color: Colors.yellowAccent),
+              title: Text(
+                "Cartão Amarelo",
+                style: TextStyle(color: AppColors.textWhite),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _registerEvent("yellow_card", player, isRedTeam);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.style, color: Colors.redAccent),
+              title: Text(
+                "Cartão Vermelho",
+                style: TextStyle(color: AppColors.textWhite),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _registerEvent("red_card", player, isRedTeam);
+              },
+            ),
+            const Divider(color: Colors.white24),
+            ListTile(
+              leading: const Icon(Icons.person_remove, color: Colors.grey),
+              title: Text(
+                "Substituir / Remover",
+                style: TextStyle(color: AppColors.textWhite),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showRemovePopup(player);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // --- END GAME LOGIC ---
+
+  void _finishMatch() async {
+    _matchTimer?.cancel();
+
+    final Map<String, dynamic> matchRecord = {
+      "match_id": DateTime.now().millisecondsSinceEpoch.toString(),
+      "date": DateTime.now().toIso8601String(),
+      "match_duration": _formatTime(totalSecondsElapsed),
+      "scoreRed": scoreRed,
+      "scoreWhite": scoreWhite,
+      "events": matchEvents,
+      "players": {"red": teamRed, "white": teamWhite},
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    final String historyKey = 'match_history_${widget.tournamentId}'; // --- NEW ---
+    
+    List<dynamic> history = prefs.containsKey(historyKey) ? jsonDecode(prefs.getString(historyKey)!) : [];
+    history.add(matchRecord);
+    await prefs.setString(historyKey, jsonEncode(history)); // --- NEW ---
+
+    List<Map<String, dynamic>> leavers = [];
+    bool isTie = scoreRed == scoreWhite;
+
+    if (!isTie) {
+      bool redWon = scoreRed > scoreWhite;
+      _playVictorySound();
+      if (redWon)
+        leavers.addAll(teamWhite);
+      else
+        leavers.addAll(teamRed);
+      _processMatchExit(leavers);
+    } else {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          title: const Text("Empate!", style: TextStyle(color: Colors.white)),
+          content: const Text(
+            "Quem roda (sai)?",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              child: const Text(
+                "Vermelho",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _processMatchExit(List.from(teamRed));
+              },
+            ),
+            TextButton(
+              child: const Text(
+                "Branco",
+                style: TextStyle(color: Colors.white),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _processMatchExit(List.from(teamWhite));
+              },
+            ),
+            TextButton(
+              child: const Text(
+                "Ambos",
+                style: TextStyle(color: Colors.orangeAccent),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                List<Map<String, dynamic>> l = [];
+                l.addAll(teamRed);
+                l.addAll(teamWhite);
+                _processMatchExit(l);
+              },
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _processMatchExit(List<Map<String, dynamic>> leavers) {
+    setState(() {
+      for (var p in leavers) {
+        int index = presentPlayers.indexWhere(
+          (element) => element['name'] == p['name'],
+        );
+        if (index != -1) {
+          var player = presentPlayers.removeAt(index);
+          presentPlayers.add(player);
+        }
+      }
+
+      List<Map<String, dynamic>> entering = [];
+      int needed = leavers.length;
+
+      for (var p in presentPlayers) {
+        if (entering.length >= needed) break;
+        final n = p['name'];
+        bool inRed = teamRed.any((t) => t['name'] == n);
+        bool inWhite = teamWhite.any((t) => t['name'] == n);
+
+        if (!inRed && !inWhite) entering.add(p);
+      }
+
+      teamRed.removeWhere((p) => leavers.any((l) => l['name'] == p['name']));
+      teamWhite.removeWhere((p) => leavers.any((l) => l['name'] == p['name']));
+
+      List<Map<String, dynamic>> pool = List.from(entering);
+
+      while (teamRed.length < totalPlayers && pool.isNotEmpty)
+        teamRed.add(pool.removeAt(0));
+      while (teamWhite.length < totalPlayers && pool.isNotEmpty)
+        teamWhite.add(pool.removeAt(0));
+
+      // --- RESET MATCH DATA ---
+      isMatchRunning = false;
+      isOvertime = false;
+      scoreRed = 0;
+      scoreWhite = 0;
+      matchEvents.clear();
+
+      // --- FIX: RESET THE TIMER HERE ---
+      _secondsPlayedBeforePause = 0;
+      _lastStartTime = null;
+      // ---------------------------------
+
+      _saveMatchState();
+      _showLeaversPopup(leavers, entering);
+    });
+  }
+
+  void _showLeaversPopup(
+    List<Map<String, dynamic>> leavers,
+    List<Map<String, dynamic>> entering,
+  ) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.deepBlue,
+        title: const Text(
+          "Saindo de Campo",
+          style: TextStyle(color: Colors.redAccent),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: leavers.length,
+            itemBuilder: (c, i) => ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.arrow_downward,
+                color: Colors.redAccent,
+              ),
+              title: Text(
+                leavers[i]['name'],
+                style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white24),
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (entering.isNotEmpty) _showEnteringPlayersPopup(entering);
+            },
+            child: const Text(
+              "Ver Quem Entrou >>",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _playVictorySound() async {
+    List<String> sounds = [
+      'audio/vitoria1.mp3',
+      'audio/vitoria2.mp3',
+      'audio/vitoria3.mp3',
+    ];
+    String randomSound = sounds[Random().nextInt(sounds.length)];
+    try {
+      await _audioPlayer.play(AssetSource(randomSound));
+    } catch (e) {
+      debugPrint("Victory sound error: $e");
+    }
+  }
+
+  void _handleAutomaticWin(bool redWon) {
+    _matchTimer?.cancel(); // Stop timer immediately
+
+    // FIX: Properly freeze the time exactly when the 3rd goal happens
+    setState(() {
+      isMatchRunning = false;
+      if (_lastStartTime != null) {
+        _secondsPlayedBeforePause += DateTime.now()
+            .difference(_lastStartTime!)
+            .inSeconds;
+        _lastStartTime = null;
+      }
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must click button
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text(
+          "Fim de Jogo!",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events, color: Colors.amber, size: 60),
+            const SizedBox(height: 16),
+            Text(
+              redWon ? "Vitória do VERMELHO!" : "Vitória do BRANCO!",
+              style: TextStyle(
+                color: redWon ? Colors.redAccent : AppColors.textWhite,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Placar Final: $scoreRed x $scoreWhite",
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Close Win Dialog
+              _finishMatch(); // TRIGGER THE NEW FLOW
+            },
+            child: const Text(
+              "Finalizar e Salvar",
+              style: TextStyle(
+                color: AppColors.accentBlue,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEnteringPlayersPopup(List<Map<String, dynamic>> entering) {
+    if (entering.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.deepBlue,
+        title: const Text(
+          "Entrando em Campo",
+          style: TextStyle(color: Colors.greenAccent),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: entering.length,
+            itemBuilder: (c, i) => ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.arrow_upward,
+                color: Colors.greenAccent,
+              ),
+              title: Text(
+                entering[i]['name'],
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- NEW: Calculate Team Average Rating ---
+  double _calculateTeamRating(List<Map<String, dynamic>> team) {
+    if (team.isEmpty) return 0.0;
+
+    double totalStars = 0.0;
+    for (var player in team) {
+      // Safely get the rating, default to 0 if null
+      double rating = player['rating'] != null
+          ? (player['rating'] as num).toDouble()
+          : 0.0;
+      totalStars += rating;
+    }
+
+    return totalStars / team.length;
+  }
+}
