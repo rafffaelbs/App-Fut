@@ -113,7 +113,7 @@ class TournamentScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (c) =>
-                            HistoryScreen(tournamentId: tournamentId),
+                            HistoryScreen(tournamentId: tournamentId, groupId: groupId,),
                       ),
                     );
                   } else {

@@ -17,8 +17,8 @@ class PlayerFieldSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPlayer = player != null;
     final iconPath = hasPlayer ? player!['icon'] as String? : null;
-    final rating = hasPlayer && player!['rating'] != null 
-        ? (player!['rating'] as num).toDouble() 
+    final rating = hasPlayer && player!['rating'] != null
+        ? (player!['rating'] as num).toDouble()
         : 0.0;
 
     return GestureDetector(
@@ -26,13 +26,15 @@ class PlayerFieldSlot extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: hasPlayer 
-              ? (isRed ? Colors.red.withOpacity(0.1) : Colors.white.withOpacity(0.1)) 
+          color: hasPlayer
+              ? (isRed
+                    ? Colors.black.withOpacity(0.5)
+                    : Colors.white.withOpacity(0.25))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: hasPlayer 
-                ? (isRed ? Colors.redAccent.withOpacity(0.5) : Colors.white54)
+            color: hasPlayer
+                ? (isRed ? Colors.grey.withOpacity(0.5) : Colors.white54)
                 : Colors.white12,
             style: hasPlayer ? BorderStyle.solid : BorderStyle.none,
           ),
@@ -42,18 +44,21 @@ class PlayerFieldSlot extends StatelessWidget {
             // --- PLAYER ICON / AVATAR ---
             CircleAvatar(
               radius: 18,
-              backgroundColor: hasPlayer 
-                  ? (isRed ? Colors.red.withOpacity(0.3) : Colors.white24) 
+              backgroundColor: hasPlayer
+                  ? (isRed ? Colors.white.withOpacity(0.3) : Colors.white24)
                   : Colors.black12,
               backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
-              child: !hasPlayer 
-                  ? const Icon(Icons.add, color: Colors.white24) 
-                  : (iconPath == null 
-                      ? Icon(Icons.person, color: isRed ? Colors.redAccent : Colors.white) 
-                      : null),
+              child: !hasPlayer
+                  ? const Icon(Icons.add, color: Colors.white24)
+                  : (iconPath == null
+                        ? Icon(
+                            Icons.person,
+                            color: isRed ? Colors.black : Colors.white,
+                          )
+                        : null),
             ),
             const SizedBox(width: 8),
-            
+
             // --- NAME AND RATING ---
             Expanded(
               child: Column(
@@ -64,7 +69,9 @@ class PlayerFieldSlot extends StatelessWidget {
                     hasPlayer ? player!['name'] : "Vazio",
                     style: TextStyle(
                       color: hasPlayer ? AppColors.textWhite : Colors.white38,
-                      fontWeight: hasPlayer ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: hasPlayer
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       fontSize: 13,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -72,7 +79,11 @@ class PlayerFieldSlot extends StatelessWidget {
                   if (hasPlayer && rating > 0)
                     Text(
                       "OVR: ${rating.toStringAsFixed(1)}",
-                      style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.amber,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                 ],
               ),

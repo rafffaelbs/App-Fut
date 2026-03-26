@@ -1,6 +1,5 @@
 # app_do_fut
 
-- Adicionar opção de Editar histórico
-- Melhorar a questao do elenco
-- Adicionar icones de jogadores
-- Mudar a questao das estrelinhas
+- Mudar o calculo das notas
+- Adicionar um batch com os jogadores das proximas partidas
+- Ao remover alguem da partida coloca-lo em ultimo lugar na lista de espera

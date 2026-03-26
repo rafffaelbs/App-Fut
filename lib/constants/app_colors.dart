@@ -6,5 +6,7 @@ class AppColors {
   static const accentBlue = Color(0xff0E6BA8);
   static const highlightBlue = Color(0xff0598fa);
   static const textWhite = Color(0xffe0e1dd);
-  static const highlightGreen = Color(0xff00FF85); // Bright Green
+  static const highlightGreen = Color(0xff00FF85);
+
+  static Color? get Twhite => null; // Bright Green
 }

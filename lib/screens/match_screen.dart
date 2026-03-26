@@ -336,6 +336,15 @@ class _MatchScreenState extends State<MatchScreen>
     setState(() {
       teamRed.removeWhere((p) => p['name'] == player['name']);
       teamWhite.removeWhere((p) => p['name'] == player['name']);
+
+      // Move player to the END of presentPlayers list (queue behavior)
+      final playerIndex = presentPlayers.indexWhere(
+        (p) => p['name'] == player['name'],
+      );
+      if (playerIndex != -1) {
+        final playerData = presentPlayers.removeAt(playerIndex);
+        presentPlayers.add(playerData);
+      }
     });
     _saveMatchState();
   }
@@ -430,7 +439,7 @@ class _MatchScreenState extends State<MatchScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.deepBlue,
+      backgroundColor: Color(0xff010a3b),
       appBar: AppBar(
         backgroundColor: AppColors.headerBlue,
         iconTheme: const IconThemeData(color: AppColors.textWhite),
@@ -614,22 +623,35 @@ class _MatchScreenState extends State<MatchScreen>
                 children: [
                   CircleAvatar(
                     backgroundColor: AppColors.deepBlue,
-                    backgroundImage: presentPlayers[i]['icon'] != null 
-                        ? AssetImage(presentPlayers[i]['icon']) 
+                    backgroundImage: presentPlayers[i]['icon'] != null
+                        ? AssetImage(presentPlayers[i]['icon'])
                         : null,
-                    child: presentPlayers[i]['icon'] == null 
+                    child: presentPlayers[i]['icon'] == null
                         ? Text(
-                            presentPlayers[i]['name'][0].toUpperCase(), 
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                          ) 
+                            presentPlayers[i]['name'][0].toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
                         : null,
                   ),
                   // Small number showing their arrival position
                   Container(
                     padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(color: AppColors.accentBlue, shape: BoxShape.circle),
-                    child: Text("${i + 1}", style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
-                  )
+                    decoration: const BoxDecoration(
+                      color: AppColors.accentBlue,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      "${i + 1}",
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ],
               ),
               title: Row(
@@ -637,22 +659,36 @@ class _MatchScreenState extends State<MatchScreen>
                   Expanded(
                     child: Text(
                       presentPlayers[i]['name'],
-                      style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textWhite,
+                        fontWeight: FontWeight.bold,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   // --- UPDATED: 10-POINT RATING BADGE ---
                   if (presentPlayers[i]['rating'] != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.withOpacity(0.3))
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.3),
+                        ),
                       ),
                       child: Text(
-                        (presentPlayers[i]['rating'] as num).toDouble().toStringAsFixed(1),
-                        style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                        (presentPlayers[i]['rating'] as num)
+                            .toDouble()
+                            .toStringAsFixed(1),
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                 ],
@@ -752,11 +788,9 @@ class _MatchScreenState extends State<MatchScreen>
                   child: Container(
                     height: 50,
                     decoration: BoxDecoration(
-                      color: AppColors.headerBlue,
+                      color: Colors.black.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.5),
-                      ),
+                      border: Border.all(color: Colors.grey.withOpacity(0.5)),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -770,7 +804,7 @@ class _MatchScreenState extends State<MatchScreen>
                         Text(
                           "Goleiro",
                           style: TextStyle(
-                            color: Colors.redAccent,
+                            color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -799,9 +833,9 @@ class _MatchScreenState extends State<MatchScreen>
                   child: Container(
                     height: 50,
                     decoration: BoxDecoration(
-                      color: AppColors.headerBlue,
+                      color: Colors.white.withOpacity(0.25),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.5)),
+                      border: Border.all(color: Colors.white54),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -852,6 +886,9 @@ class _MatchScreenState extends State<MatchScreen>
       );
     }
 
+    // Calculate team size (both teams combined)
+    final int teamSize = widget.totalPlayers;
+
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
       onReorder: (oldIndex, newIndex) {
@@ -874,16 +911,359 @@ class _MatchScreenState extends State<MatchScreen>
         });
         _saveMatchState();
       },
-      children: [
-        for (int index = 0; index < waiting.length; index++)
-          WaitlistCard(
-            key: ValueKey(waiting[index]['name']),
-            player: waiting[index],
-            index: index,
-            totalPlayers: widget.totalPlayers,
-            onTap: () => _showChegadaOptions(waiting[index]),
+      children: _buildIndividualPlayerCards(waiting, teamSize),
+    );
+  }
+
+  List<Widget> _buildIndividualPlayerCards(
+    List<Map<String, dynamic>> waiting,
+    int teamSize,
+  ) {
+    final List<Widget> cards = [];
+    final int numCompleteTeams = waiting.length ~/ teamSize;
+    final int remainingPlayers = waiting.length % teamSize;
+
+    // Build cards for complete teams
+    for (int teamIndex = 0; teamIndex < numCompleteTeams; teamIndex++) {
+      final int startIndex = teamIndex * teamSize;
+      final bool isFirstTeam = teamIndex == 0;
+
+      for (int i = 0; i < teamSize; i++) {
+        final playerIndex = startIndex + i;
+        final isFirstPlayerInTeam = i == 0;
+        final isLastPlayerInTeam = i == teamSize - 1;
+
+        cards.add(
+          _buildIndividualPlayerCard(
+            waiting[playerIndex],
+            playerIndex,
+            isFirstTeam: isFirstTeam,
+            isFirstPlayerInTeam: isFirstPlayerInTeam,
+            isLastPlayerInTeam: isLastPlayerInTeam,
+            teamBatch: teamIndex + 1,
           ),
-      ],
+        );
+      }
+    }
+
+    // Build cards for remaining players
+    if (remainingPlayers > 0) {
+      final int startIndex = numCompleteTeams * teamSize;
+      for (int i = 0; i < remainingPlayers; i++) {
+        final playerIndex = startIndex + i;
+        cards.add(
+          _buildIndividualPlayerCard(
+            waiting[playerIndex],
+            playerIndex,
+            isFirstTeam: false,
+            isFirstPlayerInTeam: false,
+            isLastPlayerInTeam: false,
+            teamBatch: numCompleteTeams + 1,
+          ),
+        );
+      }
+    }
+
+    return cards;
+  }
+
+  Widget _buildIndividualPlayerCard(
+    Map<String, dynamic> player,
+    int index, {
+    required bool isFirstTeam,
+    required bool isFirstPlayerInTeam,
+    required bool isLastPlayerInTeam,
+    required int teamBatch,
+  }) {
+    final iconPath = player['icon'] as String?;
+    final rating = player['rating'] != null
+        ? (player['rating'] as num).toDouble()
+        : 0.0;
+
+    // Calculate margins to create visual team grouping
+    final EdgeInsets margin = EdgeInsets.only(
+      bottom: isLastPlayerInTeam ? 16 : 4,
+      top: isFirstPlayerInTeam ? (isFirstTeam ? 0 : 8) : 0,
+    );
+
+    return Container(
+      key: ValueKey(player['name']),
+      margin: margin,
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isFirstTeam
+              ? AppColors.accentBlue.withOpacity(0.5)
+              : Colors.white.withOpacity(0.05),
+          width: isFirstTeam ? 2 : 1,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        leading: Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            CircleAvatar(
+              backgroundColor: isFirstTeam
+                  ? AppColors.accentBlue.withOpacity(0.2)
+                  : AppColors.deepBlue,
+              backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
+              child: iconPath == null
+                  ? Text(
+                      player['name'][0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            if (isFirstPlayerInTeam && isFirstTeam)
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: AppColors.accentBlue,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.people, size: 10, color: Colors.white),
+              ),
+          ],
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isFirstTeam
+                    ? AppColors.accentBlue.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                "${index + 1}",
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isFirstTeam ? AppColors.accentBlue : Colors.white54,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                player['name'],
+                style: TextStyle(
+                  color: isFirstTeam ? Colors.white : Colors.white70,
+                  fontWeight: isFirstTeam ? FontWeight.bold : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (rating > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Text(
+                  rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        trailing: const Icon(Icons.drag_handle, color: Colors.white24),
+        onTap: () => _showChegadaOptions(player),
+      ),
+    );
+  }
+
+  List<Widget> _buildTeamBlocks(
+    List<Map<String, dynamic>> waiting,
+    int teamSize,
+  ) {
+    final List<Widget> blocks = [];
+    final int numCompleteTeams = waiting.length ~/ teamSize;
+    final int remainingPlayers = waiting.length % teamSize;
+
+    // Build complete team blocks
+    for (int teamIndex = 0; teamIndex < numCompleteTeams; teamIndex++) {
+      final int startIndex = teamIndex * teamSize;
+      final bool isFirstTeam = teamIndex == 0;
+
+      blocks.add(
+        Container(
+          key: ValueKey('team_block_$teamIndex'),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: isFirstTeam
+                ? AppColors.accentBlue.withOpacity(0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isFirstTeam
+                  ? AppColors.accentBlue.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.05),
+              width: isFirstTeam ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isFirstTeam)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentBlue.withOpacity(0.2),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(10),
+                      topRight: Radius.circular(10),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.people, color: AppColors.accentBlue, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        "Próximo Time",
+                        style: TextStyle(
+                          color: AppColors.accentBlue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: List.generate(teamSize, (i) {
+                    final playerIndex = startIndex + i;
+                    return _buildPlayerCard(waiting[playerIndex], playerIndex);
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Build remaining players block (if any)
+    if (remainingPlayers > 0) {
+      final int startIndex = numCompleteTeams * teamSize;
+      blocks.add(
+        Container(
+          key: ValueKey('team_block_remaining'),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.05), width: 1),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: List.generate(remainingPlayers, (i) {
+                final playerIndex = startIndex + i;
+                return _buildPlayerCard(waiting[playerIndex], playerIndex);
+              }),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return blocks;
+  }
+
+  Widget _buildPlayerCard(Map<String, dynamic> player, int index) {
+    final iconPath = player['icon'] as String?;
+    final rating = player['rating'] != null
+        ? (player['rating'] as num).toDouble()
+        : 0.0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.deepBlue,
+          backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
+          child: iconPath == null
+              ? Text(
+                  player['name'][0].toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : null,
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppColors.accentBlue.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                "${index + 1}",
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.accentBlue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                player['name'],
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (rating > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Text(
+                  rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        trailing: const Icon(Icons.more_vert, color: Colors.white24),
+        onTap: () => _showChegadaOptions(player),
+      ),
     );
   }
 

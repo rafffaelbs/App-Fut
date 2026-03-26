@@ -20,30 +20,42 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   // All available player icon assets
   static const List<String> _availableIcons = [
-    'assets/players_icons/pele.webp',
-    'assets/players_icons/maradona.webp',
-    'assets/players_icons/gullit.webp',
-    'assets/players_icons/courtois.webp',
-    'assets/players_icons/pique.webp',
-    'assets/players_icons/cr7.webp',
-    'assets/players_icons/ibra.webp',
-    'assets/players_icons/drogba.webp',
-    'assets/players_icons/puyol.webp',
-    'assets/players_icons/dybala.webp',
-    'assets/players_icons/kroos.webp',
-    'assets/players_icons/ramos.webp',
-    'assets/players_icons/love.png',
-    'assets/players_icons/ribery.webp',
-    'assets/players_icons/maldini.webp',
-    'assets/players_icons/ronaldinho.webp',
-    'assets/players_icons/seedorf.webp',
-    'assets/players_icons/messi.webp',
-    'assets/players_icons/neymar.webp',
-    'assets/players_icons/zidane.webp',
-    'assets/players_icons/vini.webp',
-    'assets/players_icons/pogba.webp',
+    'assets/players_icons/adriano.png',
+    'assets/players_icons/arrascaeta.png',
+    'assets/players_icons/balota.png',
     'assets/players_icons/bellingham.webp',
-    'assets/players_icons/iniesta.webp',
+    'assets/players_icons/courtois.png',
+    'assets/players_icons/cr7.png',
+    'assets/players_icons/depay.png',
+    'assets/players_icons/drogba.png',
+    'assets/players_icons/dybala.png',
+    'assets/players_icons/gullit.png',
+    'assets/players_icons/ibra.png',
+    'assets/players_icons/iniesta.png',
+    'assets/players_icons/kroos.png',
+    'assets/players_icons/love.png',
+    'assets/players_icons/maldini.png',
+    'assets/players_icons/maradona.png',
+    'assets/players_icons/messi.png',
+    'assets/players_icons/modric.png',
+    'assets/players_icons/mouse_hunter.png',
+    'assets/players_icons/neuer.png',
+    'assets/players_icons/neymar.png',
+    'assets/players_icons/ozil.png',
+    'assets/players_icons/pele.png',
+    'assets/players_icons/pique.png',
+    'assets/players_icons/pogba.webp',
+    'assets/players_icons/puyol.png',
+    'assets/players_icons/ramos.png',
+    'assets/players_icons/ribery.png',
+    'assets/players_icons/robben.png',
+    'assets/players_icons/ronaldinho.png',
+    'assets/players_icons/ronaldo.png',
+    'assets/players_icons/seedorf.png',
+    'assets/players_icons/vegetti.png',
+    'assets/players_icons/vini.png',
+    'assets/players_icons/xavi.png',
+    'assets/players_icons/zidane.png',
   ];
 
   @override
@@ -136,66 +148,83 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1,
+              SizedBox(
+                height: 400, // Fixed height for the scrollable area
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: (_availableIcons.length / 4).ceil(),
+                  itemBuilder: (ctx, rowIndex) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: List.generate(4, (colIndex) {
+                          final iconIndex = rowIndex * 4 + colIndex;
+                          if (iconIndex >= _availableIcons.length) {
+                            return const Expanded(
+                              child: SizedBox(),
+                            ); // Empty placeholder
+                          }
+
+                          final path = _availableIcons[iconIndex];
+                          final bool selected = currentIcon == path;
+                          final bool isTaken = takenIcons.contains(path);
+
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: colIndex < 3 ? 12 : 0,
+                              ),
+                              child: GestureDetector(
+                                onTap: isTaken
+                                    ? null
+                                    : () {
+                                        onSelected(path);
+                                        Navigator.pop(ctx);
+                                      },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  height:
+                                      80, // Fixed height for each icon container
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: selected
+                                        ? AppColors.accentBlue.withOpacity(0.25)
+                                        : (isTaken
+                                              ? Colors.black26
+                                              : AppColors.deepBlue.withOpacity(
+                                                  0.6,
+                                                )),
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.accentBlue
+                                          : (isTaken
+                                                ? Colors.transparent
+                                                : Colors.white12),
+                                      width: selected ? 2 : 1,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Opacity(
+                                    opacity: isTaken ? 0.2 : 1.0,
+                                    child: Image.asset(
+                                      path,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.person_outline,
+                                        color: Colors.white38,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  },
                 ),
-                itemCount: _availableIcons.length,
-                itemBuilder: (ctx, i) {
-                  final path = _availableIcons[i];
-                  final bool selected = currentIcon == path;
-
-                  // --- NEW: CHECK IF THIS ICON IS UNAVAILABLE ---
-                  final bool isTaken = takenIcons.contains(path);
-
-                  return GestureDetector(
-                    // --- NEW: DISABLE CLICK IF TAKEN ---
-                    onTap: isTaken
-                        ? null
-                        : () {
-                            onSelected(path);
-                            Navigator.pop(ctx);
-                          },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        // Change background color if taken
-                        color: selected
-                            ? AppColors.accentBlue.withOpacity(0.25)
-                            : (isTaken
-                                  ? Colors.black26
-                                  : AppColors.deepBlue.withOpacity(0.6)),
-                        border: Border.all(
-                          // Remove borders for taken icons to make them look inactive
-                          color: selected
-                              ? AppColors.accentBlue
-                              : (isTaken ? Colors.transparent : Colors.white12),
-                          width: selected ? 2 : 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      // --- NEW: FADE OUT THE IMAGE IF TAKEN ---
-                      child: Opacity(
-                        opacity: isTaken ? 0.2 : 1.0,
-                        child: Image.asset(
-                          path,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.person_outline,
-                            color: Colors.white38,
-                            size: 28,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
               ),
             ],
           ),

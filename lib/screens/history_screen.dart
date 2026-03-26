@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io'; // Needed for file creation
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
@@ -8,8 +9,9 @@ import 'package:path_provider/path_provider.dart'; // Add this to pubspec if mis
 
 class HistoryScreen extends StatefulWidget {
   final String tournamentId; // We need this to load the correct history
+  final String groupId; // We need this to load the correct history
 
-  const HistoryScreen({super.key, required this.tournamentId});
+  const HistoryScreen({super.key, required this.tournamentId, required this.groupId});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -72,6 +74,87 @@ class _HistoryScreenState extends State<HistoryScreen> {
     setState(() {
       history = [];
     });
+  }
+
+  void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
+    final TextEditingController passController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text(
+          "Acesso Restrito",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: TextField(
+          controller: passController,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            //hintText: "Digite a senha (1234)",
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.white24),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.accentBlue),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              "Cancelar",
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              // --- PASSWORD CHECK ---
+              if (passController.text == "0101") {
+                Navigator.pop(ctx); // Close dialog
+
+                // Open Edit Screen and wait to see if changes were made
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EditMatchScreen(
+                      tournamentId: widget.tournamentId,
+                      matchIndex: matchIndex,
+                      matchData: matchData,
+                      groupId: widget.groupId,
+                    ),
+                  ),
+                );
+
+                // If result is true, reload the history to show new scores!
+                if (result == true) {
+                  _loadHistory();
+                }
+              } else {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Senha Incorreta!"),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              "Entrar",
+              style: TextStyle(
+                color: AppColors.accentBlue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -141,6 +224,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   child: ExpansionTile(
                     iconColor: Colors.white,
                     collapsedIconColor: Colors.white54,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit,
+                            color: AppColors.accentBlue,
+                            size: 20,
+                          ),
+                          onPressed: () => _promptPasswordForEdit(index, match),
+                        ),
+                        const Icon(
+                          Icons.expand_more,
+                          color: Colors.white54,
+                        ), // Default expansion arrow
+                      ],
+                    ),
                     title: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

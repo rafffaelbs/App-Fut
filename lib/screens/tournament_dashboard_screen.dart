@@ -45,7 +45,7 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
       RankingScreen(tournamentId: widget.tournamentId),
 
       // Tab 2: Today's Match History
-      HistoryScreen(tournamentId: widget.tournamentId),
+      HistoryScreen(tournamentId: widget.tournamentId, groupId: widget.groupId),
     ];
 
     // Titles for the top app bar

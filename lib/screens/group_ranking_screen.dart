@@ -20,7 +20,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   List<String> _availableFilters = ['Todos'];
   String _selectedFilter = 'Todos';
 
-  String _sortColumn = 'nota';
+  String _sortColumn = 'ga';
   bool _sortDescending = true;
 
   static const Map<int, String> _monthNames = {
@@ -187,7 +187,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       if (games > 0) {
         nota =
             5.0 +
-            (((w * 1.5) + (d * 0.5) + (l * -0.5)) + ((g * 1.0) + (a * 0.7))) /
+            (((w * 1.5) + (d * 0.5) + (l * -0.5)) + ((g * 2.0) + (a * 2.7))) /
                 games;
         nota = nota.clamp(0.0, 10.0);
       }
@@ -214,10 +214,11 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
   void _applySorting(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
-      int cmp = _sortColumn == 'nota'
-          ? (a['nota'] as double).compareTo(b['nota'] as double)
-          : (a[_sortColumn] as int).compareTo(b[_sortColumn] as int);
-      if (cmp == 0) cmp = (a['ga'] as int).compareTo(b['ga'] as int);
+      int cmp = (a[_sortColumn] as int).compareTo(b[_sortColumn] as int);
+      if (cmp == 0 && _sortColumn == 'ga') {
+        // Tie-breaker: sort by goals if G+A is equal
+        cmp = (a['goals'] as int).compareTo(b['goals'] as int);
+      }
       return _sortDescending ? -cmp : cmp;
     });
   }
@@ -413,14 +414,6 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                                   DataColumn(
                                     numeric: true,
                                     label: _sortHeader(
-                                      "NOTA",
-                                      "nota",
-                                      Colors.amber,
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    numeric: true,
-                                    label: _sortHeader(
                                       "G+A",
                                       "ga",
                                       AppColors.highlightGreen,
@@ -509,16 +502,6 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                                               fontWeight: index < 3
                                                   ? FontWeight.w600
                                                   : FontWeight.normal,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            nota.toStringAsFixed(1),
-                                            style: TextStyle(
-                                              color: notaColor,
-                                              fontWeight: FontWeight.bold,
                                               fontSize: 13,
                                             ),
                                           ),
