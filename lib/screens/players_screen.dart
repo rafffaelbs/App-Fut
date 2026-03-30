@@ -24,6 +24,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     'assets/players_icons/arrascaeta.png',
     'assets/players_icons/balota.png',
     'assets/players_icons/bellingham.webp',
+    'assets/players_icons/bruyne.png',
     'assets/players_icons/courtois.png',
     'assets/players_icons/cr7.png',
     'assets/players_icons/depay.png',
@@ -32,10 +33,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
     'assets/players_icons/gullit.png',
     'assets/players_icons/ibra.png',
     'assets/players_icons/iniesta.png',
+    'assets/players_icons/kaka.png',
     'assets/players_icons/kroos.png',
     'assets/players_icons/love.png',
     'assets/players_icons/maldini.png',
     'assets/players_icons/maradona.png',
+    'assets/players_icons/mbappe.png',
     'assets/players_icons/messi.png',
     'assets/players_icons/modric.png',
     'assets/players_icons/mouse_hunter.png',
@@ -44,6 +47,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     'assets/players_icons/ozil.png',
     'assets/players_icons/pele.png',
     'assets/players_icons/pique.png',
+    'assets/players_icons/pirlo.png',
     'assets/players_icons/pogba.webp',
     'assets/players_icons/puyol.png',
     'assets/players_icons/ramos.png',
@@ -70,6 +74,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (playersString != null) {
       setState(() {
         players = List<Map<String, dynamic>>.from(jsonDecode(playersString));
+        // Sort players by name alphabetically
+        players.sort(
+          (a, b) => (a['name'] as String).toLowerCase().compareTo(
+            (b['name'] as String).toLowerCase(),
+          ),
+        );
       });
     }
     setState(() => isLoading = false);

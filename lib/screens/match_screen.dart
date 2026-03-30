@@ -1019,37 +1019,10 @@ class _MatchScreenState extends State<MatchScreen>
                     )
                   : null,
             ),
-            if (isFirstPlayerInTeam && isFirstTeam)
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: AppColors.accentBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.people, size: 10, color: Colors.white),
-              ),
           ],
         ),
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: isFirstTeam
-                    ? AppColors.accentBlue.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                "${index + 1}",
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isFirstTeam ? AppColors.accentBlue : Colors.white54,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 player['name'],
@@ -1428,6 +1401,13 @@ class _MatchScreenState extends State<MatchScreen>
           (p) => !presentPlayers.any((present) => present['name'] == p['name']),
         )
         .toList();
+
+    // Sort available players by name alphabetically
+    available.sort(
+      (a, b) => (a['name'] as String).toLowerCase().compareTo(
+        (b['name'] as String).toLowerCase(),
+      ),
+    );
 
     showDialog(
       context: context,

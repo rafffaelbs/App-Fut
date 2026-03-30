@@ -11,7 +11,11 @@ class HistoryScreen extends StatefulWidget {
   final String tournamentId; // We need this to load the correct history
   final String groupId; // We need this to load the correct history
 
-  const HistoryScreen({super.key, required this.tournamentId, required this.groupId});
+  const HistoryScreen({
+    super.key,
+    required this.tournamentId,
+    required this.groupId,
+  });
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -33,7 +37,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (prefs.containsKey(historyKey)) {
       setState(() {
-        history = jsonDecode(prefs.getString(historyKey)!).reversed.toList();
+        history = jsonDecode(prefs.getString(historyKey)!);
+        // Sort by date descending (newest first)
+        history.sort((a, b) {
+          final dateA = DateTime.parse(a['date'] ?? '1970-01-01');
+          final dateB = DateTime.parse(b['date'] ?? '1970-01-01');
+          return dateB.compareTo(dateA); // Descending order
+        });
       });
     }
   }
