@@ -29,7 +29,7 @@ class TeamLogo extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: const Color(0xffe0e1dd).withOpacity(0.9),
+            color: const Color(0xffe0e1dd).withValues(alpha: 0.9),
             fontSize: 12,
           ),
         ),

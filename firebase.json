@@ -1,1 +1,22 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"app-do-fut","appId":"1:240906268187:android:c95ad5df55c497c73f12be","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"app-do-fut","configurations":{"android":"1:240906268187:android:c95ad5df55c497c73f12be","ios":"1:240906268187:ios:abfd8ecd0670f7363f12be"}}}}}}
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "app-do-fut",
+                    "appId": "1:240906268187:android:c95ad5df55c497c73f12be",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "app-do-fut",
+                    "configurations": {
+                        "android": "1:240906268187:android:c95ad5df55c497c73f12be",
+                        "ios": "1:240906268187:ios:abfd8ecd0670f7363f12be"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -4,8 +4,16 @@ import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:app_do_fut/firebase_options.dart';
+import 'package:app_do_fut/screens/sync_screen.dart';
+import 'package:app_do_fut/services/sync_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -259,6 +267,66 @@ class _HomePageState extends State<HomePage> {
                 context,
                 MaterialPageRoute(builder: (context) => const BlankScreen()),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_sync, color: Colors.white),
+              title: const Text(
+                'Sincronização na Nuvem',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SyncScreen()),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_upload, color: Colors.white),
+              title: const Text(
+                'Exportar Banco de Dados',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                try {
+                  await SyncService().exportToFile();
+                } catch(e) {
+                   if (context.mounted) {
+                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao exportar: $e')));
+                   }
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_download, color: Colors.white),
+              title: const Text(
+                'Importar Banco de Dados',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                try {
+                  bool success = await SyncService().importFromFile();
+                  if (success && context.mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HomePage()),
+                      (route) => false,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Dados importados com sucesso!"),
+                        backgroundColor: Colors.green,
+                      )
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Erro ao importar: $e")),
+                    );
+                  }
+                }
+              },
             ),
           ],
         ),

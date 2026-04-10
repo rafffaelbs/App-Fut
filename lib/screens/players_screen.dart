@@ -31,8 +31,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
     'assets/players_icons/drogba.png',
     'assets/players_icons/dybala.png',
     'assets/players_icons/gullit.png',
+    'assets/players_icons/haaland.png',
     'assets/players_icons/ibra.png',
-    'assets/players_icons/iniesta.png',
     'assets/players_icons/kaka.png',
     'assets/players_icons/kroos.png',
     'assets/players_icons/love.png',
@@ -198,11 +198,13 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: selected
-                                        ? AppColors.accentBlue.withOpacity(0.25)
+                                        ? AppColors.accentBlue.withValues(
+                                            alpha: 0.25,
+                                          )
                                         : (isTaken
                                               ? Colors.black26
-                                              : AppColors.deepBlue.withOpacity(
-                                                  0.6,
+                                              : AppColors.deepBlue.withValues(
+                                                  alpha: 0.6,
                                                 )),
                                     border: Border.all(
                                       color: selected
@@ -219,7 +221,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                     child: Image.asset(
                                       path,
                                       fit: BoxFit.contain,
-                                      errorBuilder: (_, __, ___) => const Icon(
+                                      errorBuilder: (_, _, _) => const Icon(
                                         Icons.person_outline,
                                         color: Colors.white38,
                                         size: 28,
@@ -297,7 +299,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                 shape: BoxShape.circle,
                                 color: AppColors.deepBlue,
                                 border: Border.all(
-                                  color: AppColors.accentBlue.withOpacity(0.4),
+                                  color: AppColors.accentBlue.withValues(
+                                    alpha: 0.4,
+                                  ),
                                   width: 1.5,
                                 ),
                               ),
@@ -308,12 +312,11 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                         child: Image.asset(
                                           selectedIcon!,
                                           fit: BoxFit.contain,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(
-                                                Icons.person_outline,
-                                                color: Colors.white38,
-                                                size: 32,
-                                              ),
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            Icons.person_outline,
+                                            color: Colors.white38,
+                                            size: 32,
+                                          ),
                                         ),
                                       ),
                                     )
@@ -357,7 +360,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         hintText: "Nome do jogador",
                         hintStyle: const TextStyle(color: Colors.white30),
                         filled: true,
-                        fillColor: AppColors.deepBlue.withOpacity(0.6),
+                        fillColor: AppColors.deepBlue.withValues(alpha: 0.6),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 12,
@@ -369,7 +372,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                            color: AppColors.accentBlue.withOpacity(0.6),
+                            color: AppColors.accentBlue.withValues(alpha: 0.6),
                             width: 1,
                           ),
                         ),
@@ -413,7 +416,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         thumbColor: _ratingColor(currentRating),
                         overlayColor: _ratingColor(
                           currentRating,
-                        ).withOpacity(0.15),
+                        ).withValues(alpha: 0.15),
                         thumbShape: const RoundSliderThumbShape(
                           enabledThumbRadius: 8,
                         ),
@@ -535,7 +538,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
       decoration: BoxDecoration(
         color: AppColors.headerBlue,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.05), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.05),
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -559,7 +565,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                       shape: BoxShape.circle,
                       color: AppColors.deepBlue,
                       border: Border.all(
-                        color: rColor.withOpacity(0.35),
+                        color: rColor.withValues(alpha: 0.35),
                         width: 1.5,
                       ),
                     ),
@@ -570,7 +576,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                               child: Image.asset(
                                 iconPath,
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Center(
+                                errorBuilder: (_, _, _) => Center(
                                   child: Text(
                                     initial,
                                     style: const TextStyle(
@@ -640,7 +646,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                             minHeight: 4,
                             backgroundColor: Colors.white10,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              rColor.withOpacity(0.7),
+                              rColor.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
@@ -666,9 +672,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: rColor.withOpacity(0.1),
+                color: rColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: rColor.withOpacity(0.3), width: 1),
+                border: Border.all(
+                  color: rColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -685,7 +694,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                   Text(
                     "/10",
                     style: TextStyle(
-                      color: rColor.withOpacity(0.5),
+                      color: rColor.withValues(alpha: 0.5),
                       fontSize: 9,
                     ),
                   ),
@@ -701,7 +710,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.08),
+                  color: Colors.redAccent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(

@@ -8,5 +8,5 @@ class AppColors {
   static const textWhite = Color(0xffe0e1dd);
   static const highlightGreen = Color(0xff00FF85);
 
-  static Color? get Twhite => null; // Bright Green
+  static Color? get tWhite => null; // Bright Green
 }

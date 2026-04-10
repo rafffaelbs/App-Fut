@@ -434,10 +434,11 @@ class _SessionsScreenState extends State<SessionsScreen> {
                             ),
                             color: AppColors.headerBlue,
                             onSelected: (String value) {
-                              if (value == 'edit')
+                              if (value == 'edit') {
                                 _showSessionDialog(index: index);
-                              else if (value == 'delete')
+                              } else if (value == 'delete') {
                                 _deleteSession(index);
+                              }
                             },
                             itemBuilder: (BuildContext context) =>
                                 <PopupMenuEntry<String>>[

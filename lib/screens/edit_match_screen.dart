@@ -77,14 +77,16 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     }
     for (var ev in events) {
       if (ev['player'] != null) playerSet.add(ev['player']);
-      if (ev['assist'] != null && ev['assist'].toString().isNotEmpty)
+      if (ev['assist'] != null && ev['assist'].toString().isNotEmpty) {
         playerSet.add(ev['assist']);
+      }
     }
 
     setState(() {
       allGroupPlayerNames = playerSet.toList()..sort();
-      if (allGroupPlayerNames.isEmpty)
+      if (allGroupPlayerNames.isEmpty) {
         allGroupPlayerNames.add("Jogador Desconhecido");
+      }
       isLoadingPlayers = false;
     });
   }
@@ -93,15 +95,17 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     setState(() {
       final removedEvent = events.removeAt(index);
       if (removedEvent['type'] == 'goal') {
-        if (removedEvent['team'] == 'Vermelho')
+        if (removedEvent['team'] == 'Vermelho') {
           scoreRed = max(0, scoreRed - 1);
-        else
+        } else {
           scoreWhite = max(0, scoreWhite - 1);
+        }
       } else if (removedEvent['type'] == 'own_goal') {
-        if (removedEvent['team'] == 'Vermelho')
+        if (removedEvent['team'] == 'Vermelho') {
           scoreWhite = max(0, scoreWhite - 1);
-        else
+        } else {
           scoreRed = max(0, scoreRed - 1);
+        }
       }
     });
   }
@@ -153,7 +157,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: selectedType,
+                      initialValue: selectedType,
                       dropdownColor: AppColors.deepBlue,
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
@@ -181,7 +185,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
                     const SizedBox(height: 10),
 
                     DropdownButtonFormField<String>(
-                      value: selectedTeam,
+                      initialValue: selectedTeam,
                       dropdownColor: AppColors.deepBlue,
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
@@ -208,7 +212,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
 
                     // --- NOW SHOWS EVERYONE IN THE GROUP ---
                     DropdownButtonFormField<String>(
-                      value: selectedPlayer,
+                      initialValue: selectedPlayer,
                       dropdownColor: AppColors.deepBlue,
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
@@ -230,7 +234,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
 
                     if (selectedType == 'goal')
                       DropdownButtonFormField<String?>(
-                        value: selectedAssist,
+                        initialValue: selectedAssist,
                         dropdownColor: AppColors.deepBlue,
                         style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
@@ -297,10 +301,11 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
                             : timeController.text.trim(),
                       };
 
-                      if (isEditing)
+                      if (isEditing) {
                         events[index] = newEvent;
-                      else
+                      } else {
                         events.add(newEvent);
+                      }
                     });
                     Navigator.pop(ctx);
                   },
@@ -583,8 +588,9 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
 
   String _getEventDescription(Map<String, dynamic> event) {
     if (event['type'] == 'goal') {
-      if (event['assist'] != null && event['assist'].toString().isNotEmpty)
+      if (event['assist'] != null && event['assist'].toString().isNotEmpty) {
         return "Gol (Assistência: ${event['assist']})";
+      }
       return "Gol (Jogada Individual)";
     }
     if (event['type'] == 'own_goal') return "Gol Contra";

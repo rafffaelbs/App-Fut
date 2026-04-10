@@ -72,25 +72,32 @@ class _RankingScreenState extends State<RankingScreen> {
 
         stats[name]!['games'] = stats[name]!['games']! + 1;
 
-        if (status == 1)
+        if (status == 1) {
           stats[name]!['wins'] = stats[name]!['wins']! + 1;
-        else if (status == -1)
+        } else if (status == -1) {
           stats[name]!['losses'] = stats[name]!['losses']! + 1;
-        else
+        } else {
           stats[name]!['draws'] = stats[name]!['draws']! + 1;
+        }
       }
 
       if (match['players']['red'] != null) {
-        for (var p in match['players']['red']) processPlayer(p, redStatus);
+        for (var p in match['players']['red']) {
+          processPlayer(p, redStatus);
+        }
       }
       if (match['players']['white'] != null) {
-        for (var p in match['players']['white']) processPlayer(p, whiteStatus);
+        for (var p in match['players']['white']) {
+          processPlayer(p, whiteStatus);
+        }
       }
 
-      if (match['players']['gk_red'] != null)
+      if (match['players']['gk_red'] != null) {
         processPlayer(match['players']['gk_red'], redStatus);
-      if (match['players']['gk_white'] != null)
+      }
+      if (match['players']['gk_white'] != null) {
         processPlayer(match['players']['gk_white'], whiteStatus);
+      }
 
       if (match['events'] != null) {
         for (var event in match['events']) {
@@ -128,8 +135,12 @@ class _RankingScreenState extends State<RankingScreen> {
 
         nota = 5.0 + ((matchResultImpact + contributionImpact) / games);
 
-        if (nota > 10.0) nota = 10.0;
-        if (nota < 0.0) nota = 0.0;
+        if (nota > 10.0) {
+          nota = 10.0;
+        }
+        if (nota < 0.0) {
+          nota = 0.0;
+        }
       }
 
       sortedList.add({
@@ -191,10 +202,10 @@ class _RankingScreenState extends State<RankingScreen> {
                         minWidth: constraints.maxWidth,
                       ),
                       child: DataTable(
-                        headingRowColor: MaterialStateProperty.all(
+                        headingRowColor: WidgetStateProperty.all(
                           AppColors.headerBlue,
                         ),
-                        dataRowColor: MaterialStateProperty.all(
+                        dataRowColor: WidgetStateProperty.all(
                           AppColors.deepBlue,
                         ),
                         columnSpacing: 16,

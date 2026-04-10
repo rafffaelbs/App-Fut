@@ -136,38 +136,48 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           );
 
           globalStats[name]!['games'] = globalStats[name]!['games']! + 1;
-          if (status == 1)
+          if (status == 1) {
             globalStats[name]!['wins'] = globalStats[name]!['wins']! + 1;
-          else if (status == -1)
+          } else if (status == -1) {
             globalStats[name]!['losses'] = globalStats[name]!['losses']! + 1;
-          else
+          } else {
             globalStats[name]!['draws'] = globalStats[name]!['draws']! + 1;
+          }
         }
 
-        if (match['players']['red'] != null)
-          for (var p in match['players']['red']) processPlayer(p, redStatus);
-        if (match['players']['white'] != null)
-          for (var p in match['players']['white'])
+        if (match['players']['red'] != null) {
+          for (var p in match['players']['red']) {
+            processPlayer(p, redStatus);
+          }
+        }
+        if (match['players']['white'] != null) {
+          for (var p in match['players']['white']) {
             processPlayer(p, whiteStatus);
-        if (match['players']['gk_red'] != null)
+          }
+        }
+        if (match['players']['gk_red'] != null) {
           processPlayer(match['players']['gk_red'], redStatus);
-        if (match['players']['gk_white'] != null)
+        }
+        if (match['players']['gk_white'] != null) {
           processPlayer(match['players']['gk_white'], whiteStatus);
+        }
 
         if (match['events'] != null) {
           for (var event in match['events']) {
             if (event['type'] == 'goal') {
               final scorer = event['player'];
-              if (globalStats.containsKey(scorer))
+              if (globalStats.containsKey(scorer)) {
                 globalStats[scorer]!['goals'] =
                     globalStats[scorer]!['goals']! + 1;
+              }
 
               final assist = event['assist'];
               if (assist != null &&
                   assist.toString().isNotEmpty &&
-                  globalStats.containsKey(assist))
+                  globalStats.containsKey(assist)) {
                 globalStats[assist]!['assists'] =
                     globalStats[assist]!['assists']! + 1;
+              }
             }
           }
         }
@@ -261,7 +271,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                       : Icons.arrow_upward_rounded)
                 : Icons.unfold_more_rounded,
             size: 11,
-            color: active ? Colors.white54 : color.withOpacity(0.35),
+            color: active ? Colors.white54 : color.withValues(alpha: 0.35),
           ),
         ],
       ),
@@ -287,7 +297,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           // ── FILTER BAR ──────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppColors.headerBlue.withOpacity(0.5),
+            color: AppColors.headerBlue.withValues(alpha: 0.5),
             child: Row(
               children: [
                 const Icon(
@@ -371,23 +381,25 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                             ),
                             child: Theme(
                               data: Theme.of(context).copyWith(
-                                dividerColor: Colors.white.withOpacity(0.05),
+                                dividerColor: Colors.white.withValues(
+                                  alpha: 0.05,
+                                ),
                               ),
                               child: DataTable(
                                 headingRowHeight: 38,
                                 dataRowMinHeight: 44,
                                 dataRowMaxHeight: 44,
-                                headingRowColor: MaterialStateProperty.all(
-                                  AppColors.headerBlue.withOpacity(0.7),
+                                headingRowColor: WidgetStateProperty.all(
+                                  AppColors.headerBlue.withValues(alpha: 0.7),
                                 ),
-                                dataRowColor: MaterialStateProperty.all(
+                                dataRowColor: WidgetStateProperty.all(
                                   Colors.transparent,
                                 ),
                                 columnSpacing: 14,
                                 horizontalMargin: 12,
                                 border: TableBorder(
                                   horizontalInside: BorderSide(
-                                    color: Colors.white.withOpacity(0.04),
+                                    color: Colors.white.withValues(alpha: 0.04),
                                   ),
                                 ),
                                 columns: [
@@ -474,20 +486,13 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                                   globalLeaderboard.length,
                                   (index) {
                                     final p = globalLeaderboard[index];
-                                    final nota = p['nota'] as double;
-
-                                    Color notaColor;
-                                    if (nota >= 7.5)
-                                      notaColor = Colors.greenAccent.shade400;
-                                    else if (nota >= 5.5)
-                                      notaColor = Colors.amber;
-                                    else
-                                      notaColor = Colors.redAccent;
 
                                     return DataRow(
-                                      color: MaterialStateProperty.all(
+                                      color: WidgetStateProperty.all(
                                         index.isOdd
-                                            ? Colors.white.withOpacity(0.02)
+                                            ? Colors.white.withValues(
+                                                alpha: 0.02,
+                                              )
                                             : Colors.transparent,
                                       ),
                                       cells: [

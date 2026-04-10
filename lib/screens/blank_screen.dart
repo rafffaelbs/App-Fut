@@ -20,7 +20,7 @@ class _BlankScreenState extends State<BlankScreen> {
 
   Future<void> _playAudio() async {
     await _player.play(AssetSource('audio/whatsapp.mp3'));
-    print('\t -- Audio esta tocando');
+    debugPrint('\t -- Audio esta tocando');
   }
 
   @override
@@ -64,8 +64,8 @@ class _BlankScreenState extends State<BlankScreen> {
           // LAYER 2: The Dimming Overlay (Optional but recommended for text readability)
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(
-                0.6,
+              color: Colors.black.withValues(
+                alpha: 0.6,
               ), // Adjust 0.6 to make it darker/lighter
             ),
           ),
@@ -79,7 +79,11 @@ class _BlankScreenState extends State<BlankScreen> {
                 children: [
                   const SizedBox(height: 200),
                   // The "In Construction" Icon
-                  Icon(Icons.handyman_outlined, size: 60, color: AppColors.accentBlue),
+                  Icon(
+                    Icons.handyman_outlined,
+                    size: 60,
+                    color: AppColors.accentBlue,
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -94,7 +98,7 @@ class _BlankScreenState extends State<BlankScreen> {
                         Shadow(
                           offset: const Offset(0, 2),
                           blurRadius: 4.0,
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                         ),
                       ],
                     ),
@@ -106,7 +110,7 @@ class _BlankScreenState extends State<BlankScreen> {
                     "Estamos trabalhando para arrumar essa parte.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.textWhite.withOpacity(0.9),
+                      color: AppColors.textWhite.withValues(alpha: 0.9),
                       fontSize: 18,
                       height: 1.5,
                     ),

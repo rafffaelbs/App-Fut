@@ -3,9 +3,9 @@ import 'dart:io'; // Needed for file creation
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart'; // Add this to pubspec if missing: path_provider: ^2.1.2
 
 class HistoryScreen extends StatefulWidget {
   final String tournamentId; // We need this to load the correct history
@@ -70,7 +70,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         XFile(file.path),
       ], text: 'Backup Completo das Partidas');
     } catch (e) {
-      print("Erro ao exportar: $e");
+      debugPrint("Erro ao exportar: $e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Erro ao criar arquivo de exportação.")),
       );
@@ -344,18 +345,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _getEventIcon(String type) {
-    if (type == 'goal')
+    if (type == 'goal') {
       return const Icon(
         Icons.sports_soccer,
         color: Colors.greenAccent,
         size: 18,
       );
-    if (type == 'own_goal')
+    }
+    if (type == 'own_goal') {
       return const Icon(Icons.error_outline, color: Colors.redAccent, size: 18);
-    if (type == 'yellow_card')
+    }
+    if (type == 'yellow_card') {
       return const Icon(Icons.style, color: Colors.yellow, size: 18);
-    if (type == 'red_card')
+    }
+    if (type == 'red_card') {
       return const Icon(Icons.style, color: Colors.red, size: 18);
+    }
     return const Icon(Icons.circle, color: Colors.grey, size: 10);
   }
 }

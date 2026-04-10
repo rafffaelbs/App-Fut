@@ -47,14 +47,6 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
       // Tab 2: Today's Match History
       HistoryScreen(tournamentId: widget.tournamentId, groupId: widget.groupId),
     ];
-
-    // Titles for the top app bar
-    final List<String> titles = [
-      widget.tournamentName, // Shows "Pelada 12/03" instead of "Partida"
-      "Ranking do Dia",
-      "Histórico de Partidas",
-    ];
-
     // IMPORTANT: We remove the AppBar from here, because MatchScreen,
     // RankingScreen, and HistoryScreen ALREADY have their own AppBars!
     // We just show the active screen and the bottom nav.
