@@ -1,17 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import '../utils/player_identity.dart';
 
 class SyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const Uuid _uuid = Uuid();
 
   /// Faz o backup de todos os dados locais (SharedPreferences) para o Firestore.
   Future<void> exportDataToFirebase(String syncCode) async {
     final prefs = await SharedPreferences.getInstance();
+    await _normalizeUuidData(prefs);
     final keys = prefs.getKeys();
     
     Map<String, dynamic> data = {};
@@ -64,6 +68,9 @@ class SyncService {
         await prefs.setStringList(key, strList);
       }
     }
+
+    await _normalizeUuidData(prefs);
+    await _pushNormalizedDataToFirebase(syncCode, prefs);
   }
 
   /// Gera um novo sync code
@@ -132,8 +139,8 @@ class SyncService {
   Future<bool> importFromFile() async {
     try {
       // Abre o explorador de arquivos
-      FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.any, // Pode ser restrito mas FileType.any garante que o json será visto
+     final result = await FilePicker.pickFiles(
+       type: FileType.any,
       );
 
       if (result != null && result.files.single.path != null) {
@@ -167,12 +174,128 @@ class SyncService {
             await prefs.setStringList(key, strList);
           }
         }
+
+        await _normalizeUuidData(prefs);
         
         return true; // Sucesso
       }
       return false; // Usuário cancelou
     } catch (e) {
       throw Exception("Erro ao importar arquivo: $e");
+    }
+  }
+
+  Future<void> _pushNormalizedDataToFirebase(
+    String syncCode,
+    SharedPreferences prefs,
+  ) async {
+    final keys = prefs.getKeys();
+    final Map<String, dynamic> data = {};
+    for (final key in keys) {
+      data[key] = prefs.get(key);
+    }
+    await _firestore.collection('sync_data').doc(syncCode).set({
+      'data': data,
+      'last_updated': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _normalizeUuidData(SharedPreferences prefs) async {
+    final Map<String, String> nameToId = {};
+
+    final playerKeys = prefs
+        .getKeys()
+        .where((k) => k.startsWith('players_'))
+        .toList();
+
+    for (final key in playerKeys) {
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty) continue;
+      final loaded = List<Map<String, dynamic>>.from(jsonDecode(raw));
+      final List<Map<String, dynamic>> normalized = [];
+      for (final player in ensurePlayerIds(loaded)) {
+        final map = Map<String, dynamic>.from(player);
+        String id = (map['id'] ?? '').toString();
+        final name = (map['name'] ?? '').toString();
+        if (id.isEmpty || id == name) {
+          id = _uuid.v4();
+          map['id'] = id;
+        }
+        if (name.isNotEmpty) {
+          nameToId[name.toLowerCase()] = id;
+        }
+        normalized.add(map);
+      }
+      await prefs.setString(key, jsonEncode(normalized));
+    }
+
+    Future<void> normalizePlayerListKey(String key) async {
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty) return;
+      final loaded = List<Map<String, dynamic>>.from(jsonDecode(raw));
+      final normalized = loaded.map((player) {
+        final map = Map<String, dynamic>.from(player);
+        final name = (map['name'] ?? '').toString();
+        if (name.isNotEmpty) {
+          final inferred = nameToId[name.toLowerCase()];
+          if (inferred != null) {
+            map['id'] = inferred;
+          } else if ((map['id'] ?? '').toString().isEmpty) {
+            map['id'] = _uuid.v4();
+          }
+        }
+        return map;
+      }).toList();
+      await prefs.setString(key, jsonEncode(normalized));
+    }
+
+    for (final key in prefs.getKeys().where((k) => k.startsWith('present_players_'))) {
+      await normalizePlayerListKey(key);
+    }
+    for (final key in prefs.getKeys().where((k) => k.startsWith('team_red_'))) {
+      await normalizePlayerListKey(key);
+    }
+    for (final key in prefs.getKeys().where((k) => k.startsWith('team_white_'))) {
+      await normalizePlayerListKey(key);
+    }
+
+    for (final key in prefs.getKeys().where((k) => k.startsWith('match_history_'))) {
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty) continue;
+      final history = List<dynamic>.from(jsonDecode(raw));
+      for (final match in history) {
+        final players = Map<String, dynamic>.from(match['players'] ?? {});
+        for (final side in ['red', 'white']) {
+          final list = List<dynamic>.from(players[side] ?? []);
+          for (final p in list) {
+            final id = playerIdFromObject(p);
+            final name = (p['name'] ?? '').toString();
+            if ((id.isEmpty || id == name) && nameToId.containsKey(name.toLowerCase())) {
+              p['id'] = nameToId[name.toLowerCase()];
+            } else if ((id.isEmpty || id == name) && name.isNotEmpty) {
+              p['id'] = _uuid.v4();
+            }
+          }
+        }
+
+        final events = List<dynamic>.from(match['events'] ?? []);
+        for (final event in events) {
+          final playerName = (event['player'] ?? '').toString();
+          final assistName = (event['assist'] ?? '').toString();
+          if ((eventPlayerId(event, 'player').isEmpty || eventPlayerId(event, 'player') == playerName) &&
+              playerName.isNotEmpty) {
+            event['playerId'] =
+                nameToId[playerName.toLowerCase()] ?? _uuid.v4();
+          }
+          if (assistName.isNotEmpty &&
+              (eventPlayerId(event, 'assist').isEmpty ||
+                  eventPlayerId(event, 'assist') == assistName)) {
+            event['assistId'] =
+                nameToId[assistName.toLowerCase()] ?? _uuid.v4();
+          }
+        }
+      }
+      await prefs.setString(key, jsonEncode(history));
     }
   }
 }

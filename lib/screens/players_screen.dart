@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../constants/app_colors.dart';
+import 'player_detail.dart';
+import '../utils/player_identity.dart';
 
 class PlayersScreen extends StatefulWidget {
   final String groupId;
@@ -13,6 +16,7 @@ class PlayersScreen extends StatefulWidget {
 }
 
 class _PlayersScreenState extends State<PlayersScreen> {
+  static const Uuid _uuid = Uuid();
   List<Map<String, dynamic>> players = [];
   bool isLoading = true;
 
@@ -72,15 +76,22 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final prefs = await SharedPreferences.getInstance();
     final String? playersString = prefs.getString(_storageKey);
     if (playersString != null) {
+      final loaded = List<Map<String, dynamic>>.from(jsonDecode(playersString));
+      final bool hadLegacyEntries = loaded.any(
+        (p) => p['id'] == null || p['id'].toString().trim().isEmpty,
+      );
+      final normalized = ensurePlayerIds(loaded);
       setState(() {
-        players = List<Map<String, dynamic>>.from(jsonDecode(playersString));
-        // Sort players by name alphabetically
+        players = normalized;
         players.sort(
           (a, b) => (a['name'] as String).toLowerCase().compareTo(
             (b['name'] as String).toLowerCase(),
           ),
         );
       });
+      if (hadLegacyEntries) {
+        await prefs.setString(_storageKey, jsonEncode(normalized));
+      }
     }
     setState(() => isLoading = false);
   }
@@ -92,7 +103,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   void _addNewPlayer(String name, double rating, String? iconPath) {
     setState(() {
-      players.add({'name': name, 'rating': rating, 'icon': iconPath});
+      players.add({
+        'id': _uuid.v4(),
+        'name': name,
+        'rating': rating,
+        'icon': iconPath,
+      });
     });
     _savePlayers();
   }
@@ -543,10 +559,27 @@ class _PlayersScreenState extends State<PlayersScreen> {
           width: 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PlayerDetailScreen(
+                  groupId: widget.groupId,
+                  playerId: (player['id'] ?? '').toString(),
+                  initialPlayerName: name,
+                  playerIcon: iconPath,
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
             // ── Avatar with icon-change tap ──────────────────
             GestureDetector(
               onTap: () {
@@ -720,7 +753,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 ),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );
