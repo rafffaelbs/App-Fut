@@ -46,6 +46,8 @@ class _MatchScreenState extends State<MatchScreen>
   // Match State
   int scoreRed = 0;
   int scoreWhite = 0;
+  int redWinStreak = 0; 
+  int whiteWinStreak = 0;
   bool isMatchRunning = false;
   bool isOvertime = false;
   Timer? _matchTimer;
@@ -130,6 +132,8 @@ class _MatchScreenState extends State<MatchScreen>
     } else {
       await prefs.remove('start_timestamp_$id');
     }
+    await prefs.setInt('red_streak_$id', redWinStreak);
+    await prefs.setInt('white_streak_$id', whiteWinStreak);
   }
 
   Future<void> _loadMatchState() async {
@@ -173,6 +177,8 @@ class _MatchScreenState extends State<MatchScreen>
 
       scoreRed = prefs.getInt('score_red_$id') ?? 0;
       scoreWhite = prefs.getInt('score_white_$id') ?? 0;
+      redWinStreak = prefs.getInt('red_streak_$id') ?? 0;
+      whiteWinStreak = prefs.getInt('white_streak_$id') ?? 0;
       isOvertime = prefs.getBool('is_overtime_$id') ?? false;
       _secondsPlayedBeforePause = prefs.getInt('seconds_played_$id') ?? 0;
       isMatchRunning = prefs.getBool('is_running_$id') ?? false;
@@ -381,6 +387,8 @@ class _MatchScreenState extends State<MatchScreen>
       teamWhite.clear();
       scoreRed = 0;
       scoreWhite = 0;
+      redWinStreak = 0;
+      whiteWinStreak = 0;
       _secondsPlayedBeforePause = 0;
       _lastStartTime = null;
       isMatchRunning = false;
@@ -721,6 +729,25 @@ class _MatchScreenState extends State<MatchScreen>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // --- NOVO: AVISO DE SEQUÊNCIA ---
+          if (redWinStreak > 0 || whiteWinStreak > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Text(
+                    redWinStreak > 0 ? "🔥 Sequência: $redWinStreak/3" : "",
+                    style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    whiteWinStreak > 0 ? "🔥 Sequência: $whiteWinStreak/3" : "",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          // --------------------------------
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1607,7 +1634,7 @@ class _MatchScreenState extends State<MatchScreen>
 
   // --- END GAME LOGIC ---
 
-  void _finishMatch() async {
+void _finishMatch() async {
     _matchTimer?.cancel();
 
     final Map<String, dynamic> matchRecord = {
@@ -1646,125 +1673,184 @@ class _MatchScreenState extends State<MatchScreen>
       );
     }
 
-    List<Map<String, dynamic>> leavers = [];
+    // --- LÓGICA DE STREAK E SUGESTÃO DE SAÍDA ---
     bool isTie = scoreRed == scoreWhite;
+    bool redWon = scoreRed > scoreWhite;
+    List<Map<String, dynamic>> suggestedLeavers = [];
+    String popupTitle = "";
+    String popupMessage = "";
+    Color popupColor = AppColors.textWhite;
 
-    if (!isTie) {
-      bool redWon = scoreRed > scoreWhite;
-      _playVictorySound();
-
-      if (redWon) {
-        leavers.addAll(teamWhite);
-      } else {
-        leavers.addAll(teamRed);
-      }
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.headerBlue,
-          title: const Text(
-            "Fim de Jogo!",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events, color: Colors.amber, size: 60),
-              const SizedBox(height: 16),
-              Text(
-                redWon ? "Vitória do VERMELHO!" : "Vitória do BRANCO!",
-                style: TextStyle(
-                  color: redWon ? Colors.redAccent : AppColors.textWhite,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Placar Final: $scoreRed x $scoreWhite",
-                style: const TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(leavers);
-              },
-              child: const Text(
-                "Avançar >>",
-                style: TextStyle(
-                  color: AppColors.accentBlue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+    if (isTie) {
+      redWinStreak = 0;
+      whiteWinStreak = 0;
+      suggestedLeavers.addAll(teamRed);
+      suggestedLeavers.addAll(teamWhite);
+      suggestedLeavers.shuffle(Random());
+      popupTitle = "Empate!";
+      popupMessage = "Sugestão do Sistema:\nAmbos os times saem.";
+      popupColor = Colors.orangeAccent;
     } else {
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.headerBlue,
-          title: const Text("Empate!", style: TextStyle(color: Colors.white)),
-          content: const Text(
-            "Quem sai?",
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              child: const Text(
-                "Vermelho",
-                style: TextStyle(color: Colors.redAccent),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(List.from(teamRed));
-              },
+      _playVictorySound();
+      
+      if (redWon) {
+        redWinStreak++;
+        whiteWinStreak = 0;
+        if (redWinStreak >= 3) {
+          suggestedLeavers.addAll(teamRed);
+          suggestedLeavers.addAll(teamWhite);
+          suggestedLeavers.shuffle(Random());
+          redWinStreak = 0; // Zera a sequência
+          popupTitle = "🔥 VERMELHO INVICTO!";
+          popupMessage = "Vermelho ganhou 3 seguidas!\nSugestão: TODOS saem da quadra.";
+          popupColor = Colors.redAccent;
+        } else {
+          suggestedLeavers.addAll(teamWhite);
+          popupTitle = "Vitória do VERMELHO!";
+          popupMessage = "Sugestão: Branco sai.\n(Sequência do Vermelho: $redWinStreak/3)";
+          popupColor = Colors.redAccent;
+        }
+      } else {
+        whiteWinStreak++;
+        redWinStreak = 0;
+        if (whiteWinStreak >= 3) {
+          suggestedLeavers.addAll(teamRed);
+          suggestedLeavers.addAll(teamWhite);
+          suggestedLeavers.shuffle(Random());
+          whiteWinStreak = 0; // Zera a sequência
+          popupTitle = "🔥 BRANCO INVICTO!";
+          popupMessage = "Branco ganhou 3 seguidas!\nSugestão: TODOS saem da quadra.";
+          popupColor = Colors.white;
+        } else {
+          suggestedLeavers.addAll(teamRed);
+          popupTitle = "Vitória do BRANCO!";
+          popupMessage = "Sugestão: Vermelho sai.\n(Sequência do Branco: $whiteWinStreak/3)";
+          popupColor = Colors.white;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    
+    // Mostra o Popup Semi-Automático
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: Text(
+          popupTitle,
+          style: TextStyle(color: popupColor, fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events, color: Colors.amber, size: 60),
+            const SizedBox(height: 16),
+            Text(
+              "Placar Final: $scoreRed x $scoreWhite",
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            TextButton(
-              child: const Text(
-                "Branco",
-                style: TextStyle(color: Colors.white),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
               ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(List.from(teamWhite));
-              },
-            ),
-            TextButton(
-              child: const Text(
-                "Ambos",
-                style: TextStyle(color: Colors.orangeAccent),
+              child: Text(
+                popupMessage,
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
               ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                List<Map<String, dynamic>> l = [];
-                l.addAll(teamRed);
-                l.addAll(teamWhite);
-                _processMatchExit(l);
-              },
             ),
           ],
         ),
-      );
-    }
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Fecha o dialog de sugestão
+              _showManualExitDialog(); // Abre a escolha manual
+            },
+            child: const Text(
+              "Alterar na Mão",
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processMatchExit(suggestedLeavers); // Aceita a sugestão do sistema
+            },
+            child: const Text(
+              "Confirmar >>",
+              style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManualExitDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text("Intervenção Manual", style: TextStyle(color: Colors.white)),
+        content: const Text(
+          "Quem deve sair de campo?",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            child: const Text(
+              "Vermelho",
+              style: TextStyle(color: Colors.redAccent),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processMatchExit(List.from(teamRed));
+            },
+          ),
+          TextButton(
+            child: const Text(
+              "Branco",
+              style: TextStyle(color: Colors.white),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _processMatchExit(List.from(teamWhite));
+            },
+          ),
+          TextButton(
+            child: const Text(
+              "Ambos",
+              style: TextStyle(color: Colors.orangeAccent),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              List<Map<String, dynamic>> both = [];
+              both.addAll(teamRed);
+              both.addAll(teamWhite);
+              both.shuffle(Random()); // Embaralha para ficar justo na fila
+              _processMatchExit(both);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _processMatchExit(List<Map<String, dynamic>> leavers) {
     setState(() {
+      bool redIsLeaving = teamRed.any((p) => leavers.any((l) => _pid(l) == _pid(p)));
+      bool whiteIsLeaving = teamWhite.any((p) => leavers.any((l) => _pid(l) == _pid(p)));
+      
+      if (redIsLeaving) redWinStreak = 0;
+      if (whiteIsLeaving) whiteWinStreak = 0;
+      
       for (var p in leavers) {
         int index = presentPlayers.indexWhere(
           (element) => _pid(element) == _pid(p),

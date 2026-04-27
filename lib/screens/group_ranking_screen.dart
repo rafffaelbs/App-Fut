@@ -86,7 +86,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     _calculateGlobalRankings();
   }
 
-  Future<void> _calculateGlobalRankings() async {
+Future<void> _calculateGlobalRankings() async {
     final prefs = await SharedPreferences.getInstance();
     final Map<String, Map<String, dynamic>> globalStats = {};
 
@@ -95,8 +95,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         DateTime date = session['timestamp'] != null
             ? DateTime.parse(session['timestamp'])
             : DateTime.now();
-        String sessionMonthYear =
-            "${date.month.toString().padLeft(2, '0')}/${date.year}";
+        String sessionMonthYear = "${date.month.toString().padLeft(2, '0')}/${date.year}";
         if (sessionMonthYear != _selectedFilter) continue;
       }
 
@@ -109,16 +108,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       for (var match in history) {
         int scoreRed = match['scoreRed'] ?? 0;
         int scoreWhite = match['scoreWhite'] ?? 0;
-        int redStatus = scoreRed > scoreWhite
-            ? 1
-            : (scoreRed == scoreWhite ? 0 : -1);
-        int whiteStatus = scoreWhite > scoreRed
-            ? 1
-            : (scoreRed == scoreWhite ? 0 : -1);
+        int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+        int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
 
         final Set<String> processed = {};
 
-        void processPlayer(dynamic playerObj, int status) {
+        void processPlayer(dynamic playerObj, int status, int goalsConceded) {
           if (playerObj == null) return;
           final String playerId = playerIdFromObject(playerObj);
           if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -132,54 +127,56 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
               'name': playerName,
               'goals': 0,
               'assists': 0,
+              'own_goals': 0,
               'games': 0,
               'wins': 0,
               'draws': 0,
               'losses': 0,
+              'goals_conceded': 0,
+              'clean_sheets': 0,
             },
           );
-          if (playerName.isNotEmpty) {
-            globalStats[playerId]!['name'] = playerName;
-          }
+          if (playerName.isNotEmpty) globalStats[playerId]!['name'] = playerName;
 
           globalStats[playerId]!['games'] = (globalStats[playerId]!['games'] as int) + 1;
-          if (status == 1)
-            globalStats[playerId]!['wins'] = (globalStats[playerId]!['wins'] as int) + 1;
-          else if (status == -1)
-            globalStats[playerId]!['losses'] = (globalStats[playerId]!['losses'] as int) + 1;
-          else
-            globalStats[playerId]!['draws'] = (globalStats[playerId]!['draws'] as int) + 1;
+          globalStats[playerId]!['goals_conceded'] = (globalStats[playerId]!['goals_conceded'] as int) + goalsConceded;
+          if (goalsConceded == 0) {
+            globalStats[playerId]!['clean_sheets'] = (globalStats[playerId]!['clean_sheets'] as int) + 1;
+          }
+
+          if (status == 1) globalStats[playerId]!['wins'] = (globalStats[playerId]!['wins'] as int) + 1;
+          else if (status == -1) globalStats[playerId]!['losses'] = (globalStats[playerId]!['losses'] as int) + 1;
+          else globalStats[playerId]!['draws'] = (globalStats[playerId]!['draws'] as int) + 1;
         }
 
         if (match['players']['red'] != null) {
-          for (var p in match['players']['red']) {
-            processPlayer(p, redStatus);
-          }
+          for (var p in match['players']['red']) processPlayer(p, redStatus, scoreWhite);
         }
         if (match['players']['white'] != null) {
-          for (var p in match['players']['white']) {
-            processPlayer(p, whiteStatus);
-          }
+          for (var p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
         }
         if (match['players']['gk_red'] != null) {
-          processPlayer(match['players']['gk_red'], redStatus);
+          processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
         }
         if (match['players']['gk_white'] != null) {
-          processPlayer(match['players']['gk_white'], whiteStatus);
+          processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
         }
 
         if (match['events'] != null) {
           for (var event in match['events']) {
+            final scorerId = eventPlayerId(event, 'player');
             if (event['type'] == 'goal') {
-              final scorerId = eventPlayerId(event, 'player');
-              if (globalStats.containsKey(scorerId))
-                globalStats[scorerId]!['goals'] =
-                    (globalStats[scorerId]!['goals'] as int) + 1;
-
+              if (globalStats.containsKey(scorerId)) {
+                globalStats[scorerId]!['goals'] = (globalStats[scorerId]!['goals'] as int) + 1;
+              }
               final assistId = eventPlayerId(event, 'assist');
-              if (assistId.isNotEmpty && globalStats.containsKey(assistId))
-                globalStats[assistId]!['assists'] =
-                    (globalStats[assistId]!['assists'] as int) + 1;
+              if (assistId.isNotEmpty && globalStats.containsKey(assistId)) {
+                globalStats[assistId]!['assists'] = (globalStats[assistId]!['assists'] as int) + 1;
+              }
+            } else if (event['type'] == 'own_goal') {
+              if (globalStats.containsKey(scorerId)) {
+                globalStats[scorerId]!['own_goals'] = (globalStats[scorerId]!['own_goals'] as int) + 1;
+              }
             }
           }
         }
@@ -188,19 +185,28 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
     List<Map<String, dynamic>> sortedList = [];
     globalStats.forEach((id, data) {
-      int g = data['goals'] as int,
-          a = data['assists'] as int,
-          games = data['games'] as int,
-          w = data['wins'] as int,
-          d = data['draws'] as int,
-          l = data['losses'] as int;
+      int g = data['goals'] as int;
+      int a = data['assists'] as int;
+      int og = data['own_goals'] as int;
+      int games = data['games'] as int;
+      int w = data['wins'] as int;
+      int d = data['draws'] as int;
+      int l = data['losses'] as int;
+      int conceded = data['goals_conceded'] as int;
+      int cleanSheets = data['clean_sheets'] as int;
 
       double nota = 0.0;
       if (games > 0) {
-        nota =
-            5.0 +
-            (((w * 1.5) + (d * 0.5) + (l * -0.5)) + ((g * 2.0) + (a * 2.7))) /
-                games;
+        double resultImpact = (w * 1.0) + (d * 0.5) + (l * -0.5);
+        double attackImpact = (g * 0.8) + (a * 0.3) + (og * -0.8);
+        
+        // Fator Defensivo com REGRA DE CORTE (5 jogos) no Ranking Histórico
+        double defenseImpact = 0.0;
+        if (games >= 5) {
+          defenseImpact = (cleanSheets * 0.5) + (conceded * -0.15);
+        }
+
+        nota = 5.0 + ((resultImpact + attackImpact + defenseImpact) / games);
         nota = nota.clamp(0.0, 10.0);
       }
 
