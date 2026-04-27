@@ -206,7 +206,8 @@ Future<void> _calculateGlobalRankings() async {
           defenseImpact = (cleanSheets * 0.5) + (conceded * -0.15);
         }
 
-        nota = 5.0 + ((resultImpact + attackImpact + defenseImpact) / games);
+        double performance = (resultImpact + attackImpact + defenseImpact) / games;
+        nota = 5.0 + (performance * 2.0); // O multiplicador mágico
         nota = nota.clamp(0.0, 10.0);
       }
 

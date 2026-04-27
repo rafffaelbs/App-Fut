@@ -188,7 +188,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
               defenseImpact = ((data['clean_sheets'] as int) * 0.5) + ((data['goals_conceded'] as int) * -0.15);
             }
 
-            double nota = 5.0 + ((resultImpact + attackImpact + defenseImpact) / games);
+            double performance = (resultImpact + attackImpact + defenseImpact) / games;
+            double nota = 5.0 + (performance * 2.0); // O multiplicador mágico
             players[i]['rating'] = nota.clamp(0.0, 10.0);
           } else {
             players[i]['rating'] = 5.0;
