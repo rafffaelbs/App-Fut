@@ -618,8 +618,31 @@ class _MatchScreenState extends State<MatchScreen>
         child: Text("Lista vazia.", style: TextStyle(color: Colors.white38)),
       );
     }
+    
+    // --- CABEÇALHO RESUMO ---
+    int total = presentPlayers.length;
+    int times = total ~/ widget.totalPlayers;
+    int sobram = total % widget.totalPlayers;
+    String resumoText = "👥 $total Presentes | $times Times";
+    if (sobram > 0) resumoText += " | Restam $sobram";
+
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
+      header: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.accentBlue.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.accentBlue.withValues(alpha: 0.5)),
+        ),
+        child: Center(
+          child: Text(
+            resumoText,
+            style: const TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ),
+      ),
       onReorder: (oldIndex, newIndex) {
         setState(() {
           if (newIndex > oldIndex) newIndex -= 1;
@@ -628,6 +651,7 @@ class _MatchScreenState extends State<MatchScreen>
         });
         _saveMatchState();
       },
+      // ... RESTO DO CÓDIGO DA LISTA CONTINUA IGUAL...
       children: [
         for (int i = 0; i < presentPlayers.length; i++)
           Container(
@@ -639,7 +663,6 @@ class _MatchScreenState extends State<MatchScreen>
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
             ),
             child: ListTile(
-              // --- UPDATED: SHOW PLAYER ICON OR INITIAL ---
               leading: Stack(
                 alignment: Alignment.bottomRight,
                 children: [
@@ -658,7 +681,6 @@ class _MatchScreenState extends State<MatchScreen>
                           )
                         : null,
                   ),
-                  // Small number showing their arrival position
                   Container(
                     padding: const EdgeInsets.all(2),
                     decoration: const BoxDecoration(
@@ -688,7 +710,6 @@ class _MatchScreenState extends State<MatchScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  // --- UPDATED: 10-POINT RATING BADGE ---
                   if (presentPlayers[i]['rating'] != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1227,7 +1248,7 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
-  void _showMultiSelectDialog() async {
+void _showMultiSelectDialog() async {
     final prefs = await SharedPreferences.getInstance();
     final String? dbData = prefs.getString('players_${widget.groupId}');
 
@@ -1243,19 +1264,10 @@ class _MatchScreenState extends State<MatchScreen>
         context: context,
         builder: (c) => AlertDialog(
           backgroundColor: AppColors.headerBlue,
-          title: const Text(
-            "Nenhum Jogador Cadastrado",
-            style: TextStyle(color: Colors.redAccent),
-          ),
-          content: const Text(
-            "Você precisa cadastrar jogadores na tela 'Jogadores' antes de adicioná-los à partida.",
-            style: TextStyle(color: Colors.white70),
-          ),
+          title: const Text("Nenhum Jogador Cadastrado", style: TextStyle(color: Colors.redAccent)),
+          content: const Text("Você precisa cadastrar jogadores na tela 'Jogadores'.", style: TextStyle(color: Colors.white70)),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text("OK", style: TextStyle(color: Colors.white)),
-            ),
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text("OK", style: TextStyle(color: Colors.white))),
           ],
         ),
       );
@@ -1263,82 +1275,89 @@ class _MatchScreenState extends State<MatchScreen>
     }
 
     List<Map<String, dynamic>> tempSelected = [];
-    final available = allSavedPlayers
-        .where(
-          (p) => !presentPlayers.any((present) => _pid(present) == _pid(p)),
-        )
-        .toList();
-
-    // Sort available players by name alphabetically
-    available.sort(
-      (a, b) => (a['name'] as String).toLowerCase().compareTo(
-        (b['name'] as String).toLowerCase(),
-      ),
-    );
+    String searchQuery = '';
 
     if (!mounted) return;
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, st) => AlertDialog(
-          backgroundColor: AppColors.headerBlue,
-          title: const Text(
-            "Adicionar Jogadores",
-            style: TextStyle(color: AppColors.textWhite),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: available.isEmpty
-                ? const Center(
-                    child: Text(
-                      "Todos os jogadores já foram adicionados!",
-                      style: TextStyle(color: Colors.white54),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: available.length,
-                    itemBuilder: (c, i) => CheckboxListTile(
-                      activeColor: AppColors.accentBlue,
-                      checkColor: AppColors.textWhite,
-                      title: Text(
-                        available[i]['name'],
-                        style: const TextStyle(color: AppColors.textWhite),
+        builder: (c, st) {
+          // Filtra quem não está na pelada e aplica a pesquisa por nome
+          final available = allSavedPlayers
+              .where((p) => !presentPlayers.any((present) => _pid(present) == _pid(p)))
+              .where((p) => p['name'].toString().toLowerCase().contains(searchQuery.toLowerCase()))
+              .toList();
+
+          available.sort((a, b) => (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase()));
+
+          return AlertDialog(
+            backgroundColor: AppColors.headerBlue,
+            title: const Text("Adicionar Jogadores", style: TextStyle(color: AppColors.textWhite)),
+            contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: MediaQuery.of(context).size.height * 0.65, // <-- Popup MAIOR
+              child: Column(
+                children: [
+                  // --- BARRA DE PESQUISA ---
+                  TextField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: "Buscar nome...",
+                      hintStyle: const TextStyle(color: Colors.white30),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                      filled: true,
+                      fillColor: AppColors.deepBlue,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
                       ),
-                      value: tempSelected.contains(available[i]),
-                      onChanged: (v) => st(
-                        () => v!
-                            ? tempSelected.add(available[i])
-                            : tempSelected.remove(available[i]),
-                      ),
                     ),
+                    onChanged: (val) {
+                      st(() => searchQuery = val); // Atualiza a lista em tempo real
+                    },
                   ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text(
-                "Cancelar",
-                style: TextStyle(color: Colors.redAccent),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: available.isEmpty
+                        ? const Center(
+                            child: Text("Nenhum jogador encontrado.", style: TextStyle(color: Colors.white54)))
+                        : ListView.builder(
+                            itemCount: available.length,
+                            itemBuilder: (c, i) => CheckboxListTile(
+                              activeColor: AppColors.accentBlue,
+                              checkColor: AppColors.textWhite,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                available[i]['name'],
+                                style: const TextStyle(color: AppColors.textWhite),
+                              ),
+                              value: tempSelected.contains(available[i]),
+                              onChanged: (v) => st(
+                                () => v! ? tempSelected.add(available[i]) : tempSelected.remove(available[i]),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
               ),
             ),
-            if (available.isNotEmpty)
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent)),
+              ),
               TextButton(
                 onPressed: () {
                   _addPlayersToArrivalList(tempSelected);
                   Navigator.pop(c);
                 },
-                child: const Text(
-                  "OK",
-                  style: TextStyle(
-                    color: AppColors.accentBlue,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: const Text("OK", style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold)),
               ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
