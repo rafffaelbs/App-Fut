@@ -522,8 +522,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         _buildAdvStatRow("Hat-Tricks (3 Gols/Jogo)", "${advancedStats['hatTricks'] ?? 0} marcados", Icons.whatshot, Colors.orangeAccent),
                         const Divider(color: Colors.white12, height: 24),
                         
-                        _buildAdvStatRow("Maior Garçom De", _formatAdvStat(advancedStats['topAssisted'], "gols"), Icons.sports_soccer, Colors.greenAccent),
-                        _buildAdvStatRow("Garçom Favorito", _formatAdvStat(advancedStats['topAssister'], "passes"), Icons.handshake, Colors.amber),
+                        _buildAdvStatRow("Garçom Favorito", _formatAdvStat(advancedStats['topAssister'], "gols seus"), Icons.handshake, Colors.amber),
+
+                        _buildAdvStatRow("Mais Assistiu", _formatAdvStat(advancedStats['topAssisted'], "assistências suas"), Icons.sports_soccer, Colors.greenAccent),
                         const Divider(color: Colors.white12, height: 24),
                         
                         _buildAdvStatRow("Mais Jogou Junto", _formatAdvStat(advancedStats['mostPlayedWith'], "jogos"), Icons.people, Colors.white),
