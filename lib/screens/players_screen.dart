@@ -22,7 +22,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   String get _storageKey => 'players_${widget.groupId}';
 
-  // All available player icon assets
   static const List<String> _availableIcons = [
     'assets/players_icons/adriano.png',
     'assets/players_icons/arrascaeta.png',
@@ -75,11 +74,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _loadPlayers() async {
     final prefs = await SharedPreferences.getInstance();
     final String? playersString = prefs.getString(_storageKey);
+    
     if (playersString != null) {
       final loaded = List<Map<String, dynamic>>.from(jsonDecode(playersString));
-      final bool hadLegacyEntries = loaded.any(
-        (p) => p['id'] == null || p['id'].toString().trim().isEmpty,
-      );
       final normalized = ensurePlayerIds(loaded);
       setState(() {
         players = normalized;
@@ -89,11 +86,120 @@ class _PlayersScreenState extends State<PlayersScreen> {
           ),
         );
       });
-      if (hadLegacyEntries) {
-        await prefs.setString(_storageKey, jsonEncode(normalized));
+    }
+    
+    // Após carregar, força a atualização das notas SofaScore e salva
+    await _calculateDynamicRatings();
+    setState(() => isLoading = false);
+  }
+
+  // --- MOTOR SOFASCORE DINÂMICO PARA ELENCO ---
+  Future<void> _calculateDynamicRatings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String sessionsKey = 'sessions_${widget.groupId}';
+    
+    if (!prefs.containsKey(sessionsKey)) {
+      // Se não há sessões, garante que todos tenham nota 5.0
+      setState(() {
+        for (var p in players) p['rating'] = 5.0;
+      });
+      await _savePlayers();
+      return;
+    }
+
+    final List<dynamic> allSessions = jsonDecode(prefs.getString(sessionsKey)!);
+    final Map<String, Map<String, dynamic>> globalStats = {};
+
+    for (var session in allSessions) {
+      String tournamentId = session['id'];
+      String historyKey = 'match_history_$tournamentId';
+      if (!prefs.containsKey(historyKey)) continue;
+
+      final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
+
+      for (var match in history) {
+        int scoreRed = match['scoreRed'] ?? 0;
+        int scoreWhite = match['scoreWhite'] ?? 0;
+        int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+        int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+
+        final Set<String> processed = {};
+
+        void processPlayer(dynamic playerObj, int status, int goalsConceded) {
+          if (playerObj == null) return;
+          final String playerId = playerIdFromObject(playerObj);
+          if (playerId.isEmpty || processed.contains(playerId)) return;
+          processed.add(playerId);
+
+          globalStats.putIfAbsent(playerId, () => {'goals': 0, 'assists': 0, 'own_goals': 0, 'games': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'goals_conceded': 0, 'clean_sheets': 0});
+          
+          globalStats[playerId]!['games'] = (globalStats[playerId]!['games'] as int) + 1;
+          globalStats[playerId]!['goals_conceded'] = (globalStats[playerId]!['goals_conceded'] as int) + goalsConceded;
+          if (goalsConceded == 0) {
+            globalStats[playerId]!['clean_sheets'] = (globalStats[playerId]!['clean_sheets'] as int) + 1;
+          }
+
+          if (status == 1) globalStats[playerId]!['wins'] = (globalStats[playerId]!['wins'] as int) + 1;
+          else if (status == -1) globalStats[playerId]!['losses'] = (globalStats[playerId]!['losses'] as int) + 1;
+          else globalStats[playerId]!['draws'] = (globalStats[playerId]!['draws'] as int) + 1;
+        }
+
+        if (match['players']['red'] != null) {
+          for (var p in match['players']['red']) processPlayer(p, redStatus, scoreWhite);
+        }
+        if (match['players']['white'] != null) {
+          for (var p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
+        }
+        if (match['players']['gk_red'] != null) processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
+        if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
+
+        if (match['events'] != null) {
+          for (var event in match['events']) {
+            final scorerId = eventPlayerId(event, 'player');
+            if (event['type'] == 'goal') {
+              if (globalStats.containsKey(scorerId)) {
+                globalStats[scorerId]!['goals'] = (globalStats[scorerId]!['goals'] as int) + 1;
+              }
+              final assistId = eventPlayerId(event, 'assist');
+              if (assistId.isNotEmpty && globalStats.containsKey(assistId)) {
+                globalStats[assistId]!['assists'] = (globalStats[assistId]!['assists'] as int) + 1;
+              }
+            } else if (event['type'] == 'own_goal') {
+              if (globalStats.containsKey(scorerId)) {
+                globalStats[scorerId]!['own_goals'] = (globalStats[scorerId]!['own_goals'] as int) + 1;
+              }
+            }
+          }
+        }
       }
     }
-    setState(() => isLoading = false);
+
+    setState(() {
+      for (var i = 0; i < players.length; i++) {
+        String pId = (players[i]['id'] ?? '').toString();
+        if (globalStats.containsKey(pId)) {
+          var data = globalStats[pId]!;
+          int games = data['games'] as int;
+          if (games > 0) {
+            double resultImpact = ((data['wins'] as int) * 1.0) + ((data['draws'] as int) * 0.5) + ((data['losses'] as int) * -0.5);
+            double attackImpact = ((data['goals'] as int) * 0.8) + ((data['assists'] as int) * 0.3) + ((data['own_goals'] as int) * -0.8);
+            double defenseImpact = 0.0;
+            if (games >= 5) {
+              defenseImpact = ((data['clean_sheets'] as int) * 0.5) + ((data['goals_conceded'] as int) * -0.15);
+            }
+
+            double nota = 5.0 + ((resultImpact + attackImpact + defenseImpact) / games);
+            players[i]['rating'] = nota.clamp(0.0, 10.0);
+          } else {
+            players[i]['rating'] = 5.0;
+          }
+        } else {
+          players[i]['rating'] = 5.0; // Padrão se não tiver jogos
+        }
+      }
+    });
+
+    await _savePlayers(); // Salva a nota dinâmica para que outras telas possam usar
   }
 
   Future<void> _savePlayers() async {
@@ -101,12 +207,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
     await prefs.setString(_storageKey, jsonEncode(players));
   }
 
-  void _addNewPlayer(String name, double rating, String? iconPath) {
+  void _addNewPlayer(String name, String? iconPath) {
     setState(() {
       players.add({
         'id': _uuid.v4(),
         'name': name,
-        'rating': rating,
+        'rating': 5.0, // <-- Removemos a nota manual. Todo mundo começa com 5.0.
         'icon': iconPath,
       });
     });
@@ -128,9 +234,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
     required void Function(String) onSelected,
     String? currentIcon,
   }) {
-    // --- NEW: FIND ALL TAKEN ICONS ---
-    // We get all icons currently in use, but we exclude the 'currentIcon'
-    // so the player can keep their own icon if they are just editing!
     final List<String> takenIcons = players
         .map((p) => p['icon'] as String?)
         .where((icon) => icon != null && icon != currentIcon)
@@ -152,7 +255,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle
               Center(
                 child: Container(
                   width: 36,
@@ -175,7 +277,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
               ),
               const SizedBox(height: 16),
               SizedBox(
-                height: 400, // Fixed height for the scrollable area
+                height: 400,
                 child: ListView.builder(
                   padding: EdgeInsets.zero,
                   itemCount: (_availableIcons.length / 4).ceil(),
@@ -186,9 +288,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         children: List.generate(4, (colIndex) {
                           final iconIndex = rowIndex * 4 + colIndex;
                           if (iconIndex >= _availableIcons.length) {
-                            return const Expanded(
-                              child: SizedBox(),
-                            ); // Empty placeholder
+                            return const Expanded(child: SizedBox());
                           }
 
                           final path = _availableIcons[iconIndex];
@@ -209,8 +309,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                       },
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
-                                  height:
-                                      80, // Fixed height for each icon container
+                                  height: 80,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: selected
@@ -264,7 +363,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
   // ── ADD PLAYER DIALOG ───────────────────────────────────────
   void _showAddPlayerDialog() {
     final TextEditingController controller = TextEditingController();
-    double currentRating = 8.0;
     String? selectedIcon;
 
     showDialog(
@@ -345,7 +443,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                             Container(
                               width: 22,
                               height: 22,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: AppColors.accentBlue,
                               ),
@@ -360,7 +458,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Center(
+                    const Center(
                       child: Text(
                         "Toque para escolher ícone",
                         style: TextStyle(color: Colors.white30, fontSize: 11),
@@ -396,73 +494,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Rating slider
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Nível",
-                          style: TextStyle(color: Colors.white54, fontSize: 13),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.deepBlue,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            currentRating.toStringAsFixed(1),
-                            style: TextStyle(
-                              color: _ratingColor(currentRating),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: _ratingColor(currentRating),
-                        inactiveTrackColor: Colors.white12,
-                        thumbColor: _ratingColor(currentRating),
-                        overlayColor: _ratingColor(
-                          currentRating,
-                        ).withValues(alpha: 0.15),
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                        trackHeight: 4,
-                      ),
-                      child: Slider(
-                        value: currentRating,
-                        min: 0.0,
-                        max: 10.0,
-                        divisions: 100,
-                        onChanged: (val) {
-                          setStateDialog(() => currentRating = val);
-                        },
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text(
-                          "0",
-                          style: TextStyle(color: Colors.white24, fontSize: 11),
-                        ),
-                        Text(
-                          "10",
-                          style: TextStyle(color: Colors.white24, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
                     // Buttons
                     Row(
                       children: [
@@ -488,7 +519,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
                               if (controller.text.trim().isNotEmpty) {
                                 _addNewPlayer(
                                   controller.text.trim(),
-                                  currentRating,
                                   selectedIcon,
                                 );
                                 Navigator.pop(context);
