@@ -127,7 +127,7 @@ class _RankingScreenState extends State<RankingScreen> {
         double matchRating = 7.0 + (performance * 1.5);
 
         // Adiciona a nota da partida ao somatório do jogador
-        stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating;
+        stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
       }
 
       if (match['players']['red'] != null) {
@@ -146,7 +146,7 @@ class _RankingScreenState extends State<RankingScreen> {
       int games = data['games'] as int;
       
       // A Nota do Dia é a média aritmética das notas tiradas em cada partida hoje
-      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 5.0;
+      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 6.0;
 
       sortedList.add({
         'id': id,

@@ -174,6 +174,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     });
   }
 
+
   // --- MATCH LOGIC ---
   void _startMatch() async {
     if (isMatchRunning) return;
@@ -756,7 +757,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Widget _buildPlayerListTile(Map<String, dynamic> player, bool isRed, Map<String, dynamic> matchStats) {
-    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : 5.0;
+    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : 6.0;
     
     return InkWell(
       onTap: () {
@@ -884,7 +885,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     required int teamBatch,
   }) {
     final iconPath = player['icon'] as String?;
-    final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 0.0;
+    final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 6.0;
     
     // Define as cores por lote para facilitar a visualização!
     Color teamColor = Colors.white12;
