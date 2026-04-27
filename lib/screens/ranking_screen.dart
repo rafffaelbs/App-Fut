@@ -143,7 +143,8 @@ Future<void> _calculateRankings() async {
         // Fator Defensivo (Ativado desde o 1º jogo na sessão atual para refletir o dia)
         double defenseImpact = (cleanSheets * 0.5) + (conceded * -0.15);
 
-        nota = 5.0 + ((resultImpact + attackImpact + defenseImpact) / games);
+        double performance = (resultImpact + attackImpact + defenseImpact) / games;
+        nota = 5.0 + (performance * 2.0); // O multiplicador mágico
         nota = nota.clamp(0.0, 10.0);
       }
 
