@@ -5,6 +5,8 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import '../utils/player_identity.dart';
 
 // --- WIDGET IMPORTS ---
 import '../widgets/match/match_scoreboard.dart';
@@ -136,23 +138,31 @@ class _MatchScreenState extends State<MatchScreen>
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
-      allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
+      allSavedPlayers = ensurePlayerIds(
+        List<Map<String, dynamic>>.from(jsonDecode(dbData)),
+      );
     }
 
     setState(() {
       if (prefs.containsKey('present_players_$id')) {
-        presentPlayers = List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString('present_players_$id')!),
+        presentPlayers = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString('present_players_$id')!),
+          ),
         );
       }
       if (prefs.containsKey('team_red_$id')) {
-        teamRed = List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString('team_red_$id')!),
+        teamRed = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString('team_red_$id')!),
+          ),
         );
       }
       if (prefs.containsKey('team_white_$id')) {
-        teamWhite = List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString('team_white_$id')!),
+        teamWhite = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString('team_white_$id')!),
+          ),
         );
       }
       if (prefs.containsKey('match_events_$id')) {
@@ -188,6 +198,7 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   // --- MATCH LOGIC ---
+  String _pid(Map<String, dynamic> player) => playerIdFromObject(player);
 
   void _startMatch() async {
     if (isMatchRunning) return;
@@ -314,8 +325,8 @@ class _MatchScreenState extends State<MatchScreen>
     List<Map<String, dynamic>> other = isRedTeam ? teamWhite : teamRed;
 
     setState(() {
-      if (target.any((p) => p['name'] == player['name']) ||
-          other.any((p) => p['name'] == player['name'])) {
+      if (target.any((p) => _pid(p) == _pid(player)) ||
+          other.any((p) => _pid(p) == _pid(player))) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("${player['name']} já está jogando!")),
         );
@@ -336,12 +347,12 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _removePlayerFromMatch(Map<String, dynamic> player) {
     setState(() {
-      teamRed.removeWhere((p) => p['name'] == player['name']);
-      teamWhite.removeWhere((p) => p['name'] == player['name']);
+      teamRed.removeWhere((p) => _pid(p) == _pid(player));
+      teamWhite.removeWhere((p) => _pid(p) == _pid(player));
 
       // Move player to the END of presentPlayers list (queue behavior)
       final playerIndex = presentPlayers.indexWhere(
-        (p) => p['name'] == player['name'],
+        (p) => _pid(p) == _pid(player),
       );
       if (playerIndex != -1) {
         final playerData = presentPlayers.removeAt(playerIndex);
@@ -354,7 +365,7 @@ class _MatchScreenState extends State<MatchScreen>
   void _addPlayersToArrivalList(List<Map<String, dynamic>> selected) {
     setState(() {
       for (var p in selected) {
-        if (!presentPlayers.any((e) => e['name'] == p['name'])) {
+        if (!presentPlayers.any((e) => _pid(e) == _pid(p))) {
           presentPlayers.add(p);
         }
       }
@@ -386,9 +397,9 @@ class _MatchScreenState extends State<MatchScreen>
   ) {
     // Find all players who are in the arrival list but NOT in the line teams
     final waiting = presentPlayers.where((p) {
-      final n = p['name'];
-      bool inRed = teamRed.any((t) => t['name'] == n);
-      bool inWhite = teamWhite.any((t) => t['name'] == n);
+      final id = _pid(p);
+      bool inRed = teamRed.any((t) => _pid(t) == id);
+      bool inWhite = teamWhite.any((t) => _pid(t) == id);
       return !inRed && !inWhite;
     }).toList();
 
@@ -612,7 +623,7 @@ class _MatchScreenState extends State<MatchScreen>
       children: [
         for (int i = 0; i < presentPlayers.length; i++)
           Container(
-            key: ValueKey(presentPlayers[i]['name']),
+            key: ValueKey(_pid(presentPlayers[i])),
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
               color: AppColors.headerBlue,
@@ -878,9 +889,9 @@ class _MatchScreenState extends State<MatchScreen>
   // --- TAB 3: NEXT TEAMS ---
   Widget _buildNextTeamsTab() {
     final waiting = presentPlayers.where((p) {
-      final n = p['name'];
-      bool inRed = teamRed.any((t) => t['name'] == n);
-      bool inWhite = teamWhite.any((t) => t['name'] == n);
+      final id = _pid(p);
+      bool inRed = teamRed.any((t) => _pid(t) == id);
+      bool inWhite = teamWhite.any((t) => _pid(t) == id);
       return !inRed && !inWhite;
     });
 
@@ -995,7 +1006,7 @@ class _MatchScreenState extends State<MatchScreen>
     );
 
     return Container(
-      key: ValueKey(player['name']),
+      key: ValueKey(_pid(player)),
       margin: margin,
       decoration: BoxDecoration(
         color: AppColors.headerBlue,
@@ -1176,7 +1187,7 @@ class _MatchScreenState extends State<MatchScreen>
             ),
             onPressed: () {
               setState(() {
-                presentPlayers.removeWhere((p) => p['name'] == player['name']);
+                presentPlayers.removeWhere((p) => _pid(p) == _pid(player));
                 _removePlayerFromMatch(player);
               });
               _saveMatchState();
@@ -1227,7 +1238,7 @@ class _MatchScreenState extends State<MatchScreen>
     List<Map<String, dynamic>> tempSelected = [];
     final available = allSavedPlayers
         .where(
-          (p) => !presentPlayers.any((present) => present['name'] == p['name']),
+          (p) => !presentPlayers.any((present) => _pid(present) == _pid(p)),
         )
         .toList();
 
@@ -1355,7 +1366,7 @@ class _MatchScreenState extends State<MatchScreen>
     List<Map<String, dynamic>> teammates = isRedTeam
         ? List.from(teamRed)
         : List.from(teamWhite);
-    teammates.removeWhere((p) => p['name'] == player['name']);
+    teammates.removeWhere((p) => _pid(p) == _pid(player));
 
     showDialog(
       context: context,
@@ -1383,27 +1394,32 @@ class _MatchScreenState extends State<MatchScreen>
           const Divider(color: Colors.white12),
 
           // Field Teammates
-          ...teammates.map(
-            (teammate) => SimpleDialogOption(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              child: Text(
-                teammate['name'],
-                style: const TextStyle(
-                  color: AppColors.textWhite,
-                  fontSize: 16,
+          ...teammates
+              .map(
+                (teammate) => SimpleDialogOption(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 24,
+                  ),
+                  child: Text(
+                    teammate['name'],
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 16,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _registerEvent(
+                      "goal",
+                      player,
+                      isRedTeam,
+                      assist: teammate['name'],
+                      assistId: _pid(teammate),
+                    );
+                  },
                 ),
               ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _registerEvent(
-                  "goal",
-                  player,
-                  isRedTeam,
-                  assist: teammate['name'],
-                );
-              },
-            ),
-          ),
 
           // --- NEW: GOALKEEPER ASSIST OPTION ---
           const Divider(color: Colors.white12),
@@ -1436,6 +1452,7 @@ class _MatchScreenState extends State<MatchScreen>
                   player,
                   isRedTeam,
                   assist: selectedGk['name'],
+                  assistId: _pid(selectedGk),
                 );
               });
             },
@@ -1451,6 +1468,7 @@ class _MatchScreenState extends State<MatchScreen>
     Map<String, dynamic> player,
     bool isRedTeam, {
     String? assist,
+    String? assistId,
   }) async {
     try {
       if (type == "goal") {
@@ -1479,7 +1497,9 @@ class _MatchScreenState extends State<MatchScreen>
 
       matchEvents.add({
         "type": type,
+        "playerId": _pid(player),
         "player": player['name'],
+        "assistId": assistId,
         "assist": assist,
         "team": isRedTeam ? "Vermelho" : "Branco",
         "time": _formatTime(totalSecondsElapsed),
@@ -1500,8 +1520,8 @@ class _MatchScreenState extends State<MatchScreen>
   void _showInGameOptions(Map<String, dynamic> player, bool isRedTeam) {
     // Determine if player is officially on the field (Not a Goalkeeper)
     bool isLinePlayer =
-        teamRed.any((p) => p['name'] == player['name']) ||
-        teamWhite.any((p) => p['name'] == player['name']);
+        teamRed.any((p) => _pid(p) == _pid(player)) ||
+        teamWhite.any((p) => _pid(p) == _pid(player));
 
     showModalBottomSheet(
       context: context,
@@ -1747,7 +1767,7 @@ class _MatchScreenState extends State<MatchScreen>
     setState(() {
       for (var p in leavers) {
         int index = presentPlayers.indexWhere(
-          (element) => element['name'] == p['name'],
+          (element) => _pid(element) == _pid(p),
         );
         if (index != -1) {
           var player = presentPlayers.removeAt(index);
@@ -1760,15 +1780,15 @@ class _MatchScreenState extends State<MatchScreen>
 
       for (var p in presentPlayers) {
         if (entering.length >= needed) break;
-        final n = p['name'];
-        bool inRed = teamRed.any((t) => t['name'] == n);
-        bool inWhite = teamWhite.any((t) => t['name'] == n);
+        final id = _pid(p);
+        bool inRed = teamRed.any((t) => _pid(t) == id);
+        bool inWhite = teamWhite.any((t) => _pid(t) == id);
 
         if (!inRed && !inWhite) entering.add(p);
       }
 
-      teamRed.removeWhere((p) => leavers.any((l) => l['name'] == p['name']));
-      teamWhite.removeWhere((p) => leavers.any((l) => l['name'] == p['name']));
+      teamRed.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
+      teamWhite.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
 
       List<Map<String, dynamic>> pool = List.from(entering);
 

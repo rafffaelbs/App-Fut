@@ -1,13 +1,19 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/player_identity.dart';
 
 class RankingScreen extends StatefulWidget {
-  // --- FIX 1: ADD TOURNAMENT ID TO RANKING SCREEN ---
+  final String groupId;
   final String tournamentId;
 
-  const RankingScreen({super.key, required this.tournamentId});
+  const RankingScreen({
+    super.key,
+    required this.groupId,
+    required this.tournamentId,
+  });
 
   @override
   State<RankingScreen> createState() => _RankingScreenState();
@@ -36,7 +42,7 @@ class _RankingScreenState extends State<RankingScreen> {
 
     final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
 
-    final Map<String, Map<String, int>> stats = {};
+    final Map<String, Map<String, dynamic>> stats = {};
 
     for (var match in history) {
       int scoreRed = match['scoreRed'] ?? 0;
@@ -52,15 +58,18 @@ class _RankingScreenState extends State<RankingScreen> {
       final Set<String> processed = {};
 
       void processPlayer(dynamic playerObj, int status) {
-        if (playerObj == null || playerObj['name'] == null) return;
-
-        String name = playerObj['name'];
-        if (processed.contains(name)) return;
-        processed.add(name);
+        if (playerObj == null) return;
+        final String playerId = playerIdFromObject(playerObj);
+        if (playerId.isEmpty) return;
+        if (processed.contains(playerId)) return;
+        processed.add(playerId);
+        final String playerName = (playerObj['name'] ?? '').toString();
 
         stats.putIfAbsent(
-          name,
+          playerId,
           () => {
+            'id': playerId,
+            'name': playerName,
             'goals': 0,
             'assists': 0,
             'games': 0,
@@ -69,16 +78,18 @@ class _RankingScreenState extends State<RankingScreen> {
             'losses': 0,
           },
         );
-
-        stats[name]!['games'] = stats[name]!['games']! + 1;
-
-        if (status == 1) {
-          stats[name]!['wins'] = stats[name]!['wins']! + 1;
-        } else if (status == -1) {
-          stats[name]!['losses'] = stats[name]!['losses']! + 1;
-        } else {
-          stats[name]!['draws'] = stats[name]!['draws']! + 1;
+        if (playerName.isNotEmpty) {
+          stats[playerId]!['name'] = playerName;
         }
+
+        stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+
+        if (status == 1)
+          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+        else if (status == -1)
+          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+        else
+          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
       }
 
       if (match['players']['red'] != null) {
@@ -102,16 +113,14 @@ class _RankingScreenState extends State<RankingScreen> {
       if (match['events'] != null) {
         for (var event in match['events']) {
           if (event['type'] == 'goal') {
-            final scorer = event['player'];
-            if (stats.containsKey(scorer)) {
-              stats[scorer]!['goals'] = stats[scorer]!['goals']! + 1;
+            final scorerId = eventPlayerId(event, 'player');
+            if (stats.containsKey(scorerId)) {
+              stats[scorerId]!['goals'] = (stats[scorerId]!['goals'] as int) + 1;
             }
 
-            final assist = event['assist'];
-            if (assist != null && assist.toString().isNotEmpty) {
-              if (stats.containsKey(assist)) {
-                stats[assist]!['assists'] = stats[assist]!['assists']! + 1;
-              }
+            final assistId = eventPlayerId(event, 'assist');
+            if (assistId.isNotEmpty && stats.containsKey(assistId)) {
+              stats[assistId]!['assists'] = (stats[assistId]!['assists'] as int) + 1;
             }
           }
         }
@@ -120,13 +129,13 @@ class _RankingScreenState extends State<RankingScreen> {
 
     List<Map<String, dynamic>> sortedList = [];
 
-    stats.forEach((name, data) {
-      int g = data['goals']!;
-      int a = data['assists']!;
-      int games = data['games']!;
-      int w = data['wins']!;
-      int d = data['draws']!;
-      int l = data['losses']!;
+    stats.forEach((id, data) {
+      int g = data['goals'] as int;
+      int a = data['assists'] as int;
+      int games = data['games'] as int;
+      int w = data['wins'] as int;
+      int d = data['draws'] as int;
+      int l = data['losses'] as int;
 
       double nota = 0.0;
       if (games > 0) {
@@ -144,7 +153,8 @@ class _RankingScreenState extends State<RankingScreen> {
       }
 
       sortedList.add({
-        'name': name,
+        'id': id,
+        'name': data['name'],
         'goals': g,
         'assists': a,
         'ga': g + a,
@@ -296,6 +306,19 @@ class _RankingScreenState extends State<RankingScreen> {
                         ) {
                           final player = leaderboard[index];
                           return DataRow(
+                            onSelectChanged: (_) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => PlayerDetailScreen(
+                                    groupId: widget.groupId,
+                                    tournamentId: widget.tournamentId,
+                                    playerId: player['id'],
+                                    initialPlayerName: player['name'],
+                                  ),
+                                ),
+                              );
+                            },
                             cells: [
                               DataCell(
                                 Text(

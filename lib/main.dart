@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:app_do_fut/firebase_options.dart';
 import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:app_do_fut/firebase_options.dart';
 import 'package:app_do_fut/screens/sync_screen.dart';
 import 'package:app_do_fut/services/sync_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +45,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final SyncService _syncService = SyncService();
   List<Map<String, dynamic>> groups = [];
   bool isLoading = true;
 
@@ -246,16 +247,64 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: AppColors.deepBlue,
 
       drawer: Drawer(
-        backgroundColor: const Color(0xff001c55),
+        backgroundColor: AppColors.headerBlue,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             const DrawerHeader(
-              decoration: BoxDecoration(color: Color(0xff0E6BA8)),
+              decoration: BoxDecoration(color: AppColors.accentBlue),
               child: Text(
                 'Pelada App',
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_sync, color: Colors.white),
+              title: const Text(
+                'Cloud Sync',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SyncScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.download, color: Colors.white),
+              title: const Text(
+                'Export Database',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await _syncService.exportToFile();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file, color: Colors.white),
+              title: const Text(
+                'Import Database',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final imported = await _syncService.importFromFile();
+                if (!mounted) return;
+                if (imported) {
+                  await _loadGroups();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Banco importado com sucesso.')),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Importacao cancelada ou invalida.')),
+                  );
+                }
+              },
             ),
             ListTile(
               leading: const Icon(Icons.settings, color: Colors.white),
@@ -267,66 +316,6 @@ class _HomePageState extends State<HomePage> {
                 context,
                 MaterialPageRoute(builder: (context) => const BlankScreen()),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_sync, color: Colors.white),
-              title: const Text(
-                'Sincronização na Nuvem',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SyncScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.file_upload, color: Colors.white),
-              title: const Text(
-                'Exportar Banco de Dados',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                try {
-                  await SyncService().exportToFile();
-                } catch(e) {
-                   if (context.mounted) {
-                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao exportar: $e')));
-                   }
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.file_download, color: Colors.white),
-              title: const Text(
-                'Importar Banco de Dados',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                try {
-                  bool success = await SyncService().importFromFile();
-                  if (success && context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HomePage()),
-                      (route) => false,
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Dados importados com sucesso!"),
-                        backgroundColor: Colors.green,
-                      )
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Erro ao importar: $e")),
-                    );
-                  }
-                }
-              },
             ),
           ],
         ),

@@ -42,7 +42,10 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
       ),
 
       // Tab 1: Today's Ranking
-      RankingScreen(tournamentId: widget.tournamentId),
+      RankingScreen(
+        groupId: widget.groupId,
+        tournamentId: widget.tournamentId,
+      ),
 
       // Tab 2: Today's Match History
       HistoryScreen(tournamentId: widget.tournamentId, groupId: widget.groupId),

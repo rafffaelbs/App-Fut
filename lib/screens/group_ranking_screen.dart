@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/player_identity.dart';
 
 class GroupRankingScreen extends StatefulWidget {
   final String groupId;
@@ -87,7 +88,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
   Future<void> _calculateGlobalRankings() async {
     final prefs = await SharedPreferences.getInstance();
-    final Map<String, Map<String, int>> globalStats = {};
+    final Map<String, Map<String, dynamic>> globalStats = {};
 
     for (var session in _allSessions) {
       if (_selectedFilter != 'Todos') {
@@ -118,14 +119,17 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         final Set<String> processed = {};
 
         void processPlayer(dynamic playerObj, int status) {
-          if (playerObj == null || playerObj['name'] == null) return;
-          String name = playerObj['name'];
-          if (processed.contains(name)) return;
-          processed.add(name);
+          if (playerObj == null) return;
+          final String playerId = playerIdFromObject(playerObj);
+          if (playerId.isEmpty || processed.contains(playerId)) return;
+          processed.add(playerId);
+          final String playerName = (playerObj['name'] ?? '').toString();
 
           globalStats.putIfAbsent(
-            name,
+            playerId,
             () => {
+              'id': playerId,
+              'name': playerName,
               'goals': 0,
               'assists': 0,
               'games': 0,
@@ -134,15 +138,17 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
               'losses': 0,
             },
           );
-
-          globalStats[name]!['games'] = globalStats[name]!['games']! + 1;
-          if (status == 1) {
-            globalStats[name]!['wins'] = globalStats[name]!['wins']! + 1;
-          } else if (status == -1) {
-            globalStats[name]!['losses'] = globalStats[name]!['losses']! + 1;
-          } else {
-            globalStats[name]!['draws'] = globalStats[name]!['draws']! + 1;
+          if (playerName.isNotEmpty) {
+            globalStats[playerId]!['name'] = playerName;
           }
+
+          globalStats[playerId]!['games'] = (globalStats[playerId]!['games'] as int) + 1;
+          if (status == 1)
+            globalStats[playerId]!['wins'] = (globalStats[playerId]!['wins'] as int) + 1;
+          else if (status == -1)
+            globalStats[playerId]!['losses'] = (globalStats[playerId]!['losses'] as int) + 1;
+          else
+            globalStats[playerId]!['draws'] = (globalStats[playerId]!['draws'] as int) + 1;
         }
 
         if (match['players']['red'] != null) {
@@ -165,19 +171,15 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         if (match['events'] != null) {
           for (var event in match['events']) {
             if (event['type'] == 'goal') {
-              final scorer = event['player'];
-              if (globalStats.containsKey(scorer)) {
-                globalStats[scorer]!['goals'] =
-                    globalStats[scorer]!['goals']! + 1;
-              }
+              final scorerId = eventPlayerId(event, 'player');
+              if (globalStats.containsKey(scorerId))
+                globalStats[scorerId]!['goals'] =
+                    (globalStats[scorerId]!['goals'] as int) + 1;
 
-              final assist = event['assist'];
-              if (assist != null &&
-                  assist.toString().isNotEmpty &&
-                  globalStats.containsKey(assist)) {
-                globalStats[assist]!['assists'] =
-                    globalStats[assist]!['assists']! + 1;
-              }
+              final assistId = eventPlayerId(event, 'assist');
+              if (assistId.isNotEmpty && globalStats.containsKey(assistId))
+                globalStats[assistId]!['assists'] =
+                    (globalStats[assistId]!['assists'] as int) + 1;
             }
           }
         }
@@ -185,13 +187,13 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     }
 
     List<Map<String, dynamic>> sortedList = [];
-    globalStats.forEach((name, data) {
-      int g = data['goals']!,
-          a = data['assists']!,
-          games = data['games']!,
-          w = data['wins']!,
-          d = data['draws']!,
-          l = data['losses']!;
+    globalStats.forEach((id, data) {
+      int g = data['goals'] as int,
+          a = data['assists'] as int,
+          games = data['games'] as int,
+          w = data['wins'] as int,
+          d = data['draws'] as int,
+          l = data['losses'] as int;
 
       double nota = 0.0;
       if (games > 0) {
@@ -203,7 +205,8 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       }
 
       sortedList.add({
-        'name': name,
+        'id': id,
+        'name': data['name'],
         'goals': g,
         'assists': a,
         'ga': g + a,

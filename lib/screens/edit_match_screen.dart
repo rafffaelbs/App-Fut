@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
+import '../utils/player_identity.dart';
 
 class EditMatchScreen extends StatefulWidget {
   final String tournamentId;
@@ -28,6 +29,8 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
   late List<dynamic> events;
 
   List<String> allGroupPlayerNames = [];
+  Map<String, String> nameToId = {};
+  Map<String, String> idToName = {};
   bool isLoadingPlayers = true;
 
   @override
@@ -47,8 +50,17 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     // 1. Load the ENTIRE Group Roster
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
-      final List<dynamic> groupPlayers = jsonDecode(dbData);
-      playerSet.addAll(groupPlayers.map((p) => p['name'].toString()));
+      final List<Map<String, dynamic>> groupPlayers = ensurePlayerIds(
+        List<Map<String, dynamic>>.from(jsonDecode(dbData)),
+      );
+      for (final p in groupPlayers) {
+        final name = (p['name'] ?? '').toString();
+        final id = (p['id'] ?? name).toString();
+        if (name.isEmpty) continue;
+        playerSet.add(name);
+        nameToId[name] = id;
+        idToName[id] = name;
+      }
     }
 
     // 2. Load players who were present in this session/tournament
@@ -56,29 +68,64 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
       'present_players_${widget.tournamentId}',
     );
     if (presentData != null) {
-      final List<dynamic> presentPlayers = jsonDecode(presentData);
-      playerSet.addAll(presentPlayers.map((p) => p['name'].toString()));
+      final List<Map<String, dynamic>> presentPlayers = ensurePlayerIds(
+        List<Map<String, dynamic>>.from(jsonDecode(presentData)),
+      );
+      for (final p in presentPlayers) {
+        final name = (p['name'] ?? '').toString();
+        final id = (p['id'] ?? name).toString();
+        if (name.isEmpty) continue;
+        playerSet.add(name);
+        nameToId.putIfAbsent(name, () => id);
+        idToName.putIfAbsent(id, () => name);
+      }
     }
 
     // 3. Fallback: Add players from the match data (just in case someone played but was later deleted from the group!)
     if (widget.matchData['players']['red'] != null) {
       playerSet.addAll(
         (widget.matchData['players']['red'] as List).map(
-          (p) => p['name'].toString(),
+          (p) {
+            final name = p['name'].toString();
+            final id = (p['id'] ?? name).toString();
+            nameToId.putIfAbsent(name, () => id);
+            idToName.putIfAbsent(id, () => name);
+            return name;
+          },
         ),
       );
     }
     if (widget.matchData['players']['white'] != null) {
       playerSet.addAll(
         (widget.matchData['players']['white'] as List).map(
-          (p) => p['name'].toString(),
+          (p) {
+            final name = p['name'].toString();
+            final id = (p['id'] ?? name).toString();
+            nameToId.putIfAbsent(name, () => id);
+            idToName.putIfAbsent(id, () => name);
+            return name;
+          },
         ),
       );
     }
     for (var ev in events) {
-      if (ev['player'] != null) playerSet.add(ev['player']);
-      if (ev['assist'] != null && ev['assist'].toString().isNotEmpty) {
-        playerSet.add(ev['assist']);
+      final playerId = eventPlayerId(ev, 'player');
+      final assistId = eventPlayerId(ev, 'assist');
+      final playerName = (ev['player'] ?? '').toString();
+      final assistName = (ev['assist'] ?? '').toString();
+      if (playerName.isNotEmpty) {
+        playerSet.add(playerName);
+        if (playerId.isNotEmpty) {
+          nameToId.putIfAbsent(playerName, () => playerId);
+          idToName.putIfAbsent(playerId, () => playerName);
+        }
+      }
+      if (assistName.isNotEmpty) {
+        playerSet.add(assistName);
+        if (assistId.isNotEmpty) {
+          nameToId.putIfAbsent(assistName, () => assistId);
+          idToName.putIfAbsent(assistId, () => assistName);
+        }
       }
     }
 
@@ -127,14 +174,18 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
 
     // --- FIX FOR THE RED SCREEN CRASH ---
     // Safely verify the player exists in the list, otherwise default to the first player
-    String selectedPlayer = allGroupPlayerNames.contains(currentEvent['player'])
-        ? currentEvent['player']
+    final currentEventPlayerName =
+        idToName[eventPlayerId(currentEvent, 'player')] ?? currentEvent['player'];
+    String selectedPlayer = allGroupPlayerNames.contains(currentEventPlayerName)
+        ? currentEventPlayerName
         : allGroupPlayerNames.first;
 
+    final currentAssistName =
+        idToName[eventPlayerId(currentEvent, 'assist')] ?? currentEvent['assist'];
     String? selectedAssist =
-        (currentEvent['assist'] != null &&
-            allGroupPlayerNames.contains(currentEvent['assist']))
-        ? currentEvent['assist']
+        (currentAssistName != null &&
+            allGroupPlayerNames.contains(currentAssistName))
+        ? currentAssistName
         : null;
 
     TextEditingController timeController = TextEditingController(
@@ -294,7 +345,11 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
                       final newEvent = {
                         'type': selectedType,
                         'team': selectedTeam,
+                        'playerId': nameToId[selectedPlayer] ?? selectedPlayer,
                         'player': selectedPlayer,
+                        'assistId': selectedAssist == null
+                            ? null
+                            : (nameToId[selectedAssist] ?? selectedAssist),
                         'assist': selectedAssist,
                         'time': timeController.text.trim().isEmpty
                             ? "00:00"
