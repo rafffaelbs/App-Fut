@@ -29,7 +29,7 @@ class _RankingScreenState extends State<RankingScreen> {
     _calculateRankings();
   }
 
-Future<void> _calculateRankings() async {
+  Future<void> _calculateRankings() async {
     final prefs = await SharedPreferences.getInstance();
     final String historyKey = 'match_history_${widget.tournamentId}';
 
@@ -48,13 +48,34 @@ Future<void> _calculateRankings() async {
       int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
       int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
 
+      // Agrupa os eventos específicos desta partida
+      Map<String, Map<String, int>> matchPlayerEvents = {};
+      if (match['events'] != null) {
+        for (var ev in match['events']) {
+          String pid = eventPlayerId(ev, 'player');
+          String astId = eventPlayerId(ev, 'assist');
+          String type = ev['type'];
+          
+          if (pid.isNotEmpty) {
+            matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
+            if (type == 'goal') matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
+            if (type == 'own_goal') matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
+            if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
+            if (type == 'red_card') matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
+          }
+          if (astId.isNotEmpty) {
+            matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
+            if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
+          }
+        }
+      }
+
       final Set<String> processed = {};
 
-      void processPlayer(dynamic playerObj, int status, int goalsConceded) {
+      void processPlayer(dynamic playerObj, int status, int conceded) {
         if (playerObj == null) return;
         final String playerId = playerIdFromObject(playerObj);
-        if (playerId.isEmpty) return;
-        if (processed.contains(playerId)) return;
+        if (playerId.isEmpty || processed.contains(playerId)) return;
         processed.add(playerId);
         
         final String playerName = (playerObj['name'] ?? '').toString();
@@ -66,27 +87,47 @@ Future<void> _calculateRankings() async {
             'name': playerName,
             'goals': 0,
             'assists': 0,
-            'own_goals': 0,
             'games': 0,
             'wins': 0,
             'draws': 0,
             'losses': 0,
-            'goals_conceded': 0,
-            'clean_sheets': 0,
+            'sum_ratings': 0.0, // Acumula as notas de cada partida
           },
         );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
         stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
-        stats[playerId]!['goals_conceded'] = (stats[playerId]!['goals_conceded'] as int) + goalsConceded;
         
-        if (goalsConceded == 0) {
-          stats[playerId]!['clean_sheets'] = (stats[playerId]!['clean_sheets'] as int) + 1;
-        }
-
         if (status == 1) stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
         else if (status == -1) stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
         else stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+
+        // Recupera os dados deste jogador apenas nesta partida
+        int g = matchPlayerEvents[playerId]?['g'] ?? 0;
+        int a = matchPlayerEvents[playerId]?['a'] ?? 0;
+        int og = matchPlayerEvents[playerId]?['og'] ?? 0;
+        int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
+        int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
+
+        // Atualiza a tabela geral
+        stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
+        stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
+
+        // --- CÁLCULO DA NOTA DESTA PARTIDA (Igual ao Campo Miniatura) ---
+        double resultImpact = 0;
+        if (status == 1) resultImpact = 0.5;
+        else if (status == -1) resultImpact = -0.5;
+
+        double attackImpact = (g * 0.8) + (a * 0.4) + (og * -0.7);
+        double disciplineImpact = (yc * -0.3) + (rc * -0.8);
+        double defenseImpact = (conceded * -0.15); 
+
+
+        double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
+        double matchRating = 7.0 + (performance * 1.5);
+
+        // Adiciona a nota da partida ao somatório do jogador
+        stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating;
       }
 
       if (match['players']['red'] != null) {
@@ -95,31 +136,6 @@ Future<void> _calculateRankings() async {
       if (match['players']['white'] != null) {
         for (var p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
       }
-      if (match['players']['gk_red'] != null) {
-        processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
-      }
-      if (match['players']['gk_white'] != null) {
-        processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
-      }
-
-      if (match['events'] != null) {
-        for (var event in match['events']) {
-          final scorerId = eventPlayerId(event, 'player');
-          if (event['type'] == 'goal') {
-            if (stats.containsKey(scorerId)) {
-              stats[scorerId]!['goals'] = (stats[scorerId]!['goals'] as int) + 1;
-            }
-            final assistId = eventPlayerId(event, 'assist');
-            if (assistId.isNotEmpty && stats.containsKey(assistId)) {
-              stats[assistId]!['assists'] = (stats[assistId]!['assists'] as int) + 1;
-            }
-          } else if (event['type'] == 'own_goal') {
-            if (stats.containsKey(scorerId)) {
-              stats[scorerId]!['own_goals'] = (stats[scorerId]!['own_goals'] as int) + 1;
-            }
-          }
-        }
-      }
     }
 
     List<Map<String, dynamic>> sortedList = [];
@@ -127,26 +143,10 @@ Future<void> _calculateRankings() async {
     stats.forEach((id, data) {
       int g = data['goals'] as int;
       int a = data['assists'] as int;
-      int og = data['own_goals'] as int;
       int games = data['games'] as int;
-      int w = data['wins'] as int;
-      int d = data['draws'] as int;
-      int l = data['losses'] as int;
-      int conceded = data['goals_conceded'] as int;
-      int cleanSheets = data['clean_sheets'] as int;
-
-      double nota = 0.0;
-      if (games > 0) {
-        double resultImpact = (w * 1.0) + (d * 0.5) + (l * -0.5);
-        double attackImpact = (g * 0.8) + (a * 0.3) + (og * -0.8);
-        
-        // Fator Defensivo (Ativado desde o 1º jogo na sessão atual para refletir o dia)
-        double defenseImpact = (cleanSheets * 0.5) + (conceded * -0.15);
-
-        double performance = (resultImpact + attackImpact + defenseImpact) / games;
-        nota = 5.0 + (performance * 2.0); // O multiplicador mágico
-        nota = nota.clamp(0.0, 10.0);
-      }
+      
+      // A Nota do Dia é a média aritmética das notas tiradas em cada partida hoje
+      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 5.0;
 
       sortedList.add({
         'id': id,
@@ -155,10 +155,10 @@ Future<void> _calculateRankings() async {
         'assists': a,
         'ga': g + a,
         'games': games,
-        'wins': w,
-        'draws': d,
-        'losses': l,
-        'nota': nota,
+        'wins': data['wins'],
+        'draws': data['draws'],
+        'losses': data['losses'],
+        'nota': avgRating,
       });
     });
 
@@ -182,7 +182,7 @@ Future<void> _calculateRankings() async {
         backgroundColor: AppColors.headerBlue,
         iconTheme: const IconThemeData(color: AppColors.textWhite),
         title: const Text(
-          "Ranking (G/A)",
+          "Ranking da Pelada",
           style: TextStyle(color: AppColors.textWhite),
         ),
         centerTitle: true,

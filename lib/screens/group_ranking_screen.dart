@@ -158,7 +158,9 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           double disciplineImpact = (yc * -0.3) + (rc * -0.8);
           double defenseImpact = (conceded * -0.15);
 
-          double matchRating = 7.0 + resultImpact + attackImpact + defenseImpact + disciplineImpact;
+          double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
+          double matchRating = 7.0 + (performance * 1.5);
+
           globalStats[playerId]!['sum_ratings'] = (globalStats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
         }
 
