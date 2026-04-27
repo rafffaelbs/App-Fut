@@ -50,35 +50,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     super.initState();
     _loadPlayerDetails();
   }
-
-  Future<void> _loadPlayerDetails() async {
+Future<void> _loadPlayerDetails() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? tournament = widget.tournamentId ?? await _resolveTournamentId(prefs);
     final Map<String, dynamic>? player = await _loadPlayer(prefs);
     final String? icon = widget.playerIcon ?? player?['icon'] as String?;
-    final String resolvedName =
-        (player?['name'] ?? widget.initialPlayerName ?? '').toString();
+    final String resolvedName = (player?['name'] ?? widget.initialPlayerName ?? '').toString();
 
-    if (tournament == null) {
-      setState(() {
-        playerName = resolvedName;
-        playerStats['name'] = resolvedName;
-        resolvedIcon = icon;
-        isLoading = false;
-      });
-      return;
-    }
-
-    final List<Map<String, dynamic>> leaderboard = _calculateLeaderboard(
-      prefs: prefs,
-      tournamentId: tournament,
-    );
+    // Calcula o ranking histórico de TODAS as peladas do grupo
+    final List<Map<String, dynamic>> leaderboard = _calculateAllTimeLeaderboard(prefs);
     final int index = leaderboard.indexWhere(
       (p) => (p['id'] as String) == widget.playerId,
     );
 
     setState(() {
-      selectedTournamentId = tournament;
       resolvedIcon = icon;
       playerName = resolvedName;
       totalPlayers = leaderboard.length;
@@ -93,42 +77,141 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     });
   }
 
-  Future<String?> _resolveTournamentId(SharedPreferences prefs) async {
+  List<Map<String, dynamic>> _calculateAllTimeLeaderboard(SharedPreferences prefs) {
     final String sessionsKey = 'sessions_${widget.groupId}';
-    if (!prefs.containsKey(sessionsKey)) return null;
+    List<dynamic> allHistory = [];
 
-    final List<Map<String, dynamic>> sessions = List<Map<String, dynamic>>.from(
-      jsonDecode(prefs.getString(sessionsKey)!),
-    );
-
-    if (sessions.isEmpty) return null;
-
-    final DateTime now = DateTime.now();
-    final List<Map<String, dynamic>> currentMonthSessions = sessions.where((session) {
-      final String? timestamp = session['timestamp'];
-      if (timestamp == null) return false;
-      final DateTime? date = DateTime.tryParse(timestamp);
-      if (date == null) return false;
-      return date.year == now.year && date.month == now.month;
-    }).toList();
-
-    currentMonthSessions.sort((a, b) {
-      final DateTime da = DateTime.tryParse(a['timestamp'] ?? '') ?? DateTime(1970);
-      final DateTime db = DateTime.tryParse(b['timestamp'] ?? '') ?? DateTime(1970);
-      return db.compareTo(da);
-    });
-
-    if (currentMonthSessions.isNotEmpty) {
-      return currentMonthSessions.first['id'];
+    // 1. Busca todas as sessões cadastradas para este grupo
+    if (prefs.containsKey(sessionsKey)) {
+      final List<dynamic> sessions = jsonDecode(prefs.getString(sessionsKey)!);
+      
+      // 2. Para cada sessão, busca os jogos e unifica na lista allHistory
+      for (var session in sessions) {
+        final String? tId = session['id'];
+        if (tId != null) {
+          final String historyKey = 'match_history_$tId';
+          if (prefs.containsKey(historyKey)) {
+            allHistory.addAll(jsonDecode(prefs.getString(historyKey)!));
+          }
+        }
+      }
     }
 
-    sessions.sort((a, b) {
-      final DateTime da = DateTime.tryParse(a['timestamp'] ?? '') ?? DateTime(1970);
-      final DateTime db = DateTime.tryParse(b['timestamp'] ?? '') ?? DateTime(1970);
-      return db.compareTo(da);
+    final Map<String, Map<String, dynamic>> stats = {};
+
+    // 3. Calcula as estatísticas em cima de TODO o histórico acumulado
+    for (final match in allHistory) {
+      final int scoreRed = match['scoreRed'] ?? 0;
+      final int scoreWhite = match['scoreWhite'] ?? 0;
+
+      final int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+      final int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+      final Set<String> processed = {};
+
+      void processPlayer(dynamic playerObj, int status) {
+        if (playerObj == null) return;
+        final String playerId = playerIdFromObject(playerObj);
+        if (playerId.isEmpty) return;
+        if (processed.contains(playerId)) return;
+        processed.add(playerId);
+        final String playerDisplayName = (playerObj['name'] ?? '').toString();
+
+        stats.putIfAbsent(
+          playerId,
+          () => {
+            'id': playerId,
+            'name': playerDisplayName,
+            'goals': 0,
+            'assists': 0,
+            'games': 0,
+            'wins': 0,
+            'draws': 0,
+            'losses': 0,
+          },
+        );
+        if (playerDisplayName.isNotEmpty) {
+          stats[playerId]!['name'] = playerDisplayName;
+        }
+
+        stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+        if (status == 1) {
+          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+        } else if (status == -1) {
+          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+        } else {
+          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+        }
+      }
+
+      if (match['players']['red'] != null) {
+        for (final p in match['players']['red']) processPlayer(p, redStatus);
+      }
+      if (match['players']['white'] != null) {
+        for (final p in match['players']['white']) processPlayer(p, whiteStatus);
+      }
+      if (match['players']['gk_red'] != null) {
+        processPlayer(match['players']['gk_red'], redStatus);
+      }
+      if (match['players']['gk_white'] != null) {
+        processPlayer(match['players']['gk_white'], whiteStatus);
+      }
+
+      if (match['events'] != null) {
+        for (final event in match['events']) {
+          if (event['type'] != 'goal') continue;
+
+          final String scorerId = eventPlayerId(event, 'player');
+          if (scorerId.isNotEmpty && stats.containsKey(scorerId)) {
+            stats[scorerId]!['goals'] = (stats[scorerId]!['goals'] as int) + 1;
+          }
+
+          final String assistId = eventPlayerId(event, 'assist');
+          if (assistId.isNotEmpty && stats.containsKey(assistId)) {
+            stats[assistId]!['assists'] = (stats[assistId]!['assists'] as int) + 1;
+          }
+        }
+      }
+    }
+
+    final List<Map<String, dynamic>> sortedList = [];
+    stats.forEach((id, data) {
+      final int g = data['goals'] as int;
+      final int a = data['assists'] as int;
+      final int games = data['games'] as int;
+      final int w = data['wins'] as int;
+      final int d = data['draws'] as int;
+      final int l = data['losses'] as int;
+
+      double nota = 0.0;
+      if (games > 0) {
+        final double matchResultImpact = ((w * 1.5) + (d * 0.5) + (l * -0.5));
+        final double contributionImpact = ((g * 1.0) + (a * 0.7));
+        nota = 5.0 + ((matchResultImpact + contributionImpact) / games);
+        if (nota > 10.0) nota = 10.0;
+        if (nota < 0.0) nota = 0.0;
+      }
+
+      sortedList.add({
+        'id': id,
+        'name': data['name'],
+        'goals': g,
+        'assists': a,
+        'ga': g + a,
+        'games': games,
+        'wins': w,
+        'draws': d,
+        'losses': l,
+        'nota': nota,
+      });
     });
 
-    return sessions.first['id'];
+    sortedList.sort((a, b) {
+      final int compareGA = (b['ga'] as int).compareTo(a['ga'] as int);
+      if (compareGA != 0) return compareGA;
+      return (b['nota'] as double).compareTo(a['nota'] as double);
+    });
+
+    return sortedList;
   }
 
   Future<Map<String, dynamic>?> _loadPlayer(SharedPreferences prefs) async {
@@ -368,24 +451,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         const SizedBox(height: 6),
                         Text(
                           rankPosition != null
-                              ? 'Current Month Ranking: #$rankPosition / $totalPlayers'
-                              : 'Current Month Ranking: sem dados',
+                              ? 'Ranking Histórico Geral: #$rankPosition / $totalPlayers'
+                              : 'Ranking Histórico: sem dados',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
                           ),
                         ),
-                        if (selectedTournamentId != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              'Sessao: $selectedTournamentId',
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
