@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../utils/player_identity.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
@@ -30,6 +31,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   int totalPlayers = 0;
   String playerName = '';
   String? resolvedIcon;
+
+  // --- CHART STATE ---
+  List<dynamic> _allHistory = [];
+  String _chartMetric = 'Nota'; // Opções: 'Nota', 'G+A', 'Gols', 'Assistências'
+  String _chartPeriod = 'Sessão'; // Opções: 'Sessão', 'Mês'
+  List<Map<String, dynamic>> _chartData = [];
 
   Map<String, dynamic> playerStats = {
     'name': '',
@@ -74,13 +81,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     }
 
     final List<Map<String, dynamic>> leaderboard = _calculateAllTimeLeaderboard(allHistory);
-    final int index = leaderboard.indexWhere(
-      (p) => (p['id'] as String) == widget.playerId,
-    );
-
+    final int index = leaderboard.indexWhere((p) => (p['id'] as String) == widget.playerId);
     final Map<String, dynamic> advStats = _calculateAdvancedStats(allHistory);
 
     setState(() {
+      _allHistory = allHistory; // Guarda o histórico na memória para o gráfico
       resolvedIcon = icon;
       playerName = resolvedName;
       totalPlayers = leaderboard.length;
@@ -93,10 +98,111 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         playerStats['name'] = resolvedName;
         playerStats['nota'] = 5.0;
       }
-      isLoading = false;
+    });
+
+    _calculateChartData(); // Gera os pontos do gráfico
+    setState(() => isLoading = false);
+  }
+
+  // --- MOTOR DO GRÁFICO ---
+  void _calculateChartData() {
+    if (_allHistory.isEmpty) return;
+
+    final myId = widget.playerId;
+    Map<String, Map<String, dynamic>> grouped = {};
+
+    for (final match in _allHistory) {
+      final List<dynamic> redPlayers = [...(match['players']['red'] ?? []), match['players']['gk_red']].where((p) => p != null).toList();
+      final List<dynamic> whitePlayers = [...(match['players']['white'] ?? []), match['players']['gk_white']].where((p) => p != null).toList();
+
+      bool inRed = redPlayers.any((p) => playerIdFromObject(p) == myId);
+      bool inWhite = whitePlayers.any((p) => playerIdFromObject(p) == myId);
+
+      if (!inRed && !inWhite) continue;
+
+      String rawDate = match['date'] ?? DateTime.now().toIso8601String();
+      DateTime dt = DateTime.parse(rawDate);
+
+      String groupKey;
+      if (_chartPeriod == 'Mês') {
+        groupKey = "${dt.month.toString().padLeft(2, '0')}/${dt.year.toString().substring(2)}";
+      } else {
+        groupKey = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}";
+      }
+
+      grouped.putIfAbsent(groupKey, () => {
+        'goals': 0, 'assists': 0, 'own_goals': 0, 'games': 0,
+        'wins': 0, 'draws': 0, 'losses': 0, 'goals_conceded': 0, 'clean_sheets': 0,
+        'date': dt,
+      });
+
+      String myTeam = inRed ? 'red' : 'white';
+      int scoreRed = match['scoreRed'] ?? 0;
+      int scoreWhite = match['scoreWhite'] ?? 0;
+      int goalsConceded = inRed ? scoreWhite : scoreRed;
+      
+      int myTeamResult = 0;
+      if (scoreRed != scoreWhite) {
+        myTeamResult = (myTeam == 'red' && scoreRed > scoreWhite) || (myTeam == 'white' && scoreWhite > scoreRed) ? 1 : -1;
+      }
+
+      grouped[groupKey]!['games'] += 1;
+      grouped[groupKey]!['goals_conceded'] += goalsConceded;
+      if (goalsConceded == 0) grouped[groupKey]!['clean_sheets'] += 1;
+
+      if (myTeamResult == 1) grouped[groupKey]!['wins'] += 1;
+      else if (myTeamResult == -1) grouped[groupKey]!['losses'] += 1;
+      else grouped[groupKey]!['draws'] += 1;
+
+      if (match['events'] != null) {
+        for (final ev in match['events']) {
+          final String scorerId = eventPlayerId(ev, 'player');
+          final String assistId = eventPlayerId(ev, 'assist');
+
+          if (ev['type'] == 'goal') {
+            if (scorerId == myId) grouped[groupKey]!['goals'] += 1;
+            if (assistId == myId) grouped[groupKey]!['assists'] += 1;
+          } else if (ev['type'] == 'own_goal') {
+            if (scorerId == myId) grouped[groupKey]!['own_goals'] += 1;
+          }
+        }
+      }
+    }
+
+    List<Map<String, dynamic>> chartList = [];
+    grouped.forEach((key, data) {
+      int games = data['games'];
+      double nota = 5.0;
+      if (games > 0) {
+        double resultImpact = (data['wins'] * 1.0) + (data['draws'] * 0.5) + (data['losses'] * -0.5);
+        double attackImpact = (data['goals'] * 0.8) + (data['assists'] * 0.3) + (data['own_goals'] * -0.8);
+        // Para o gráfico, não usamos a trava de 5 jogos (para mostrar a evolução diária real)
+        double defenseImpact = (data['clean_sheets'] * 0.5) + (data['goals_conceded'] * -0.15);
+
+        double performance = (resultImpact + attackImpact + defenseImpact) / games;
+        nota = 5.0 + (performance * 2.0); 
+        nota = nota.clamp(0.0, 10.0);
+      }
+
+      chartList.add({
+        'label': key,
+        'date': data['date'],
+        'Nota': nota,
+        'Gols': data['goals'],
+        'Assistências': data['assists'],
+        'G+A': data['goals'] + data['assists'],
+      });
+    });
+
+    // Ordena da data mais antiga para a mais nova
+    chartList.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+
+    setState(() {
+      _chartData = chartList;
     });
   }
 
+  // Restante dos métodos inalterados: _calculateAdvancedStats, _calculateAllTimeLeaderboard, _loadPlayer, etc.
   Map<String, dynamic> _calculateAdvancedStats(List<dynamic> allHistory) {
     Map<String, int> assistsGiven = {};
     Map<String, int> assistsReceived = {};
@@ -260,7 +366,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         double defenseImpact = 0.0;
         if (games >= 5) defenseImpact = ((data['clean_sheets'] as int) * 0.5) + ((data['goals_conceded'] as int) * -0.15);
 
-        // --- ESPAÇAMENTO DA NOTA (Multiplicador de 2.0 para dar amplitude) ---
         double performance = (resultImpact + attackImpact + defenseImpact) / games;
         nota = 5.0 + (performance * 2.0); 
         nota = nota.clamp(0.0, 10.0);
@@ -286,6 +391,202 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     return null;
   }
 
+  // --- WIDGET DO GRÁFICO ---
+  Widget _buildEvolutionChart() {
+    if (_chartData.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: Text("Jogue mais partidas para ver o gráfico.", style: TextStyle(color: Colors.white54))),
+      );
+    }
+
+    List<FlSpot> spots = [];
+    double maxY = 0;
+    double minY = _chartMetric == 'Nota' ? 10.0 : 0;
+
+    for (int i = 0; i < _chartData.length; i++) {
+      double value = (_chartData[i][_chartMetric] as num).toDouble();
+      spots.add(FlSpot(i.toDouble(), value));
+      if (value > maxY) maxY = value;
+      if (value < minY) minY = value;
+    }
+
+    if (_chartMetric == 'Nota') {
+      maxY = 10.0;
+      minY = minY < 3.0 ? minY : 3.0; // Garante que começa num valor razoável para notas
+    } else {
+      maxY = (maxY + 2).ceilToDouble(); // Folga no topo para Gols e Assistências
+      minY = 0;
+    }
+
+    Color lineColor = AppColors.accentBlue;
+    if (_chartMetric == 'Nota') lineColor = Colors.amber;
+    if (_chartMetric == 'Gols') lineColor = AppColors.textWhite;
+    if (_chartMetric == 'G+A') lineColor = AppColors.highlightGreen;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.auto_graph, color: AppColors.accentBlue),
+                  SizedBox(width: 8),
+                  Text("Evolução", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              // Dropdown Periodo
+              Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(color: AppColors.deepBlue, borderRadius: BorderRadius.circular(8)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _chartPeriod,
+                    dropdownColor: AppColors.deepBlue,
+                    icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 16),
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    items: ['Sessão', 'Mês'].map((String value) {
+                      return DropdownMenuItem<String>(value: value, child: Text(value));
+                    }).toList(),
+                    onChanged: (newValue) {
+                      if (newValue != null) {
+                        setState(() => _chartPeriod = newValue);
+                        _calculateChartData();
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Chips de Métrica
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['Nota', 'G+A', 'Gols', 'Assistências'].map((metric) {
+                bool isSelected = _chartMetric == metric;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() { _chartMetric = metric; _calculateChartData(); }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.accentBlue.withValues(alpha: 0.2) : Colors.transparent,
+                        border: Border.all(color: isSelected ? AppColors.accentBlue : Colors.white24),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(metric, style: TextStyle(color: isSelected ? AppColors.accentBlue : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // O GRÁFICO
+          SizedBox(
+            height: 200,
+            child: LineChart(
+              LineChartData(
+                minY: minY,
+                maxY: maxY,
+                minX: 0,
+                maxX: (spots.length - 1).toDouble(),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: _chartMetric == 'Nota' ? 2.0 : 1.0,
+                  getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          _chartMetric == 'Nota' ? value.toStringAsFixed(1) : value.toInt().toString(),
+                          style: const TextStyle(color: Colors.white54, fontSize: 10),
+                          textAlign: TextAlign.right,
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 22,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        if (value.toInt() < 0 || value.toInt() >= _chartData.length) return const SizedBox();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            _chartData[value.toInt()]['label'],
+                            style: const TextStyle(color: Colors.white54, fontSize: 9),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: lineColor,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(radius: 4, color: lineColor, strokeWidth: 1.5, strokeColor: AppColors.headerBlue);
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: lineColor.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((LineBarSpot touchedSpot) {
+                        return LineTooltipItem(
+                          '${_chartData[touchedSpot.x.toInt()]['label']}\n',
+                          const TextStyle(color: Colors.white70, fontSize: 10),
+                          children: [
+                            TextSpan(
+                              text: _chartMetric == 'Nota' ? touchedSpot.y.toStringAsFixed(1) : touchedSpot.y.toInt().toString(),
+                              style: TextStyle(color: lineColor, fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final int wins = playerStats['wins'] ?? 0;
@@ -304,7 +605,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         centerTitle: true,
         elevation: 0,
         title: Text(
-          displayName, // --- TÍTULO DINÂMICO COM O NOME ---
+          displayName,
           style: const TextStyle(color: AppColors.textWhite),
         ),
       ),
@@ -324,7 +625,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     ),
                     child: Column(
                       children: [
-                        // --- ICON COM BADGE DE NOTA ---
                         Stack(
                           alignment: Alignment.topRight,
                           children: [
@@ -372,6 +672,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
+                  // --- INCLUSÃO DO GRÁFICO AQUI ---
+                  _buildEvolutionChart(),
+                  const SizedBox(height: 16),
+                  // --------------------------------
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
