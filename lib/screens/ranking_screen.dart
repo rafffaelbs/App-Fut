@@ -212,6 +212,7 @@ class _RankingScreenState extends State<RankingScreen> {
                         minWidth: constraints.maxWidth,
                       ),
                       child: DataTable(
+                        showCheckboxColumn: false,
                         headingRowColor: WidgetStateProperty.all(
                           AppColors.headerBlue,
                         ),
@@ -306,19 +307,6 @@ class _RankingScreenState extends State<RankingScreen> {
                         ) {
                           final player = leaderboard[index];
                           return DataRow(
-                            onSelectChanged: (_) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => PlayerDetailScreen(
-                                    groupId: widget.groupId,
-                                    tournamentId: widget.tournamentId,
-                                    playerId: player['id'],
-                                    initialPlayerName: player['name'],
-                                  ),
-                                ),
-                              );
-                            },
                             cells: [
                               DataCell(
                                 Text(
@@ -336,6 +324,19 @@ class _RankingScreenState extends State<RankingScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PlayerDetailScreen(
+                                        groupId: widget.groupId,
+                                        tournamentId: widget.tournamentId,
+                                        playerId: player['id'],
+                                        initialPlayerName: player['name'],
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                               DataCell(
                                 Text(
