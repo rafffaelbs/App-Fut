@@ -26,9 +26,18 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   bool _sortDescending = true;
 
   static const Map<int, String> _monthNames = {
-    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro',
+    1: 'Janeiro',
+    2: 'Fevereiro',
+    3: 'Março',
+    4: 'Abril',
+    5: 'Maio',
+    6: 'Junho',
+    7: 'Julho',
+    8: 'Agosto',
+    9: 'Setembro',
+    10: 'Outubro',
+    11: 'Novembro',
+    12: 'Dezembro',
   };
 
   String _formatFilterLabel(String filter) {
@@ -56,8 +65,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
       Set<String> uniqueMonths = {};
       for (var session in _allSessions) {
-        DateTime date = session['timestamp'] != null ? DateTime.parse(session['timestamp']) : DateTime.now();
-        uniqueMonths.add("${date.month.toString().padLeft(2, '0')}/${date.year}");
+        DateTime date = session['timestamp'] != null
+            ? DateTime.parse(session['timestamp'])
+            : DateTime.now();
+        uniqueMonths.add(
+          "${date.month.toString().padLeft(2, '0')}/${date.year}",
+        );
       }
 
       List<String> sortedMonths = uniqueMonths.toList()
@@ -80,8 +93,11 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
     for (var session in _allSessions) {
       if (_selectedFilter != 'Todos') {
-        DateTime date = session['timestamp'] != null ? DateTime.parse(session['timestamp']) : DateTime.now();
-        String sessionMonthYear = "${date.month.toString().padLeft(2, '0')}/${date.year}";
+        DateTime date = session['timestamp'] != null
+            ? DateTime.parse(session['timestamp'])
+            : DateTime.now();
+        String sessionMonthYear =
+            "${date.month.toString().padLeft(2, '0')}/${date.year}";
         if (sessionMonthYear != _selectedFilter) continue;
       }
 
@@ -94,8 +110,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       for (var match in history) {
         int scoreRed = match['scoreRed'] ?? 0;
         int scoreWhite = match['scoreWhite'] ?? 0;
-        int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
-        int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+        int redStatus = scoreRed > scoreWhite
+            ? 1
+            : (scoreRed == scoreWhite ? 0 : -1);
+        int whiteStatus = scoreWhite > scoreRed
+            ? 1
+            : (scoreRed == scoreWhite ? 0 : -1);
 
         Map<String, Map<String, int>> matchPlayerEvents = {};
         if (match['events'] != null) {
@@ -103,17 +123,33 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
             String pid = eventPlayerId(ev, 'player');
             String astId = eventPlayerId(ev, 'assist');
             String type = ev['type'];
-            
+
             if (pid.isNotEmpty) {
-              matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-              if (type == 'goal') matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
-              if (type == 'own_goal') matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
-              if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
-              if (type == 'red_card') matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
+              matchPlayerEvents.putIfAbsent(
+                pid,
+                () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+              );
+              if (type == 'goal')
+                matchPlayerEvents[pid]!['g'] =
+                    matchPlayerEvents[pid]!['g']! + 1;
+              if (type == 'own_goal')
+                matchPlayerEvents[pid]!['og'] =
+                    matchPlayerEvents[pid]!['og']! + 1;
+              if (type == 'yellow_card')
+                matchPlayerEvents[pid]!['yc'] =
+                    matchPlayerEvents[pid]!['yc']! + 1;
+              if (type == 'red_card')
+                matchPlayerEvents[pid]!['rc'] =
+                    matchPlayerEvents[pid]!['rc']! + 1;
             }
             if (astId.isNotEmpty) {
-              matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-              if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
+              matchPlayerEvents.putIfAbsent(
+                astId,
+                () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+              );
+              if (type == 'goal')
+                matchPlayerEvents[astId]!['a'] =
+                    matchPlayerEvents[astId]!['a']! + 1;
             }
           }
         }
@@ -130,17 +166,32 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           globalStats.putIfAbsent(
             playerId,
             () => {
-              'id': playerId, 'name': playerName, 'goals': 0, 'assists': 0, 'games': 0,
-              'wins': 0, 'draws': 0, 'losses': 0, 'sum_ratings': 0.0,
+              'id': playerId,
+              'name': playerName,
+              'goals': 0,
+              'assists': 0,
+              'games': 0,
+              'wins': 0,
+              'draws': 0,
+              'losses': 0,
+              'sum_ratings': 0.0,
             },
           );
-          if (playerName.isNotEmpty) globalStats[playerId]!['name'] = playerName;
+          if (playerName.isNotEmpty)
+            globalStats[playerId]!['name'] = playerName;
 
-          globalStats[playerId]!['games'] = (globalStats[playerId]!['games'] as int) + 1;
+          globalStats[playerId]!['games'] =
+              (globalStats[playerId]!['games'] as int) + 1;
 
-          if (status == 1) globalStats[playerId]!['wins'] = (globalStats[playerId]!['wins'] as int) + 1;
-          else if (status == -1) globalStats[playerId]!['losses'] = (globalStats[playerId]!['losses'] as int) + 1;
-          else globalStats[playerId]!['draws'] = (globalStats[playerId]!['draws'] as int) + 1;
+          if (status == 1)
+            globalStats[playerId]!['wins'] =
+                (globalStats[playerId]!['wins'] as int) + 1;
+          else if (status == -1)
+            globalStats[playerId]!['losses'] =
+                (globalStats[playerId]!['losses'] as int) + 1;
+          else
+            globalStats[playerId]!['draws'] =
+                (globalStats[playerId]!['draws'] as int) + 1;
 
           int g = matchPlayerEvents[playerId]?['g'] ?? 0;
           int a = matchPlayerEvents[playerId]?['a'] ?? 0;
@@ -148,27 +199,40 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
           int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-          globalStats[playerId]!['goals'] = (globalStats[playerId]!['goals'] as int) + g;
-          globalStats[playerId]!['assists'] = (globalStats[playerId]!['assists'] as int) + a;
+          globalStats[playerId]!['goals'] =
+              (globalStats[playerId]!['goals'] as int) + g;
+          globalStats[playerId]!['assists'] =
+              (globalStats[playerId]!['assists'] as int) + a;
 
           double resultImpact = 0;
-          if (status == 1) resultImpact = 0.5;
-          else if (status == -1) resultImpact = -0.5;
+          if (status == 1)
+            resultImpact = 0.5;
+          else if (status == -1)
+            resultImpact = -0.5;
 
           double attackImpact = (g * 0.8) + (a * 0.4) + (og * -0.7);
           double disciplineImpact = (yc * -0.3) + (rc * -0.8);
           double defenseImpact = (conceded * -0.15);
 
-          double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
+          double performance =
+              resultImpact + attackImpact + defenseImpact + disciplineImpact;
           double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
 
-          globalStats[playerId]!['sum_ratings'] = (globalStats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
+          globalStats[playerId]!['sum_ratings'] =
+              (globalStats[playerId]!['sum_ratings'] as double) +
+              matchRating.clamp(0.0, 10.0);
         }
 
-        if (match['players']['red'] != null) for (var p in match['players']['red']) processPlayer(p, redStatus, scoreWhite);
-        if (match['players']['white'] != null) for (var p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
-        if (match['players']['gk_red'] != null) processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
-        if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
+        if (match['players']['red'] != null)
+          for (var p in match['players']['red'])
+            processPlayer(p, redStatus, scoreWhite);
+        if (match['players']['white'] != null)
+          for (var p in match['players']['white'])
+            processPlayer(p, whiteStatus, scoreRed);
+        if (match['players']['gk_red'] != null)
+          processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
+        if (match['players']['gk_white'] != null)
+          processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
       }
     }
 
@@ -178,7 +242,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       int a = data['assists'] as int;
       int games = data['games'] as int;
       double sumRatings = data['sum_ratings'] as double;
-      
+
       // APENAS ENTRA NO RANKING SE TIVER JOGADO 5 JOGOS OU MAIS
       if (games >= 5) {
         double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
@@ -186,8 +250,15 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         double finalRating = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
 
         sortedList.add({
-          'id': id, 'name': data['name'], 'goals': g, 'assists': a, 'ga': g + a,
-          'games': games, 'wins': data['wins'], 'draws': data['draws'], 'losses': data['losses'],
+          'id': id,
+          'name': data['name'],
+          'goals': g,
+          'assists': a,
+          'ga': g + a,
+          'games': games,
+          'wins': data['wins'],
+          'draws': data['draws'],
+          'losses': data['losses'],
           'nota': finalRating,
         });
       }
@@ -203,14 +274,20 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   void _applySorting(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
       int cmp = (a[_sortColumn] as num).compareTo(b[_sortColumn] as num);
-      if (cmp == 0 && _sortColumn == 'ga') cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+      if (cmp == 0 && _sortColumn == 'ga')
+        cmp = (a['goals'] as num).compareTo(b['goals'] as num);
       return _sortDescending ? -cmp : cmp;
     });
   }
 
   void _onColumnSort(String column) {
     setState(() {
-      _sortColumn == column ? _sortDescending = !_sortDescending : () { _sortColumn = column; _sortDescending = true; }();
+      _sortColumn == column
+          ? _sortDescending = !_sortDescending
+          : () {
+              _sortColumn = column;
+              _sortDescending = true;
+            }();
       final copy = List<Map<String, dynamic>>.from(globalLeaderboard);
       _applySorting(copy);
       globalLeaderboard = copy;
@@ -224,9 +301,25 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(color: active ? Colors.white : color, fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 0.4)),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
           const SizedBox(width: 2),
-          Icon(active ? (_sortDescending ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded) : Icons.unfold_more_rounded, size: 11, color: active ? Colors.white54 : color.withValues(alpha: 0.35)),
+          Icon(
+            active
+                ? (_sortDescending
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded)
+                : Icons.unfold_more_rounded,
+            size: 11,
+            color: active ? Colors.white54 : color.withValues(alpha: 0.35),
+          ),
         ],
       ),
     );
@@ -236,7 +329,10 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     if (index == 0) return const Text('🥇', style: TextStyle(fontSize: 16));
     if (index == 1) return const Text('🥈', style: TextStyle(fontSize: 16));
     if (index == 2) return const Text('🥉', style: TextStyle(fontSize: 16));
-    return Text('${index + 1}', style: const TextStyle(color: Colors.white30, fontSize: 12));
+    return Text(
+      '${index + 1}',
+      style: const TextStyle(color: Colors.white30, fontSize: 12),
+    );
   }
 
   @override
@@ -244,7 +340,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue, strokeWidth: 2))
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: AppColors.accentBlue,
+                strokeWidth: 2,
+              ),
+            )
           : SingleChildScrollView(
               scrollDirection: Axis.vertical,
               primary: true,
@@ -253,20 +354,57 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                 children: [
                   // ── FILTER BAR ──────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     color: AppColors.headerBlue.withValues(alpha: 0.5),
                     child: Row(
                       children: [
-                        const Icon(Icons.calendar_today_rounded, color: Colors.white30, size: 13),
+                        const Icon(
+                          Icons.calendar_today_rounded,
+                          color: Colors.white30,
+                          size: 13,
+                        ),
                         const SizedBox(width: 8),
-                        const Text("Período", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        const Text(
+                          "Período",
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
                         const Spacer(),
                         DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedFilter, dropdownColor: AppColors.headerBlue, icon: const Icon(Icons.expand_more_rounded, color: Colors.white38, size: 16), isDense: true,
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                            items: _availableFilters.map((value) => DropdownMenuItem<String>(value: value, child: Text(_formatFilterLabel(value)))).toList(),
-                            onChanged: (newValue) { if (newValue != null && newValue != _selectedFilter) { setState(() { _selectedFilter = newValue; isLoading = true; }); _calculateGlobalRankings(); } },
+                            value: _selectedFilter,
+                            dropdownColor: AppColors.headerBlue,
+                            icon: const Icon(
+                              Icons.expand_more_rounded,
+                              color: Colors.white38,
+                              size: 16,
+                            ),
+                            isDense: true,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            items: _availableFilters
+                                .map(
+                                  (value) => DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(_formatFilterLabel(value)),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (newValue) {
+                              if (newValue != null &&
+                                  newValue != _selectedFilter) {
+                                setState(() {
+                                  _selectedFilter = newValue;
+                                  isLoading = true;
+                                });
+                                _calculateGlobalRankings();
+                              }
+                            },
                           ),
                         ),
                       ],
@@ -277,54 +415,255 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                   globalLeaderboard.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.all(32.0),
-                          child: Center(child: Text(_selectedFilter == 'Todos' ? "Nenhuma partida jogada." : "Nenhuma partida em ${_formatFilterLabel(_selectedFilter)}.", style: const TextStyle(color: Colors.white30, fontSize: 13))),
+                          child: Center(
+                            child: Text(
+                              _selectedFilter == 'Todos'
+                                  ? "Nenhuma partida jogada."
+                                  : "Nenhuma partida em ${_formatFilterLabel(_selectedFilter)}.",
+                              style: const TextStyle(
+                                color: Colors.white30,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         )
                       : SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           primary: false,
                           physics: const ClampingScrollPhysics(),
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width),
+                            constraints: BoxConstraints(
+                              minWidth: MediaQuery.of(context).size.width,
+                            ),
                             child: Theme(
-                              data: Theme.of(context).copyWith(dividerColor: Colors.white.withValues(alpha: 0.05)),
+                              data: Theme.of(context).copyWith(
+                                dividerColor: Colors.white.withValues(
+                                  alpha: 0.05,
+                                ),
+                              ),
                               child: DataTable(
                                 showCheckboxColumn: false,
-                                headingRowHeight: 38, dataRowMinHeight: 44, dataRowMaxHeight: 44,
-                                headingRowColor: WidgetStateProperty.all(AppColors.headerBlue.withValues(alpha: 0.7)), dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                                columnSpacing: 14, horizontalMargin: 12, border: TableBorder(horizontalInside: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
+                                headingRowHeight: 38,
+                                dataRowMinHeight: 44,
+                                dataRowMaxHeight: 44,
+                                headingRowColor: WidgetStateProperty.all(
+                                  AppColors.headerBlue.withValues(alpha: 0.7),
+                                ),
+                                dataRowColor: WidgetStateProperty.all(
+                                  Colors.transparent,
+                                ),
+                                columnSpacing: 14,
+                                horizontalMargin: 12,
+                                border: TableBorder(
+                                  horizontalInside: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.04),
+                                  ),
+                                ),
                                 columns: [
-                                  const DataColumn(label: Text("#", style: TextStyle(color: Colors.white24, fontSize: 11))),
-                                  const DataColumn(label: Text("JOGADOR", style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600, fontSize: 11))),
-                                  DataColumn(numeric: true, label: _sortHeader("NOTA", "nota", Colors.amber)),
-                                  DataColumn(numeric: true, label: _sortHeader("G+A", "ga", AppColors.highlightGreen)),
-                                  DataColumn(numeric: true, label: _sortHeader("GOLS", "goals", Colors.white54)),
-                                  DataColumn(numeric: true, label: _sortHeader("ASSIST", "assists", Colors.white54)),
-                                  DataColumn(numeric: true, label: _sortHeader("VIT", "wins", Colors.greenAccent)),
-                                  DataColumn(numeric: true, label: _sortHeader("EMP", "draws", Colors.orangeAccent)),
-                                  DataColumn(numeric: true, label: _sortHeader("DER", "losses", Colors.redAccent)),
-                                  DataColumn(numeric: true, label: _sortHeader("JOGOS", "games", Colors.grey)),
+                                  const DataColumn(
+                                    label: Text(
+                                      "#",
+                                      style: TextStyle(
+                                        color: Colors.white24,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  const DataColumn(
+                                    label: Text(
+                                      "JOGADOR",
+                                      style: TextStyle(
+                                        color: Colors.white54,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "NOTA",
+                                      "nota",
+                                      Colors.amber,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "G+A",
+                                      "ga",
+                                      AppColors.highlightGreen,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "GOLS",
+                                      "goals",
+                                      Colors.white54,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "ASSIST",
+                                      "assists",
+                                      Colors.white54,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "VIT",
+                                      "wins",
+                                      Colors.greenAccent,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "EMP",
+                                      "draws",
+                                      Colors.orangeAccent,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "DER",
+                                      "losses",
+                                      Colors.redAccent,
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    numeric: true,
+                                    label: _sortHeader(
+                                      "JOGOS",
+                                      "games",
+                                      Colors.grey,
+                                    ),
+                                  ),
                                 ],
-                                rows: List<DataRow>.generate(globalLeaderboard.length, (index) {
-                                  final p = globalLeaderboard[index];
-                                  return DataRow(
-                                    color: WidgetStateProperty.all(index.isOdd ? Colors.white.withValues(alpha: 0.02) : Colors.transparent),
-                                    onSelectChanged: (selected) {
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => PlayerDetailScreen(groupId: widget.groupId, playerId: p['id'].toString(), initialPlayerName: p['name'])));
-                                    },
-                                    cells: [
-                                      DataCell(_rankCell(index)),
-                                      DataCell(Text(p['name'], style: TextStyle(color: index < 3 ? Colors.white : Colors.white60, fontWeight: index < 3 ? FontWeight.w600 : FontWeight.normal, fontSize: 13))),
-                                      DataCell(Text((p['nota'] as double).toStringAsFixed(1), style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 13))),
-                                      DataCell(Text("${p['ga']}", style: const TextStyle(color: AppColors.highlightGreen, fontWeight: FontWeight.w600, fontSize: 13))),
-                                      DataCell(Text("${p['goals']}", style: const TextStyle(color: Colors.white60, fontSize: 13))),
-                                      DataCell(Text("${p['assists']}", style: const TextStyle(color: Colors.white60, fontSize: 13))),
-                                      DataCell(Text("${p['wins']}", style: const TextStyle(color: Colors.greenAccent, fontSize: 13))),
-                                      DataCell(Text("${p['draws']}", style: const TextStyle(color: Colors.orangeAccent, fontSize: 13))),
-                                      DataCell(Text("${p['losses']}", style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
-                                      DataCell(Text("${p['games']}", style: const TextStyle(color: Colors.white30, fontSize: 12))),
-                                    ],
-                                  );
-                                }),
+                                rows: List<DataRow>.generate(
+                                  globalLeaderboard.length,
+                                  (index) {
+                                    final p = globalLeaderboard[index];
+                                    return DataRow(
+                                      color: WidgetStateProperty.all(
+                                        index.isOdd
+                                            ? Colors.white.withValues(
+                                                alpha: 0.02,
+                                              )
+                                            : Colors.transparent,
+                                      ),
+                                      onSelectChanged: (selected) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                PlayerDetailScreen(
+                                                  groupId: widget.groupId,
+                                                  playerId: p['id'].toString(),
+                                                  initialPlayerName: p['name'],
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                      cells: [
+                                        DataCell(_rankCell(index)),
+                                        DataCell(
+                                          Text(
+                                            p['name'],
+                                            style: TextStyle(
+                                              color: index < 3
+                                                  ? Colors.white
+                                                  : Colors.white60,
+                                              fontWeight: index < 3
+                                                  ? FontWeight.w600
+                                                  : FontWeight.normal,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            (p['nota'] as double)
+                                                .toStringAsFixed(1),
+                                            style: const TextStyle(
+                                              color: Colors.amber,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['ga']}",
+                                            style: const TextStyle(
+                                              color: AppColors.highlightGreen,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['goals']}",
+                                            style: const TextStyle(
+                                              color: Colors.white60,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['assists']}",
+                                            style: const TextStyle(
+                                              color: Colors.white60,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['wins']}",
+                                            style: const TextStyle(
+                                              color: Colors.greenAccent,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['draws']}",
+                                            style: const TextStyle(
+                                              color: Colors.orangeAccent,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['losses']}",
+                                            style: const TextStyle(
+                                              color: Colors.redAccent,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            "${p['games']}",
+                                            style: const TextStyle(
+                                              color: Colors.white30,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),

@@ -45,8 +45,12 @@ class _RankingScreenState extends State<RankingScreen> {
       int scoreRed = match['scoreRed'] ?? 0;
       int scoreWhite = match['scoreWhite'] ?? 0;
 
-      int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
-      int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
+      int redStatus = scoreRed > scoreWhite
+          ? 1
+          : (scoreRed == scoreWhite ? 0 : -1);
+      int whiteStatus = scoreWhite > scoreRed
+          ? 1
+          : (scoreRed == scoreWhite ? 0 : -1);
 
       // Agrupa os eventos específicos desta partida
       Map<String, Map<String, int>> matchPlayerEvents = {};
@@ -55,17 +59,32 @@ class _RankingScreenState extends State<RankingScreen> {
           String pid = eventPlayerId(ev, 'player');
           String astId = eventPlayerId(ev, 'assist');
           String type = ev['type'];
-          
+
           if (pid.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal') matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
-            if (type == 'own_goal') matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
-            if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
-            if (type == 'red_card') matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
+            matchPlayerEvents.putIfAbsent(
+              pid,
+              () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+            );
+            if (type == 'goal')
+              matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
+            if (type == 'own_goal')
+              matchPlayerEvents[pid]!['og'] =
+                  matchPlayerEvents[pid]!['og']! + 1;
+            if (type == 'yellow_card')
+              matchPlayerEvents[pid]!['yc'] =
+                  matchPlayerEvents[pid]!['yc']! + 1;
+            if (type == 'red_card')
+              matchPlayerEvents[pid]!['rc'] =
+                  matchPlayerEvents[pid]!['rc']! + 1;
           }
           if (astId.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
+            matchPlayerEvents.putIfAbsent(
+              astId,
+              () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+            );
+            if (type == 'goal')
+              matchPlayerEvents[astId]!['a'] =
+                  matchPlayerEvents[astId]!['a']! + 1;
           }
         }
       }
@@ -77,7 +96,7 @@ class _RankingScreenState extends State<RankingScreen> {
         final String playerId = playerIdFromObject(playerObj);
         if (playerId.isEmpty || processed.contains(playerId)) return;
         processed.add(playerId);
-        
+
         final String playerName = (playerObj['name'] ?? '').toString();
 
         stats.putIfAbsent(
@@ -91,16 +110,19 @@ class _RankingScreenState extends State<RankingScreen> {
             'wins': 0,
             'draws': 0,
             'losses': 0,
-            'sum_ratings': 0.0, 
+            'sum_ratings': 0.0,
           },
         );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
         stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
-        
-        if (status == 1) stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
-        else if (status == -1) stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+
+        if (status == 1)
+          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+        else if (status == -1)
+          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+        else
+          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
 
         int g = matchPlayerEvents[playerId]?['g'] ?? 0;
         int a = matchPlayerEvents[playerId]?['a'] ?? 0;
@@ -112,24 +134,31 @@ class _RankingScreenState extends State<RankingScreen> {
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
         double resultImpact = 0;
-        if (status == 1) resultImpact = 0.5;
-        else if (status == -1) resultImpact = -0.5;
+        if (status == 1)
+          resultImpact = 0.5;
+        else if (status == -1)
+          resultImpact = -0.5;
 
         double attackImpact = (g * 0.8) + (a * 0.4) + (og * -0.7);
         double disciplineImpact = (yc * -0.3) + (rc * -0.8);
-        double defenseImpact = (conceded * -0.15); 
+        double defenseImpact = (conceded * -0.15);
 
-        double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
+        double performance =
+            resultImpact + attackImpact + defenseImpact + disciplineImpact;
         double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
 
-        stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
+        stats[playerId]!['sum_ratings'] =
+            (stats[playerId]!['sum_ratings'] as double) +
+            matchRating.clamp(0.0, 10.0);
       }
 
       if (match['players']['red'] != null) {
-        for (var p in match['players']['red']) processPlayer(p, redStatus, scoreWhite);
+        for (var p in match['players']['red'])
+          processPlayer(p, redStatus, scoreWhite);
       }
       if (match['players']['white'] != null) {
-        for (var p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
+        for (var p in match['players']['white'])
+          processPlayer(p, whiteStatus, scoreRed);
       }
     }
 
@@ -140,7 +169,7 @@ class _RankingScreenState extends State<RankingScreen> {
       int a = data['assists'] as int;
       int games = data['games'] as int;
       double sumRatings = data['sum_ratings'] as double;
-      
+
       // APENAS ENTRA NO RANKING SE TIVER JOGADO 5 JOGOS OU MAIS
       if (games >= 5) {
         // BAYESIANA + BONUS
@@ -215,9 +244,7 @@ class _RankingScreenState extends State<RankingScreen> {
                     headingRowColor: WidgetStateProperty.all(
                       AppColors.headerBlue,
                     ),
-                    dataRowColor: WidgetStateProperty.all(
-                      AppColors.deepBlue,
-                    ),
+                    dataRowColor: WidgetStateProperty.all(AppColors.deepBlue),
                     columnSpacing: 16,
                     columns: const [
                       DataColumn(
@@ -301,9 +328,7 @@ class _RankingScreenState extends State<RankingScreen> {
                         numeric: true,
                       ),
                     ],
-                    rows: List<DataRow>.generate(leaderboard.length, (
-                      index,
-                    ) {
+                    rows: List<DataRow>.generate(leaderboard.length, (index) {
                       final player = leaderboard[index];
                       return DataRow(
                         cells: [
@@ -374,9 +399,7 @@ class _RankingScreenState extends State<RankingScreen> {
                           DataCell(
                             Text(
                               "${player['wins']}",
-                              style: const TextStyle(
-                                color: Colors.greenAccent,
-                              ),
+                              style: const TextStyle(color: Colors.greenAccent),
                             ),
                           ),
                           DataCell(
@@ -390,9 +413,7 @@ class _RankingScreenState extends State<RankingScreen> {
                           DataCell(
                             Text(
                               "${player['losses']}",
-                              style: const TextStyle(
-                                color: Colors.redAccent,
-                              ),
+                              style: const TextStyle(color: Colors.redAccent),
                             ),
                           ),
                           DataCell(
