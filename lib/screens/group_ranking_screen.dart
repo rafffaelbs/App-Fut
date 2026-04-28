@@ -674,3 +674,4 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     );
   }
 }
+
