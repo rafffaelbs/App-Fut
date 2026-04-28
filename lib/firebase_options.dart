@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -65,4 +56,32 @@ class DefaultFirebaseOptions {
     storageBucket: 'app-do-fut.firebasestorage.app',
     iosBundleId: 'com.example.appDoFut',
   );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyChwoIRuQTTOHeZXEQwodi3gHCx9K-isxw',
+    appId: '1:240906268187:web:d47065247d6f9bb93f12be',
+    messagingSenderId: '240906268187',
+    projectId: 'app-do-fut',
+    authDomain: 'app-do-fut.firebaseapp.com',
+    storageBucket: 'app-do-fut.firebasestorage.app',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyAFopgn3yRgA0CdRMTIO_lRc0vWcXv-2ko',
+    appId: '1:240906268187:ios:abfd8ecd0670f7363f12be',
+    messagingSenderId: '240906268187',
+    projectId: 'app-do-fut',
+    storageBucket: 'app-do-fut.firebasestorage.app',
+    iosBundleId: 'com.example.appDoFut',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyChwoIRuQTTOHeZXEQwodi3gHCx9K-isxw',
+    appId: '1:240906268187:web:5a0da71e8638d7853f12be',
+    messagingSenderId: '240906268187',
+    projectId: 'app-do-fut',
+    authDomain: 'app-do-fut.firebaseapp.com',
+    storageBucket: 'app-do-fut.firebasestorage.app',
+  );
+
 }

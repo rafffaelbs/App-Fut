@@ -467,10 +467,14 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Color _getRatingColor(double rating) {
-    if (rating >= 8.0) return Colors.green;
-    if (rating >= 6.0) return Colors.amber;
-    if (rating >= 4.0) return Colors.orangeAccent;
-    return Colors.redAccent;
+    if (rating >= 10.0) return Colors.white;
+    if (rating >= 9.0) return Colors.purpleAccent;
+    if (rating >= 8.0) return Colors.green[700]!; // Darker green
+    if (rating >= 7.5) return Colors.green;
+    if (rating >= 7.0) return Colors.lightGreenAccent; // Light green
+    if (rating >= 6.0) return Colors.yellow;
+    if (rating >= 5.0) return Colors.orange;
+    return Colors.red; // Below 5.0
   }
 
   List<Widget> _buildEventIconsList(Map<String, dynamic> stats) {
