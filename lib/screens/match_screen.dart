@@ -46,6 +46,9 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
 
   int _secondsPlayedBeforePause = 0;
   DateTime? _lastStartTime;
+  
+  // --- CONFIGURAÇÕES ---
+  bool _showTacticalPitch = true;
 
   int get totalSecondsElapsed {
     if (!isMatchRunning || _lastStartTime == null) return _secondsPlayedBeforePause;
@@ -114,6 +117,8 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   Future<void> _loadMatchState() async {
     final prefs = await SharedPreferences.getInstance();
     final String id = widget.tournamentId;
+
+    _showTacticalPitch = prefs.getBool('show_tactical_pitch') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) allSavedPlayers = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(dbData)));
@@ -204,6 +209,69 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     );
   }
 
+  // --- NOVA LÓGICA: EDIÇÃO DE ASSISTÊNCIA NA SÚMULA ---
+  void _editAssistInSummary(int eventIndex, StateSetter setSummaryState) {
+    final ev = matchEvents[eventIndex];
+    bool isRedTeam = ev['team'] == 'Vermelho';
+    List<Map<String, dynamic>> teammates = isRedTeam ? List.from(teamRed) : List.from(teamWhite);
+    
+    // Remove o autor do gol para ele não dar assistência para si mesmo
+    teammates.removeWhere((p) => _pid(p) == ev['playerId']);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text("Editar Assistência", style: TextStyle(color: AppColors.highlightBlue, fontWeight: FontWeight.bold)),
+        children: [
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            child: const Text("Jogada Individual (Remover Assist.)", style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                matchEvents[eventIndex]['assist'] = null;
+                matchEvents[eventIndex]['assistId'] = null;
+              });
+              _saveMatchState();
+              setSummaryState(() {}); // Atualiza o popup da súmula
+            },
+          ),
+          const Divider(color: Colors.white12),
+          ...teammates.map((teammate) => SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            child: Text(teammate['name'], style: const TextStyle(color: AppColors.textWhite, fontSize: 16)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                matchEvents[eventIndex]['assist'] = teammate['name'];
+                matchEvents[eventIndex]['assistId'] = _pid(teammate);
+              });
+              _saveMatchState();
+              setSummaryState(() {});
+            },
+          )),
+          const Divider(color: Colors.white12),
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            child: const Row(children: [Icon(Icons.sports_handball, color: AppColors.textWhite, size: 20), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: AppColors.textWhite, fontSize: 16, fontWeight: FontWeight.bold))]),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
+                setState(() {
+                  matchEvents[eventIndex]['assist'] = selectedGk['name'];
+                  matchEvents[eventIndex]['assistId'] = _pid(selectedGk);
+                });
+                _saveMatchState();
+                setSummaryState(() {});
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showMatchSummary() {
     showDialog(
       context: context,
@@ -237,6 +305,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
                           else if (ev['type'] == 'red_card') { icon = Icons.style; iconColor = Colors.red; }
 
                           return ListTile(
+                            contentPadding: EdgeInsets.zero,
                             dense: true,
                             leading: Icon(icon, color: iconColor, size: 20),
                             title: Text("${ev['player']} (${ev['team']})", style: const TextStyle(color: Colors.white)),
@@ -244,21 +313,31 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
                               ev['type'] == 'goal' ? (ev['assist'] != null ? "Assist: ${ev['assist']}" : "Individual") : "", 
                               style: const TextStyle(color: Colors.white54, fontSize: 12)
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                              onPressed: () {
-                                setState(() {
-                                  var removed = matchEvents.removeAt(i);
-                                  bool isRed = removed['team'] == 'Vermelho';
-                                  if (removed['type'] == 'goal') {
-                                    if (isRed) scoreRed = max(0, scoreRed - 1); else scoreWhite = max(0, scoreWhite - 1);
-                                  } else if (removed['type'] == 'own_goal') {
-                                    if (isRed) scoreWhite = max(0, scoreWhite - 1); else scoreRed = max(0, scoreRed - 1);
-                                  }
-                                });
-                                _saveMatchState();
-                                setDialogState(() {}); 
-                              },
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (ev['type'] == 'goal')
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.amber, size: 20),
+                                    onPressed: () => _editAssistInSummary(i, setDialogState),
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      var removed = matchEvents.removeAt(i);
+                                      bool isRed = removed['team'] == 'Vermelho';
+                                      if (removed['type'] == 'goal') {
+                                        if (isRed) scoreRed = max(0, scoreRed - 1); else scoreWhite = max(0, scoreWhite - 1);
+                                      } else if (removed['type'] == 'own_goal') {
+                                        if (isRed) scoreWhite = max(0, scoreWhite - 1); else scoreRed = max(0, scoreRed - 1);
+                                      }
+                                    });
+                                    _saveMatchState();
+                                    setDialogState(() {}); 
+                                  },
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -389,11 +468,54 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     return icons;
   }
 
+  // --- CONFIGURAÇÕES DA PARTIDA ---
+  void _showSettingsDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.deepBlue,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Wrap(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text("Configurações da Partida", style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            SwitchListTile(
+              activeColor: AppColors.accentBlue,
+              title: const Text("Mostrar Mini Campo Tático", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Desative para ver apenas as listas de jogadores", style: TextStyle(color: Colors.white54, fontSize: 12)),
+              value: _showTacticalPitch,
+              onChanged: (val) async {
+                setState(() => _showTacticalPitch = val);
+                setModalState(() => _showTacticalPitch = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('show_tactical_pitch', val);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xff010a3b),
-      appBar: AppBar(backgroundColor: AppColors.headerBlue, iconTheme: const IconThemeData(color: AppColors.textWhite), title: Text(widget.tournamentName, style: const TextStyle(color: AppColors.textWhite)), centerTitle: true, elevation: 0),
+      appBar: AppBar(
+        backgroundColor: AppColors.headerBlue, 
+        iconTheme: const IconThemeData(color: AppColors.textWhite), 
+        title: Text(widget.tournamentName, style: const TextStyle(color: AppColors.textWhite)), 
+        centerTitle: true, 
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettingsDialog,
+          )
+        ],
+      ),
       body: Column(
         children: [
           MatchScoreboard(scoreRed: scoreRed, scoreWhite: scoreWhite, timeString: _formatTime(totalSecondsElapsed), isMatchRunning: isMatchRunning, isOvertime: isOvertime, isReadyToStart: _isReadyToStart, redTeamRating: _calculateTeamRating(teamRed), whiteTeamRating: _calculateTeamRating(teamWhite), onUpdateScore: _updateScore, onStart: _startMatch, onPause: _pauseMatch, onStop: _requestStopMatch),
@@ -466,31 +588,41 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         children: [
           if (redWinStreak > 0 || whiteWinStreak > 0)
             Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text(redWinStreak > 0 ? "🔥 Sequência: $redWinStreak/3" : "", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)), Text(whiteWinStreak > 0 ? "🔥 Sequência: $whiteWinStreak/3" : "", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])),
-          Container(
-            margin: const EdgeInsets.all(12), height: 230, decoration: BoxDecoration(color: const Color(0xFF1B4332), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white30, width: 2)),
-            child: Stack(
-              children: [
-                Align(alignment: Alignment.center, child: Container(width: 2, color: Colors.white30)), Align(alignment: Alignment.center, child: Container(width: 60, height: 60, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white30, width: 2)))),
-                ...teamRed.asMap().entries.map((entry) => Align(alignment: redAlignments[entry.key % redAlignments.length], child: _buildPitchPlayer(entry.value, true, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
-                ...teamWhite.asMap().entries.map((entry) => Align(alignment: whiteAlignments[entry.key % whiteAlignments.length], child: _buildPitchPlayer(entry.value, false, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
-              ],
+          
+          if (_showTacticalPitch)
+            Container(
+              margin: const EdgeInsets.all(12), 
+              height: 330, 
+              decoration: BoxDecoration(color: const Color(0xFF1B4332), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white30, width: 2)),
+              child: Stack(
+                children: [
+                  Align(alignment: Alignment.center, child: Container(width: 2, color: Colors.white30)), Align(alignment: Alignment.center, child: Container(width: 80, height: 80, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white30, width: 2)))),
+                  ...teamRed.asMap().entries.map((entry) => Align(alignment: redAlignments[entry.key % redAlignments.length], child: _buildPitchPlayer(entry.value, true, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
+                  ...teamWhite.asMap().entries.map((entry) => Align(alignment: whiteAlignments[entry.key % whiteAlignments.length], child: _buildPitchPlayer(entry.value, false, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
+                ],
+              ),
             ),
-          ),
+          
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  children: [
-                    const Padding(padding: EdgeInsets.only(bottom: 8.0), child: Text("Linha Vermelho", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12))),
-                    ...teamRed.map((p) => _buildPlayerListTile(p, true, allStats[_pid(p)]!)),
-                  ],
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(right: BorderSide(color: Colors.white10, width: 1)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Padding(padding: EdgeInsets.only(top: 12.0, bottom: 8.0), child: Text("Linha Vermelho", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12))),
+                      ...teamRed.map((p) => _buildPlayerListTile(p, true, allStats[_pid(p)]!)),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
                 child: Column(
                   children: [
-                    const Padding(padding: EdgeInsets.only(bottom: 8.0), child: Text("Linha Branco", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12))),
+                    const Padding(padding: EdgeInsets.only(top: 12.0, bottom: 8.0), child: Text("Linha Branco", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12))),
                     ...teamWhite.map((p) => _buildPlayerListTile(p, false, allStats[_pid(p)]!)),
                   ],
                 ),
@@ -501,9 +633,9 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
             child: Row(
               children: [
-                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(true, (selectedGk) => _showInGameOptions(selectedGk, true)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5))), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
+                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(true, (selectedGk) => _confirmEventDialog("goal", selectedGk, true)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5))), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
                 const SizedBox(width: 12),
-                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(false, (selectedGk) => _showInGameOptions(selectedGk, false)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white54)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.white, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
+                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(false, (selectedGk) => _confirmEventDialog("goal", selectedGk, false)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white54)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.white, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
               ],
             ),
           ),
@@ -700,7 +832,6 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), ListTile(leading: const Icon(Icons.shuffle, color: Colors.orangeAccent), title: const Text('Sortear Linha', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })]));
   }
 
-  // --- NOVA LÓGICA: POPUP DE CONFIRMAÇÃO DE EVENTO ---
   void _confirmEventDialog(String type, Map<String, dynamic> player, bool isRedTeam, {String? assist, String? assistId}) {
     String actionText = "";
     if (type == 'goal') {
