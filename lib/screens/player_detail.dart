@@ -169,7 +169,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
       // MULTIPLICADOR DE ESPAÇAMENTO (x1.5)
       double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-      double matchRating = 7.0 + (performance * 1.5);
+      double matchRating = 7.0 + (performance * 2.5);
       grouped[groupKey]!['sum_ratings'] += matchRating.clamp(0.0, 10.0);
     }
 
@@ -339,7 +339,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
         // MULTIPLICADOR DE ESPAÇAMENTO (x1.5)
         double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-        double matchRating = 7.0 + (performance * 1.5);
+        double matchRating = 7.0 + (performance * 2.5);
         stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
       }
 

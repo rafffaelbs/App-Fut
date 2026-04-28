@@ -131,7 +131,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           double defenseImpact = (conceded * -0.15);
 
           double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-          double matchRating = 7.0 + (performance * 1.5);
+          double matchRating = 7.0 + (performance * 2.5);
           globalStats[playerId]!['sum_ratings'] = (globalStats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
         }
 

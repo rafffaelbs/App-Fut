@@ -124,7 +124,7 @@ class _RankingScreenState extends State<RankingScreen> {
 
 
         double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-        double matchRating = 7.0 + (performance * 1.5);
+        double matchRating = 7.0 + (performance * 2.5);
 
         // Adiciona a nota da partida ao somatório do jogador
         stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
