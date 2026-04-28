@@ -47,7 +47,6 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   int _secondsPlayedBeforePause = 0;
   DateTime? _lastStartTime;
   
-  // --- CONFIGURAÇÕES ---
   bool _showTacticalPitch = true;
 
   int get totalSecondsElapsed {
@@ -190,7 +189,6 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     _saveMatchState();
   }
 
-  // --- LÓGICA DE SÚMULA ANTES DE ENCERRAR ---
   void _requestStopMatch() {
     showDialog(
       context: context,
@@ -209,13 +207,11 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     );
   }
 
-  // --- NOVA LÓGICA: EDIÇÃO DE ASSISTÊNCIA NA SÚMULA ---
   void _editAssistInSummary(int eventIndex, StateSetter setSummaryState) {
     final ev = matchEvents[eventIndex];
     bool isRedTeam = ev['team'] == 'Vermelho';
     List<Map<String, dynamic>> teammates = isRedTeam ? List.from(teamRed) : List.from(teamWhite);
     
-    // Remove o autor do gol para ele não dar assistência para si mesmo
     teammates.removeWhere((p) => _pid(p) == ev['playerId']);
 
     showDialog(
@@ -229,12 +225,9 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
             child: const Text("Jogada Individual (Remover Assist.)", style: TextStyle(color: Colors.redAccent, fontSize: 16)),
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() {
-                matchEvents[eventIndex]['assist'] = null;
-                matchEvents[eventIndex]['assistId'] = null;
-              });
+              setState(() { matchEvents[eventIndex]['assist'] = null; matchEvents[eventIndex]['assistId'] = null; });
               _saveMatchState();
-              setSummaryState(() {}); // Atualiza o popup da súmula
+              setSummaryState(() {});
             },
           ),
           const Divider(color: Colors.white12),
@@ -243,10 +236,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
             child: Text(teammate['name'], style: const TextStyle(color: AppColors.textWhite, fontSize: 16)),
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() {
-                matchEvents[eventIndex]['assist'] = teammate['name'];
-                matchEvents[eventIndex]['assistId'] = _pid(teammate);
-              });
+              setState(() { matchEvents[eventIndex]['assist'] = teammate['name']; matchEvents[eventIndex]['assistId'] = _pid(teammate); });
               _saveMatchState();
               setSummaryState(() {});
             },
@@ -258,10 +248,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
             onPressed: () {
               Navigator.pop(ctx);
               _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
-                setState(() {
-                  matchEvents[eventIndex]['assist'] = selectedGk['name'];
-                  matchEvents[eventIndex]['assistId'] = _pid(selectedGk);
-                });
+                setState(() { matchEvents[eventIndex]['assist'] = selectedGk['name']; matchEvents[eventIndex]['assistId'] = _pid(selectedGk); });
                 _saveMatchState();
                 setSummaryState(() {});
               });
@@ -369,14 +356,40 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     _saveMatchState();
   }
 
+  // --- NOVA LÓGICA DE SORTEIO NIVELADO ---
   void _sortearTeams() {
     if (presentPlayers.length < 2) return;
     setState(() {
-      List<Map<String, dynamic>> pool = List.from(presentPlayers);
-      pool.shuffle(Random());
-      teamRed.clear(); teamWhite.clear();
-      for (int i = 0; i < widget.totalPlayers && pool.isNotEmpty; i++) teamRed.add(pool.removeAt(0));
-      for (int i = 0; i < widget.totalPlayers && pool.isNotEmpty; i++) teamWhite.add(pool.removeAt(0));
+      // Pega a quantidade exata (ou até onde der) dos próximos na fila
+      int needed = widget.totalPlayers * 2;
+      List<Map<String, dynamic>> pool = presentPlayers.take(needed).toList();
+      
+      // Ordena do melhor para o pior (Draft Mode)
+      pool.sort((a, b) => ((b['rating'] ?? 7.0) as num).compareTo((a['rating'] ?? 7.0) as num));
+      
+      teamRed.clear(); 
+      teamWhite.clear();
+      double sumRed = 0; 
+      double sumWhite = 0;
+      
+      // Distribui balanceando as somas
+      for (var p in pool) {
+        if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
+          if (sumRed <= sumWhite) { 
+            teamRed.add(p); 
+            sumRed += ((p['rating'] ?? 7.0) as num).toDouble(); 
+          } else { 
+            teamWhite.add(p); 
+            sumWhite += ((p['rating'] ?? 7.0) as num).toDouble(); 
+          }
+        } else if (teamRed.length < widget.totalPlayers) {
+          teamRed.add(p); 
+          sumRed += ((p['rating'] ?? 7.0) as num).toDouble();
+        } else {
+          teamWhite.add(p); 
+          sumWhite += ((p['rating'] ?? 7.0) as num).toDouble();
+        }
+      }
     });
     _saveMatchState();
   }
@@ -447,7 +460,9 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     double attackImpact = (goals * 0.8) + (assists * 0.4) + (ownGoals * -0.7);
     double disciplineImpact = (yellow * -0.3) + (red * -0.8);
     double defenseImpact = (oppScore * -0.15); 
-    double matchRating = 7.0 + ((resultImpact + attackImpact + defenseImpact + disciplineImpact) * 1.5);
+    
+    // --- MULTIPLICADOR AGRESSIVO: AQUI É 2.5 ---
+    double matchRating = 7.0 + ((resultImpact + attackImpact + defenseImpact + disciplineImpact) * 2.5);
     return {'nota': matchRating.clamp(0.0, 10.0), 'goals': goals, 'assists': assists, 'ownGoals': ownGoals, 'yellow': yellow, 'red': red, 'ga': goals + assists};
   }
 
@@ -468,7 +483,6 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     return icons;
   }
 
-  // --- CONFIGURAÇÕES DA PARTIDA ---
   void _showSettingsDialog() {
     showModalBottomSheet(
       context: context,
@@ -829,7 +843,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   void _showActionSheet() {
-    showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), ListTile(leading: const Icon(Icons.shuffle, color: Colors.orangeAccent), title: const Text('Sortear Linha', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })]));
+    showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), ListTile(leading: const Icon(Icons.balance, color: Colors.orangeAccent), title: const Text('Sorteio Nivelado', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })]));
   }
 
   void _confirmEventDialog(String type, Map<String, dynamic> player, bool isRedTeam, {String? assist, String? assistId}) {
@@ -1002,9 +1016,30 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       teamRed.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
       teamWhite.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
 
+      // --- MÁGICA DO BALANCEAMENTO AQUI TAMBÉM ---
       List<Map<String, dynamic>> pool = List.from(entering);
-      while (teamRed.length < widget.totalPlayers && pool.isNotEmpty) teamRed.add(pool.removeAt(0));
-      while (teamWhite.length < widget.totalPlayers && pool.isNotEmpty) teamWhite.add(pool.removeAt(0));
+      pool.sort((a, b) => ((b['rating'] ?? 7.0) as num).compareTo((a['rating'] ?? 7.0) as num));
+      
+      double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? 7.0) as num).toDouble());
+      double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? 7.0) as num).toDouble());
+
+      for (var p in pool) {
+        if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
+          if (sumRed <= sumWhite) { 
+            teamRed.add(p); 
+            sumRed += ((p['rating'] ?? 7.0) as num).toDouble(); 
+          } else { 
+            teamWhite.add(p); 
+            sumWhite += ((p['rating'] ?? 7.0) as num).toDouble(); 
+          }
+        } else if (teamRed.length < widget.totalPlayers) {
+          teamRed.add(p); 
+          sumRed += ((p['rating'] ?? 7.0) as num).toDouble();
+        } else if (teamWhite.length < widget.totalPlayers) {
+          teamWhite.add(p); 
+          sumWhite += ((p['rating'] ?? 7.0) as num).toDouble();
+        }
+      }
 
       isMatchRunning = false; isOvertime = false; scoreRed = 0; scoreWhite = 0; matchEvents.clear(); _secondsPlayedBeforePause = 0; _lastStartTime = null;
 
