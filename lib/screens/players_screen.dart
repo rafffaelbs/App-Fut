@@ -188,10 +188,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Color _ratingColor(double rating) {
-    if (rating >= 8.5) return const Color(0xFF4CAF50);
-    if (rating >= 7.5) return Colors.amber;
-    if (rating >= 6.5) return Colors.orangeAccent;
-    return Colors.redAccent;
+    if (rating >= 10.0) return Colors.black;
+    if (rating >= 9.0) return Colors.purpleAccent;
+    if (rating >= 8.0) return Colors.green[700]!; // Darker green
+    if (rating >= 7.5) return Colors.green;
+    if (rating >= 7.0) return Colors.lightGreenAccent; // Light green
+    if (rating >= 6.0) return Colors.yellow;
+    if (rating >= 5.0) return Colors.orange;
+    return Colors.red; // Below 5.0
   }
 
   String _ratingLabel(double rating, int games) {

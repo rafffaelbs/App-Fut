@@ -592,6 +592,17 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     );
   }
 
+  Color _getRatingColor(double rating) {
+    if (rating >= 10.0) return Colors.black;
+    if (rating >= 9.0) return Colors.purpleAccent;
+    if (rating >= 8.0) return Colors.green[700]!; // Darker green
+    if (rating >= 7.5) return Colors.green;
+    if (rating >= 7.0) return Colors.lightGreenAccent; // Light green
+    if (rating >= 6.0) return Colors.yellow;
+    if (rating >= 5.0) return Colors.orange;
+    return Colors.red; // Below 5.0
+  }
+
   @override
   Widget build(BuildContext context) {
     final int wins = playerStats['wins'] ?? 0; final int draws = playerStats['draws'] ?? 0; final int losses = playerStats['losses'] ?? 0;
@@ -599,6 +610,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final double nota = playerStats['nota'] ?? 7.0;
     final String displayName = playerName.isNotEmpty ? playerName : (widget.initialPlayerName ?? 'Jogador');
     final String initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    final Color ratingColor = _getRatingColor(nota);
 
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
@@ -618,7 +630,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           alignment: Alignment.topRight,
                           children: [
                             CircleAvatar(radius: 36, backgroundColor: AppColors.deepBlue, child: resolvedIcon != null ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(resolvedIcon!, fit: BoxFit.contain))) : Text(initial, style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold, fontSize: 26))),
-                            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.headerBlue, width: 2)), child: Text(nota.toStringAsFixed(1), style: const TextStyle(color: AppColors.headerBlue, fontWeight: FontWeight.bold, fontSize: 12))),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: ratingColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.headerBlue, width: 2)), child: Text(nota.toStringAsFixed(1), style: const TextStyle(color: AppColors.headerBlue, fontWeight: FontWeight.bold, fontSize: 12))),
                           ],
                         ),
                         const SizedBox(height: 12),

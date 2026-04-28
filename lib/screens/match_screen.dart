@@ -467,7 +467,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Color _getRatingColor(double rating) {
-    if (rating >= 10.0) return Colors.white;
+    if (rating >= 10.0) return Colors.black;
     if (rating >= 9.0) return Colors.purpleAccent;
     if (rating >= 8.0) return Colors.green[700]!; // Darker green
     if (rating >= 7.5) return Colors.green;

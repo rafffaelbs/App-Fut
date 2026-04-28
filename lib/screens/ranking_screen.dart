@@ -198,215 +198,215 @@ class _RankingScreenState extends State<RankingScreen> {
                 style: TextStyle(color: Colors.white54),
               ),
             )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: constraints.maxWidth,
+          : SingleChildScrollView(
+              scrollDirection: Axis.vertical,
+              primary: true,
+              physics: const ClampingScrollPhysics(),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                primary: false,
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width,
+                  ),
+                  child: DataTable(
+                    showCheckboxColumn: false,
+                    headingRowColor: WidgetStateProperty.all(
+                      AppColors.headerBlue,
+                    ),
+                    dataRowColor: WidgetStateProperty.all(
+                      AppColors.deepBlue,
+                    ),
+                    columnSpacing: 16,
+                    columns: const [
+                      DataColumn(
+                        label: Text(
+                          "#",
+                          style: TextStyle(
+                            color: AppColors.accentBlue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      child: DataTable(
-                        showCheckboxColumn: false,
-                        headingRowColor: WidgetStateProperty.all(
-                          AppColors.headerBlue,
+                      DataColumn(
+                        label: Text(
+                          "JOGADOR",
+                          style: TextStyle(
+                            color: AppColors.textWhite,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        dataRowColor: WidgetStateProperty.all(
-                          AppColors.deepBlue,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "NOTA",
+                          style: TextStyle(
+                            color: Colors.amber,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        columnSpacing: 16,
-                        columns: const [
-                          DataColumn(
-                            label: Text(
-                              "#",
-                              style: TextStyle(
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "G+A",
+                          style: TextStyle(
+                            color: AppColors.highlightGreen,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "GOLS",
+                          style: TextStyle(color: AppColors.textWhite),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "ASSIST",
+                          style: TextStyle(color: AppColors.textWhite),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "VIT",
+                          style: TextStyle(color: Colors.greenAccent),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "EMP",
+                          style: TextStyle(color: Colors.orangeAccent),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "DER",
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          "JOGOS",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        numeric: true,
+                      ),
+                    ],
+                    rows: List<DataRow>.generate(leaderboard.length, (
+                      index,
+                    ) {
+                      final player = leaderboard[index];
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              "${index + 1}",
+                              style: const TextStyle(
                                 color: AppColors.accentBlue,
-                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                          DataColumn(
-                            label: Text(
-                              "JOGADOR",
-                              style: TextStyle(
+                          DataCell(
+                            Text(
+                              player['name'],
+                              style: const TextStyle(
                                 color: AppColors.textWhite,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => PlayerDetailScreen(
+                                    groupId: widget.groupId,
+                                    tournamentId: widget.tournamentId,
+                                    playerId: player['id'],
+                                    initialPlayerName: player['name'],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                          DataColumn(
-                            label: Text(
-                              "NOTA",
-                              style: TextStyle(
+                          DataCell(
+                            Text(
+                              player['nota'].toStringAsFixed(1),
+                              style: const TextStyle(
                                 color: Colors.amber,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "G+A",
-                              style: TextStyle(
+                          DataCell(
+                            Text(
+                              "${player['ga']}",
+                              style: const TextStyle(
                                 color: AppColors.highlightGreen,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "GOLS",
-                              style: TextStyle(color: AppColors.textWhite),
+                          DataCell(
+                            Text(
+                              "${player['goals']}",
+                              style: const TextStyle(
+                                color: AppColors.textWhite,
+                              ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "ASSIST",
-                              style: TextStyle(color: AppColors.textWhite),
+                          DataCell(
+                            Text(
+                              "${player['assists']}",
+                              style: const TextStyle(
+                                color: AppColors.textWhite,
+                              ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "VIT",
-                              style: TextStyle(color: Colors.greenAccent),
+                          DataCell(
+                            Text(
+                              "${player['wins']}",
+                              style: const TextStyle(
+                                color: Colors.greenAccent,
+                              ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "EMP",
-                              style: TextStyle(color: Colors.orangeAccent),
+                          DataCell(
+                            Text(
+                              "${player['draws']}",
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
+                              ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "DER",
-                              style: TextStyle(color: Colors.redAccent),
+                          DataCell(
+                            Text(
+                              "${player['losses']}",
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                              ),
                             ),
-                            numeric: true,
                           ),
-                          DataColumn(
-                            label: Text(
-                              "JOGOS",
-                              style: TextStyle(color: Colors.grey),
+                          DataCell(
+                            Text(
+                              "${player['games']}",
+                              style: const TextStyle(color: Colors.grey),
                             ),
-                            numeric: true,
                           ),
                         ],
-                        rows: List<DataRow>.generate(leaderboard.length, (
-                          index,
-                        ) {
-                          final player = leaderboard[index];
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Text(
-                                  "${index + 1}",
-                                  style: const TextStyle(
-                                    color: AppColors.accentBlue,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  player['name'],
-                                  style: const TextStyle(
-                                    color: AppColors.textWhite,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => PlayerDetailScreen(
-                                        groupId: widget.groupId,
-                                        tournamentId: widget.tournamentId,
-                                        playerId: player['id'],
-                                        initialPlayerName: player['name'],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              DataCell(
-                                Text(
-                                  player['nota'].toStringAsFixed(1),
-                                  style: const TextStyle(
-                                    color: Colors.amber,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['ga']}",
-                                  style: const TextStyle(
-                                    color: AppColors.highlightGreen,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['goals']}",
-                                  style: const TextStyle(
-                                    color: AppColors.textWhite,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['assists']}",
-                                  style: const TextStyle(
-                                    color: AppColors.textWhite,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['wins']}",
-                                  style: const TextStyle(
-                                    color: Colors.greenAccent,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['draws']}",
-                                  style: const TextStyle(
-                                    color: Colors.orangeAccent,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['losses']}",
-                                  style: const TextStyle(
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  "${player['games']}",
-                                  style: const TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    ),
+                      );
+                    }),
                   ),
-                );
-              },
+                ),
+              ),
             ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
+import 'package:app_do_fut/screens/player_detail.dart';
 
 class GroupRankingScreen extends StatefulWidget {
   final String groupId;
@@ -242,47 +243,52 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
-      body: Column(
-        children: [
-          // ── FILTER BAR ──────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppColors.headerBlue.withValues(alpha: 0.5),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today_rounded, color: Colors.white30, size: 13),
-                const SizedBox(width: 8),
-                const Text("Período", style: TextStyle(color: Colors.white38, fontSize: 12)),
-                const Spacer(),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedFilter, dropdownColor: AppColors.headerBlue, icon: const Icon(Icons.expand_more_rounded, color: Colors.white38, size: 16), isDense: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                    items: _availableFilters.map((value) => DropdownMenuItem<String>(value: value, child: Text(_formatFilterLabel(value)))).toList(),
-                    onChanged: (newValue) { if (newValue != null && newValue != _selectedFilter) { setState(() { _selectedFilter = newValue; isLoading = true; }); _calculateGlobalRankings(); } },
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue, strokeWidth: 2))
+          : SingleChildScrollView(
+              scrollDirection: Axis.vertical,
+              primary: true,
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                children: [
+                  // ── FILTER BAR ──────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: AppColors.headerBlue.withValues(alpha: 0.5),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, color: Colors.white30, size: 13),
+                        const SizedBox(width: 8),
+                        const Text("Período", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        const Spacer(),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedFilter, dropdownColor: AppColors.headerBlue, icon: const Icon(Icons.expand_more_rounded, color: Colors.white38, size: 16), isDense: true,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                            items: _availableFilters.map((value) => DropdownMenuItem<String>(value: value, child: Text(_formatFilterLabel(value)))).toList(),
+                            onChanged: (newValue) { if (newValue != null && newValue != _selectedFilter) { setState(() { _selectedFilter = newValue; isLoading = true; }); _calculateGlobalRankings(); } },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
 
-          // ── TABLE ───────────────────────────────────────────
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue, strokeWidth: 2))
-                : globalLeaderboard.isEmpty
-                ? Center(child: Text(_selectedFilter == 'Todos' ? "Nenhuma partida jogada." : "Nenhuma partida em ${_formatFilterLabel(_selectedFilter)}.", style: const TextStyle(color: Colors.white30, fontSize: 13)))
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
+                  // ── TABLE ───────────────────────────────────────────
+                  globalLeaderboard.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Center(child: Text(_selectedFilter == 'Todos' ? "Nenhuma partida jogada." : "Nenhuma partida em ${_formatFilterLabel(_selectedFilter)}.", style: const TextStyle(color: Colors.white30, fontSize: 13))),
+                        )
+                      : SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
+                          primary: false,
+                          physics: const ClampingScrollPhysics(),
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                            constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width),
                             child: Theme(
                               data: Theme.of(context).copyWith(dividerColor: Colors.white.withValues(alpha: 0.05)),
                               child: DataTable(
+                                showCheckboxColumn: false,
                                 headingRowHeight: 38, dataRowMinHeight: 44, dataRowMaxHeight: 44,
                                 headingRowColor: WidgetStateProperty.all(AppColors.headerBlue.withValues(alpha: 0.7)), dataRowColor: WidgetStateProperty.all(Colors.transparent),
                                 columnSpacing: 14, horizontalMargin: 12, border: TableBorder(horizontalInside: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
@@ -296,12 +302,15 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                                   DataColumn(numeric: true, label: _sortHeader("VIT", "wins", Colors.greenAccent)),
                                   DataColumn(numeric: true, label: _sortHeader("EMP", "draws", Colors.orangeAccent)),
                                   DataColumn(numeric: true, label: _sortHeader("DER", "losses", Colors.redAccent)),
-                                  const DataColumn(numeric: true, label: Text("JOGOS", style: TextStyle(color: Colors.white24, fontSize: 11))),
+                                  DataColumn(numeric: true, label: _sortHeader("JOGOS", "games", Colors.grey)),
                                 ],
                                 rows: List<DataRow>.generate(globalLeaderboard.length, (index) {
                                   final p = globalLeaderboard[index];
                                   return DataRow(
                                     color: WidgetStateProperty.all(index.isOdd ? Colors.white.withValues(alpha: 0.02) : Colors.transparent),
+                                    onSelectChanged: (selected) {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => PlayerDetailScreen(groupId: widget.groupId, playerId: p['id'].toString(), initialPlayerName: p['name'])));
+                                    },
                                     cells: [
                                       DataCell(_rankCell(index)),
                                       DataCell(Text(p['name'], style: TextStyle(color: index < 3 ? Colors.white : Colors.white60, fontWeight: index < 3 ? FontWeight.w600 : FontWeight.normal, fontSize: 13))),
@@ -320,12 +329,9 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+                ],
+              ),
+            ),
     );
   }
 }
