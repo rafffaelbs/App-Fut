@@ -91,7 +91,7 @@ class _RankingScreenState extends State<RankingScreen> {
             'wins': 0,
             'draws': 0,
             'losses': 0,
-            'sum_ratings': 0.0, // Acumula as notas de cada partida
+            'sum_ratings': 0.0, 
           },
         );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
@@ -102,18 +102,15 @@ class _RankingScreenState extends State<RankingScreen> {
         else if (status == -1) stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
         else stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
 
-        // Recupera os dados deste jogador apenas nesta partida
         int g = matchPlayerEvents[playerId]?['g'] ?? 0;
         int a = matchPlayerEvents[playerId]?['a'] ?? 0;
         int og = matchPlayerEvents[playerId]?['og'] ?? 0;
         int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
         int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-        // Atualiza a tabela geral
         stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
-        // --- CÁLCULO DA NOTA DESTA PARTIDA (Igual ao Campo Miniatura) ---
         double resultImpact = 0;
         if (status == 1) resultImpact = 0.5;
         else if (status == -1) resultImpact = -0.5;
@@ -122,11 +119,9 @@ class _RankingScreenState extends State<RankingScreen> {
         double disciplineImpact = (yc * -0.3) + (rc * -0.8);
         double defenseImpact = (conceded * -0.15); 
 
-
         double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-        double matchRating = 7.0 + (performance * 2.5);
+        double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
 
-        // Adiciona a nota da partida ao somatório do jogador
         stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
       }
 
@@ -144,22 +139,28 @@ class _RankingScreenState extends State<RankingScreen> {
       int g = data['goals'] as int;
       int a = data['assists'] as int;
       int games = data['games'] as int;
+      double sumRatings = data['sum_ratings'] as double;
       
-      // A Nota do Dia é a média aritmética das notas tiradas em cada partida hoje
-      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 6.0;
+      // APENAS ENTRA NO RANKING SE TIVER JOGADO 5 JOGOS OU MAIS
+      if (games >= 5) {
+        // BAYESIANA + BONUS
+        double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
+        double volumeBonus = (games / 10) * 0.1;
+        double finalRating = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
 
-      sortedList.add({
-        'id': id,
-        'name': data['name'],
-        'goals': g,
-        'assists': a,
-        'ga': g + a,
-        'games': games,
-        'wins': data['wins'],
-        'draws': data['draws'],
-        'losses': data['losses'],
-        'nota': avgRating,
-      });
+        sortedList.add({
+          'id': id,
+          'name': data['name'],
+          'goals': g,
+          'assists': a,
+          'ga': g + a,
+          'games': games,
+          'wins': data['wins'],
+          'draws': data['draws'],
+          'losses': data['losses'],
+          'nota': finalRating,
+        });
+      }
     });
 
     sortedList.sort((a, b) {
@@ -193,7 +194,7 @@ class _RankingScreenState extends State<RankingScreen> {
           : leaderboard.isEmpty
           ? const Center(
               child: Text(
-                "Sem dados de partidas.",
+                "Sem jogadores elegíveis. (Mín. 5 jogos)",
                 style: TextStyle(color: Colors.white54),
               ),
             )

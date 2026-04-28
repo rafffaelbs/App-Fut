@@ -159,7 +159,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           double defenseImpact = (conceded * -0.15);
 
           double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-          double matchRating = 7.0 + (performance * 2.5);
+          double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
 
           globalStats[playerId]!['sum_ratings'] = (globalStats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
         }
@@ -176,13 +176,20 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
       int g = data['goals'] as int;
       int a = data['assists'] as int;
       int games = data['games'] as int;
-      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 7.0;
+      double sumRatings = data['sum_ratings'] as double;
+      
+      // APENAS ENTRA NO RANKING SE TIVER JOGADO 5 JOGOS OU MAIS
+      if (games >= 5) {
+        double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
+        double volumeBonus = (games / 10) * 0.1;
+        double finalRating = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
 
-      sortedList.add({
-        'id': id, 'name': data['name'], 'goals': g, 'assists': a, 'ga': g + a,
-        'games': games, 'wins': data['wins'], 'draws': data['draws'], 'losses': data['losses'],
-        'nota': avgRating,
-      });
+        sortedList.add({
+          'id': id, 'name': data['name'], 'goals': g, 'assists': a, 'ga': g + a,
+          'games': games, 'wins': data['wins'], 'draws': data['draws'], 'losses': data['losses'],
+          'nota': finalRating,
+        });
+      }
     });
 
     _applySorting(sortedList);

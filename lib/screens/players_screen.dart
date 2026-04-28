@@ -64,7 +64,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final String sessionsKey = 'sessions_${widget.groupId}';
     
     if (!prefs.containsKey(sessionsKey)) {
-      setState(() { for (var p in players) p['rating'] = 7.0; });
+      setState(() { for (var p in players) { p['rating'] = 7.0; p['totalGames'] = 0; } });
       await _savePlayers();
       return;
     }
@@ -131,6 +131,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           double defenseImpact = (conceded * -0.15);
 
           double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
+          // VOLATILIDADE 2.5
           double matchRating = 7.0 + (performance * 2.5);
           globalStats[playerId]!['sum_ratings'] = (globalStats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
         }
@@ -148,9 +149,17 @@ class _PlayersScreenState extends State<PlayersScreen> {
         if (globalStats.containsKey(pId)) {
           var data = globalStats[pId]!;
           int games = data['games'] as int;
-          players[i]['rating'] = games > 0 ? (data['sum_ratings'] as double) / games : 7.0;
+          double sumRatings = data['sum_ratings'] as double;
+          
+          // MÉDIA BAYESIANA E BÔNUS
+          double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
+          double volumeBonus = (games / 10) * 0.1;
+          
+          players[i]['rating'] = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
+          players[i]['totalGames'] = games;
         } else {
           players[i]['rating'] = 7.0;
+          players[i]['totalGames'] = 0;
         }
       }
     });
@@ -164,7 +173,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   void _addNewPlayer(String name, String? iconPath) {
-    setState(() { players.add({'id': _uuid.v4(), 'name': name, 'rating': 7.0, 'icon': iconPath}); });
+    setState(() { players.add({'id': _uuid.v4(), 'name': name, 'rating': 7.0, 'totalGames': 0, 'icon': iconPath}); });
     _savePlayers();
   }
 
@@ -185,7 +194,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
     return Colors.redAccent;
   }
 
-  String _ratingLabel(double rating) {
+  String _ratingLabel(double rating, int games) {
+    if (games < 5) return 'Estreante';
     if (rating >= 8.5) return 'Elite';
     if (rating >= 7.5) return 'Ótimo';
     if (rating >= 6.8) return 'Bom';
@@ -238,6 +248,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final String name = player['name'] ?? '';
     final String initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final double rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 7.0;
+    final int games = player['totalGames'] ?? 0;
     final String? iconPath = player['icon'];
     final Color rColor = _ratingColor(rating);
 
@@ -270,7 +281,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         children: [
                           Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: rating / 10.0, minHeight: 4, backgroundColor: Colors.white10, valueColor: AlwaysStoppedAnimation<Color>(rColor.withValues(alpha: 0.7))))),
                           const SizedBox(width: 10),
-                          Text(_ratingLabel(rating), style: TextStyle(color: rColor, fontSize: 11, fontWeight: FontWeight.w500)),
+                          Text(_ratingLabel(rating, games), style: TextStyle(color: rColor, fontSize: 11, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ],
@@ -339,7 +350,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
         });
         String currentLevel = '';
         for (int i = 0; i < players.length; i++) {
-          String level = _ratingLabel(players[i]['rating'] ?? 7.0);
+          String level = _ratingLabel(players[i]['rating'] ?? 7.0, players[i]['totalGames'] ?? 0);
           if (level != currentLevel) { listItems.add(_buildSectionHeader(level)); currentLevel = level; }
           listItems.add(_buildPlayerCard(i));
         }

@@ -167,9 +167,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       double disciplineImpact = (yc * -0.3) + (rc * -0.8);
       double defenseImpact = (goalsConceded * -0.15);
 
-      // MULTIPLICADOR DE ESPAÇAMENTO (x1.5)
       double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-      double matchRating = 7.0 + (performance * 2.5);
+      double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
       grouped[groupKey]!['sum_ratings'] += matchRating.clamp(0.0, 10.0);
     }
 
@@ -337,9 +336,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         double disciplineImpact = (yc * -0.3) + (rc * -0.8);
         double defenseImpact = (conceded * -0.15);
 
-        // MULTIPLICADOR DE ESPAÇAMENTO (x1.5)
         double performance = resultImpact + attackImpact + defenseImpact + disciplineImpact;
-        double matchRating = 7.0 + (performance * 2.5);
+        double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
         stats[playerId]!['sum_ratings'] = (stats[playerId]!['sum_ratings'] as double) + matchRating.clamp(0.0, 10.0);
       }
 
@@ -352,14 +350,20 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final List<Map<String, dynamic>> sortedList = [];
     stats.forEach((id, data) {
       final int games = data['games'] as int;
-      double avgRating = games > 0 ? (data['sum_ratings'] as double) / games : 7.0;
+      double sumRatings = data['sum_ratings'] as double;
+      
+      if (games >= 5) {
+        double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
+        double volumeBonus = (games / 10) * 0.1;
+        double finalRating = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
 
-      sortedList.add({
-        'id': id, 'name': data['name'], 'goals': data['goals'], 'assists': data['assists'],
-        'yellow': data['yellow'], 'red': data['red'],
-        'ga': (data['goals'] as int) + (data['assists'] as int), 'games': games,
-        'wins': data['wins'], 'draws': data['draws'], 'losses': data['losses'], 'nota': avgRating,
-      });
+        sortedList.add({
+          'id': id, 'name': data['name'], 'goals': data['goals'], 'assists': data['assists'],
+          'yellow': data['yellow'], 'red': data['red'],
+          'ga': (data['goals'] as int) + (data['assists'] as int), 'games': games,
+          'wins': data['wins'], 'draws': data['draws'], 'losses': data['losses'], 'nota': finalRating,
+        });
+      }
     });
 
     sortedList.sort((a, b) => (b['nota'] as double).compareTo(a['nota'] as double));
@@ -517,7 +521,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         const SizedBox(height: 8),
                         OutlinedButton.icon(onPressed: _showEditNameDialog, icon: const Icon(Icons.edit, size: 16), label: const Text('Editar nome'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24))),
                         const SizedBox(height: 6),
-                        Text(rankPosition != null ? 'Ranking Histórico Geral: #$rankPosition / $totalPlayers' : 'Ranking Histórico: sem dados', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        Text(rankPosition != null ? 'Ranking Histórico Geral: #$rankPosition / $totalPlayers' : 'Em Avaliação (Estreante)', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                       ],
                     ),
                   ),
