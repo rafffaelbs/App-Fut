@@ -65,26 +65,31 @@ class _RankingScreenState extends State<RankingScreen> {
               pid,
               () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
             );
-            if (type == 'goal')
+            if (type == 'goal') {
               matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
-            if (type == 'own_goal')
+            }
+            if (type == 'own_goal') {
               matchPlayerEvents[pid]!['og'] =
                   matchPlayerEvents[pid]!['og']! + 1;
-            if (type == 'yellow_card')
+            }
+            if (type == 'yellow_card') {
               matchPlayerEvents[pid]!['yc'] =
                   matchPlayerEvents[pid]!['yc']! + 1;
-            if (type == 'red_card')
+            }
+            if (type == 'red_card') {
               matchPlayerEvents[pid]!['rc'] =
                   matchPlayerEvents[pid]!['rc']! + 1;
+            }
           }
           if (astId.isNotEmpty) {
             matchPlayerEvents.putIfAbsent(
               astId,
               () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
             );
-            if (type == 'goal')
+            if (type == 'goal') {
               matchPlayerEvents[astId]!['a'] =
                   matchPlayerEvents[astId]!['a']! + 1;
+            }
           }
         }
       }
@@ -117,12 +122,13 @@ class _RankingScreenState extends State<RankingScreen> {
 
         stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
 
-        if (status == 1)
+        if (status == 1) {
           stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
-        else if (status == -1)
+        } else if (status == -1) {
           stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else
+        } else {
           stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+        }
 
         int g = matchPlayerEvents[playerId]?['g'] ?? 0;
         int a = matchPlayerEvents[playerId]?['a'] ?? 0;
@@ -134,10 +140,11 @@ class _RankingScreenState extends State<RankingScreen> {
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
         double resultImpact = 0;
-        if (status == 1)
+        if (status == 1) {
           resultImpact = 0.5;
-        else if (status == -1)
+        } else if (status == -1) {
           resultImpact = -0.5;
+        }
 
         double attackImpact = (g * 0.8) + (a * 0.4) + (og * -0.7);
         double disciplineImpact = (yc * -0.3) + (rc * -0.8);
@@ -145,7 +152,8 @@ class _RankingScreenState extends State<RankingScreen> {
 
         double performance =
             resultImpact + attackImpact + defenseImpact + disciplineImpact;
-        double matchRating = 7.0 + (performance * 2.5); // FATOR 2.5
+        // FATOR 2.5 APLICADO, MAS SEM BAYESIANA
+        double matchRating = 7.0 + (performance * 2.5); 
 
         stats[playerId]!['sum_ratings'] =
             (stats[playerId]!['sum_ratings'] as double) +
@@ -153,12 +161,14 @@ class _RankingScreenState extends State<RankingScreen> {
       }
 
       if (match['players']['red'] != null) {
-        for (var p in match['players']['red'])
+        for (var p in match['players']['red']) {
           processPlayer(p, redStatus, scoreWhite);
+        }
       }
       if (match['players']['white'] != null) {
-        for (var p in match['players']['white'])
+        for (var p in match['players']['white']) {
           processPlayer(p, whiteStatus, scoreRed);
+        }
       }
     }
 
@@ -170,12 +180,9 @@ class _RankingScreenState extends State<RankingScreen> {
       int games = data['games'] as int;
       double sumRatings = data['sum_ratings'] as double;
 
-      // APENAS ENTRA NO RANKING SE TIVER JOGADO 5 JOGOS OU MAIS
-      if (games >= 5) {
-        // BAYESIANA + BONUS
-        double bayesianRating = ((5 * 7.0) + sumRatings) / (5 + games);
-        double volumeBonus = (games / 10) * 0.1;
-        double finalRating = (bayesianRating + volumeBonus).clamp(0.0, 10.0);
+      // Ranking da Pelada: Média simples do dia. Sem trava de jogos, sem bayesiana.
+      if (games > 0) {
+        double avgRating = (sumRatings / games).clamp(0.0, 10.0);
 
         sortedList.add({
           'id': id,
@@ -187,7 +194,7 @@ class _RankingScreenState extends State<RankingScreen> {
           'wins': data['wins'],
           'draws': data['draws'],
           'losses': data['losses'],
-          'nota': finalRating,
+          'nota': avgRating,
         });
       }
     });
@@ -223,7 +230,7 @@ class _RankingScreenState extends State<RankingScreen> {
           : leaderboard.isEmpty
           ? const Center(
               child: Text(
-                "Sem jogadores elegíveis. (Mín. 5 jogos)",
+                "Sem jogadores registrados.",
                 style: TextStyle(color: Colors.white54),
               ),
             )
@@ -355,7 +362,7 @@ class _RankingScreenState extends State<RankingScreen> {
                                   builder: (context) => PlayerDetailScreen(
                                     groupId: widget.groupId,
                                     tournamentId: widget.tournamentId,
-                                    playerId: player['id'],
+                                    playerId: player['id'].toString(),
                                     initialPlayerName: player['name'],
                                   ),
                                 ),
@@ -364,7 +371,7 @@ class _RankingScreenState extends State<RankingScreen> {
                           ),
                           DataCell(
                             Text(
-                              player['nota'].toStringAsFixed(1),
+                              (player['nota'] as double).toStringAsFixed(1),
                               style: const TextStyle(
                                 color: Colors.amber,
                                 fontWeight: FontWeight.bold,
