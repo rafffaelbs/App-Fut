@@ -225,7 +225,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.headerBlue,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

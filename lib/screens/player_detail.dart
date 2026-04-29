@@ -845,7 +845,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color:  isSelected ? AppColors.accentBlue.withValues(alpha: 0.2) : Colors.transparent,
+                        color:  isSelected ? AppColors.accentBlue.withOpacity(0.2) : Colors.transparent,
                         border: Border.all(color: isSelected ? AppColors.accentBlue : Colors.white24),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -922,7 +922,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                       strokeWidth: 1.5, strokeColor: AppColors.headerBlue,
                     ),
                   ),
-                  belowBarData: BarAreaData(show: true, color: lineColor.withValues(alpha: 0.15)),
+                  belowBarData: BarAreaData(show: true, color: lineColor.withOpacity(0.15)),
                 ),
               ],
               lineTouchData: LineTouchData(
@@ -1058,9 +1058,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       onLongPress: () { if (isManual && index != null) _showRemoveManualBadgeDialog(index); },
       child: Container(
         decoration: BoxDecoration(
-          color:        badgeColor.withValues(alpha: 0.1),
+          color:        badgeColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
-          border:       Border.all(color: badgeColor.withValues(alpha: 0.3)),
+          border:       Border.all(color: badgeColor.withOpacity(0.3)),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),

@@ -28,13 +28,13 @@ class PlayerFieldSlot extends StatelessWidget {
         decoration: BoxDecoration(
           color: hasPlayer
               ? (isRed
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : Colors.white.withValues(alpha: 0.25))
+                    ? Colors.black.withOpacity(0.5)
+                    : Colors.white.withOpacity(0.25))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: hasPlayer
-                ? (isRed ? Colors.grey.withValues(alpha: 0.5) : Colors.white54)
+                ? (isRed ? Colors.grey.withOpacity(0.5) : Colors.white54)
                 : Colors.white12,
             style: hasPlayer ? BorderStyle.solid : BorderStyle.none,
           ),
@@ -45,7 +45,7 @@ class PlayerFieldSlot extends StatelessWidget {
             CircleAvatar(
               radius: 18,
               backgroundColor: hasPlayer
-                  ? (isRed ? Colors.white.withValues(alpha: 0.3) : Colors.white24)
+                  ? (isRed ? Colors.white.withOpacity(0.3) : Colors.white24)
                   : Colors.black12,
               backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
               child: !hasPlayer

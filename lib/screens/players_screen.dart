@@ -252,8 +252,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                 shape: BoxShape.circle,
                                 color: AppColors.deepBlue,
                                 border: Border.all(
-                                  color: AppColors.accentBlue.withValues(
-                                    alpha: 0.4,
+                                  color: AppColors.accentBlue.withOpacity(0.4,
                                   ),
                                   width: 1.5,
                                 ),
@@ -313,7 +312,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         hintText: "Nome do jogador",
                         hintStyle: const TextStyle(color: Colors.white30),
                         filled: true,
-                        fillColor: AppColors.deepBlue.withValues(alpha: 0.6),
+                        fillColor: AppColors.deepBlue.withOpacity(0.6),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 12,
@@ -325,7 +324,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                            color: AppColors.accentBlue.withValues(alpha: 0.6),
+                            color: AppColors.accentBlue.withOpacity(0.6),
                             width: 1,
                           ),
                         ),

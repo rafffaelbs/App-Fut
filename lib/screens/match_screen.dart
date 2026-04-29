@@ -607,12 +607,12 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     String resumoText = "👥 $total Presentes | $times Times"; if (sobram > 0) resumoText += " | Restam $sobram";
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
-      header: Container(margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: AppColors.accentBlue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.accentBlue.withValues(alpha: 0.5))), child: Center(child: Text(resumoText, style: const TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 14)))),
+      header: Container(margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: AppColors.accentBlue.withOpacity(0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.accentBlue.withOpacity(0.5))), child: Center(child: Text(resumoText, style: const TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 14)))),
       onReorder: (oldIndex, newIndex) { setState(() { if (newIndex > oldIndex) newIndex -= 1; final item = presentPlayers.removeAt(oldIndex); presentPlayers.insert(newIndex, item); }); _saveMatchState(); },
       children: [
         for (int i = 0; i < presentPlayers.length; i++)
           Container(
-            key: ValueKey(_pid(presentPlayers[i])), margin: const EdgeInsets.only(bottom: 8), decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+            key: ValueKey(_pid(presentPlayers[i])), margin: const EdgeInsets.only(bottom: 8), decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withOpacity(0.05))),
             child: ListTile(
               leading: Stack(
                 alignment: Alignment.bottomRight,
@@ -621,7 +621,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
                   Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: AppColors.accentBlue, shape: BoxShape.circle), child: Text("${i + 1}", style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold))),
                 ],
               ),
-              title: Row(children: [Expanded(child: Text(presentPlayers[i]['name'], style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)), if (presentPlayers[i]['rating'] != null) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.withValues(alpha: 0.3))), child: Text((presentPlayers[i]['rating'] as num).toDouble().toStringAsFixed(1), style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)))]),
+              title: Row(children: [Expanded(child: Text(presentPlayers[i]['name'], style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)), if (presentPlayers[i]['rating'] != null) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.withOpacity(0.3))), child: Text((presentPlayers[i]['rating'] as num).toDouble().toStringAsFixed(1), style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)))]),
               trailing: const Icon(Icons.more_vert, color: Colors.white24), onTap: () => _showChegadaOptions(presentPlayers[i]),
             ),
           ),
@@ -691,7 +691,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
             child: Row(
               children: [
-                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(true, (selectedGk) => _confirmEventDialog("goal", selectedGk, true)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5))), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
+                Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(true, (selectedGk) => _confirmEventDialog("goal", selectedGk, true)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.5))), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.redAccent, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
                 const SizedBox(width: 12),
                 Expanded(child: GestureDetector(onTap: () { if (!isMatchRunning) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inicie a partida primeiro!"))); return; } _showGoalkeeperSelectionDialog(false, (selectedGk) => _confirmEventDialog("goal", selectedGk, false)); }, child: Container(height: 40, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white54)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sports_handball, color: Colors.white, size: 16), SizedBox(width: 8), Text("Goleiro", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])))),
               ],
@@ -743,17 +743,17 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     if (isCompleteTeam) { if (teamBatch == 1) teamColor = AppColors.accentBlue; else if (teamBatch == 2) teamColor = Colors.orangeAccent; else if (teamBatch == 3) teamColor = Colors.purpleAccent; else teamColor = Colors.greenAccent; }
     final EdgeInsets margin = EdgeInsets.only(bottom: isLastPlayerInTeam ? 16 : 2);
     return Container(
-      key: ValueKey(_pid(player)), margin: margin, decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.vertical(top: isFirstPlayerInTeam ? const Radius.circular(12) : const Radius.circular(4), bottom: isLastPlayerInTeam ? const Radius.circular(12) : const Radius.circular(4)), border: Border.all(color: isCompleteTeam ? teamColor.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.05), width: isCompleteTeam ? 1.5 : 1)),
+      key: ValueKey(_pid(player)), margin: margin, decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.vertical(top: isFirstPlayerInTeam ? const Radius.circular(12) : const Radius.circular(4), bottom: isLastPlayerInTeam ? const Radius.circular(12) : const Radius.circular(4)), border: Border.all(color: isCompleteTeam ? teamColor.withOpacity(0.6) : Colors.white.withOpacity(0.05), width: isCompleteTeam ? 1.5 : 1)),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         leading: Stack(
           alignment: Alignment.bottomRight,
           children: [
-            CircleAvatar(backgroundColor: isCompleteTeam ? teamColor.withValues(alpha: 0.2) : AppColors.deepBlue, backgroundImage: iconPath != null ? AssetImage(iconPath) : null, child: iconPath == null ? Text(player['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)) : null),
+            CircleAvatar(backgroundColor: isCompleteTeam ? teamColor.withOpacity(0.2) : AppColors.deepBlue, backgroundImage: iconPath != null ? AssetImage(iconPath) : null, child: iconPath == null ? Text(player['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)) : null),
             Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: isCompleteTeam ? teamColor : Colors.white30, shape: BoxShape.circle), child: Text("${index + 1}", style: const TextStyle(fontSize: 9, color: Colors.black, fontWeight: FontWeight.bold))),
           ],
         ),
-        title: Row(children: [Expanded(child: Text(player['name'], style: TextStyle(color: isCompleteTeam ? Colors.white : Colors.white70, fontWeight: isCompleteTeam ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)), if (rating > 0) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.withValues(alpha: 0.3))), child: Text(rating.toStringAsFixed(1), style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)))]),
+        title: Row(children: [Expanded(child: Text(player['name'], style: TextStyle(color: isCompleteTeam ? Colors.white : Colors.white70, fontWeight: isCompleteTeam ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)), if (rating > 0) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.withOpacity(0.3))), child: Text(rating.toStringAsFixed(1), style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)))]),
         trailing: const Icon(Icons.drag_handle, color: Colors.white24), onTap: () => _showChegadaOptions(player),
       ),
     );

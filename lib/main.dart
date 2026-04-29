@@ -4,8 +4,10 @@ import 'package:app_do_fut/firebase_options.dart';
 import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/sync_screen.dart';
+import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/services/sync_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -246,7 +248,7 @@ class _HomePageState extends State<HomePage> {
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.4),
+          color: Colors.white.withOpacity(0.4),
           fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.2,
@@ -270,7 +272,7 @@ class _HomePageState extends State<HomePage> {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppColors.headerBlue.withValues(alpha: 0.5),
+            color: AppColors.headerBlue.withOpacity(0.5),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: AppColors.accentBlue, size: 22),
@@ -285,10 +287,7 @@ class _HomePageState extends State<HomePage> {
         ),
         subtitle: Text(
           subtitle,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
-            fontSize: 12,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
         ),
         trailing: const Icon(
           Icons.chevron_right_rounded,
@@ -323,7 +322,7 @@ class _HomePageState extends State<HomePage> {
                   end: Alignment.bottomRight,
                   colors: [
                     AppColors.accentBlue,
-                    AppColors.accentBlue.withValues(alpha: 0.7),
+                    AppColors.accentBlue.withOpacity(0.7),
                     AppColors.headerBlue,
                   ],
                 ),
@@ -337,7 +336,7 @@ class _HomePageState extends State<HomePage> {
                   Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white30, width: 1),
                     ),
@@ -376,12 +375,31 @@ class _HomePageState extends State<HomePage> {
                     subtitle: 'Sincronizar com Firebase',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SyncScreen(),
-                        ),
-                      );
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LoginScreen(),
+                          ),
+                        ).then((success) {
+                          if (success == true) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SyncScreen(),
+                              ),
+                            );
+                          }
+                        });
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SyncScreen(),
+                          ),
+                        );
+                      }
                     },
                   ),
                   _buildDrawerTile(
@@ -434,6 +452,17 @@ class _HomePageState extends State<HomePage> {
                     subtitle: 'Versão 1.2.0',
                     onTap: () {},
                   ),
+                  if (FirebaseAuth.instance.currentUser != null)
+                    _buildDrawerTile(
+                      icon: Icons.logout_rounded,
+                      title: 'Sair',
+                      subtitle: 'Deslogar da conta',
+                      onTap: () async {
+                        await FirebaseAuth.instance.signOut();
+                        setState(() {});
+                        if (mounted) Navigator.pop(context);
+                      },
+                    ),
                 ],
               ),
             ),
@@ -452,7 +481,7 @@ class _HomePageState extends State<HomePage> {
                   Text(
                     'Society™ Team 2024',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: Colors.white.withOpacity(0.15),
                       fontSize: 11,
                       letterSpacing: 0.5,
                     ),

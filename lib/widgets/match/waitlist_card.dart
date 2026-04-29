@@ -27,12 +27,12 @@ class WaitlistCard extends StatelessWidget {
         color: AppColors.headerBlue,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isNextTeam ? AppColors.accentBlue.withValues(alpha: 0.5) : Colors.transparent,
+          color: isNextTeam ? AppColors.accentBlue.withOpacity(0.5) : Colors.transparent,
         ),
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isNextTeam ? AppColors.accentBlue.withValues(alpha: 0.2) : Colors.white10,
+          backgroundColor: isNextTeam ? AppColors.accentBlue.withOpacity(0.2) : Colors.white10,
           backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
           child: iconPath == null ? Text("${index + 1}º", style: const TextStyle(color: Colors.white)) : null,
         ),

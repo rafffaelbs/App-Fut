@@ -37,7 +37,7 @@ class MatchScoreboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratingColor = Colors.amber.withValues(alpha: 0.86);
+    final ratingColor = Colors.amber.withOpacity(0.86);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(0, 10, 0, 20),
@@ -185,12 +185,12 @@ class MatchScoreboard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isReadyToStart
                     ? Colors.green
-                    : Colors.grey.withValues(alpha: 0.3),
+                    : Colors.grey.withOpacity(0.3),
                 shape: BoxShape.circle,
                 boxShadow: isReadyToStart
                     ? [
                         BoxShadow(
-                          color: Colors.green.withValues(alpha: 0.4),
+                          color: Colors.green.withOpacity(0.4),
                           blurRadius: 10,
                           spreadRadius: 2,
                         ),
