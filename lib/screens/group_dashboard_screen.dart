@@ -3,6 +3,7 @@ import 'package:app_do_fut/screens/group_ranking_screen.dart';
 import 'package:app_do_fut/screens/players_screen.dart';
 import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
+import 'package:app_do_fut/screens/manage_seasons_screen.dart';
 import 'package:flutter/material.dart';
 
 class GroupDashboardScreen extends StatefulWidget {
@@ -44,19 +45,69 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
-          // BOTAO NOVO PARA FABRICA DE TROFEUS
-          IconButton(
-            icon: const Icon(Icons.workspace_premium, color: Colors.amber),
-            tooltip: "Gerenciar Troféus",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ManageBadgesScreen(groupId: widget.groupId),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            color: AppColors.headerBlue,
+            onSelected: (value) async {
+              // Exige senha 0101
+              final TextEditingController passCtrl = TextEditingController();
+              bool auth = false;
+              await showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.headerBlue,
+                  title: const Text('Área Administrativa', style: TextStyle(color: Colors.white)),
+                  content: TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Senha',
+                      labelStyle: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+                    TextButton(
+                      onPressed: () {
+                        if (passCtrl.text == '0101') {
+                          auth = true;
+                          Navigator.pop(ctx);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Senha incorreta!')));
+                        }
+                      },
+                      child: const Text('Entrar', style: TextStyle(color: AppColors.accentBlue)),
+                    ),
+                  ],
                 ),
               );
+
+              if (!auth || !context.mounted) return;
+
+              if (value == 'badges') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManageBadgesScreen(groupId: widget.groupId)),
+                );
+              } else if (value == 'seasons') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManageSeasonsScreen(groupId: widget.groupId)),
+                );
+              }
             },
-          )
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'badges',
+                child: Row(children: [Icon(Icons.workspace_premium, color: Colors.amber, size: 20), SizedBox(width: 8), Text('Gerenciar Troféus', style: TextStyle(color: Colors.white))]),
+              ),
+              const PopupMenuItem(
+                value: 'seasons',
+                child: Row(children: [Icon(Icons.calendar_month, color: AppColors.accentBlue, size: 20), SizedBox(width: 8), Text('Gerenciar Temporadas', style: TextStyle(color: Colors.white))]),
+              ),
+            ],
+          ),
         ],
       ),
 
