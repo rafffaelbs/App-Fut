@@ -47,6 +47,30 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   Map<String, dynamic> advancedStats = {};
   List<Map<String, dynamic>> manualBadges = [];
+  List<Map<String, dynamic>> _allPlayers = [];
+
+  static const List<String> _availableIcons = [
+    'assets/players_icons/adriano.png',  'assets/players_icons/arrascaeta.png',
+    'assets/players_icons/balota.png',   'assets/players_icons/bellingham.webp',
+    'assets/players_icons/bruyne.png',   'assets/players_icons/courtois.png',
+    'assets/players_icons/cr7.png',      'assets/players_icons/depay.png',
+    'assets/players_icons/drogba.png',   'assets/players_icons/dybala.png',
+    'assets/players_icons/gullit.png',   'assets/players_icons/haaland.png',
+    'assets/players_icons/ibra.png',     'assets/players_icons/kaka.png',
+    'assets/players_icons/kroos.png',    'assets/players_icons/love.png',
+    'assets/players_icons/maldini.png',  'assets/players_icons/maradona.png',
+    'assets/players_icons/mbappe.png',   'assets/players_icons/messi.png',
+    'assets/players_icons/modric.png',   'assets/players_icons/mouse_hunter.png',
+    'assets/players_icons/neuer.png',    'assets/players_icons/neymar.png',
+    'assets/players_icons/ozil.png',     'assets/players_icons/pele.png',
+    'assets/players_icons/pique.png',    'assets/players_icons/pirlo.png',
+    'assets/players_icons/pogba.webp',   'assets/players_icons/puyol.png',
+    'assets/players_icons/ramos.png',    'assets/players_icons/ribery.png',
+    'assets/players_icons/robben.png',   'assets/players_icons/ronaldinho.png',
+    'assets/players_icons/ronaldo.png',  'assets/players_icons/seedorf.png',
+    'assets/players_icons/vegetti.png',  'assets/players_icons/vini.png',
+    'assets/players_icons/xavi.png',     'assets/players_icons/zidane.png',
+  ];
 
   @override
   void initState() {
@@ -60,7 +84,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   Future<void> _loadPlayerDetails() async {
     final prefs = await SharedPreferences.getInstance();
-    final Map<String, dynamic>? player = await _loadPlayer(prefs);
+    
+    // Load all players to find specific player and check taken icons
+    final String playersKey = 'players_${widget.groupId}';
+    List<Map<String, dynamic>> players = [];
+    if (prefs.containsKey(playersKey)) {
+      players = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(playersKey)!)));
+    }
+    
+    final Map<String, dynamic>? player = players.firstWhere(
+      (p) => (p['id'] ?? '').toString() == widget.playerId,
+      orElse: () => {},
+    );
+    
     final String? icon = widget.playerIcon ?? player?['icon'] as String?;
     final String resolvedName = (player?['name'] ?? widget.initialPlayerName ?? '').toString();
 
@@ -97,6 +133,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
     setState(() {
       _allHistory  = allHistory;
+      _allPlayers  = players;
       resolvedIcon = icon;
       playerName   = resolvedName;
       totalPlayers = leaderboard.length;
@@ -473,6 +510,21 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     setState(() { playerName = newName; playerStats['name'] = newName; });
   }
 
+  Future<void> _savePlayerIcon(String iconPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String key = 'players_${widget.groupId}';
+    if (!prefs.containsKey(key)) return;
+    final players = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(key)!)));
+    final int index = players.indexWhere((p) => (p['id'] ?? '').toString() == widget.playerId);
+    if (index == -1) return;
+    players[index]['icon'] = iconPath;
+    await prefs.setString(key, jsonEncode(players));
+    setState(() { 
+      resolvedIcon = iconPath; 
+      _allPlayers = players; // Update stored list for takenIcons logic
+    });
+  }
+
   Future<void> _saveManualBadge(String icon, String title) async {
     final prefs = await SharedPreferences.getInstance();
     final String playersKey = 'players_${widget.groupId}';
@@ -677,6 +729,107 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showIconPicker() {
+    final List<String> takenIcons = _allPlayers
+        .map((p) => p['icon'] as String?)
+        .where((icon) => icon != null && icon != resolvedIcon)
+        .cast<String>()
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.headerBlue,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                "Escolher Ícone",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 400,
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: (_availableIcons.length / 4).ceil(),
+                  itemBuilder: (ctx, rowIndex) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: List.generate(4, (colIndex) {
+                          final iconIndex = rowIndex * 4 + colIndex;
+                          if (iconIndex >= _availableIcons.length) return const Expanded(child: SizedBox());
+
+                          final path = _availableIcons[iconIndex];
+                          final bool selected = resolvedIcon == path;
+                          final bool isTaken = takenIcons.contains(path);
+
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(right: colIndex < 3 ? 12 : 0),
+                              child: GestureDetector(
+                                onTap: isTaken ? null : () {
+                                  _savePlayerIcon(path);
+                                  Navigator.pop(ctx);
+                                },
+                                child: Container(
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: selected
+                                        ? AppColors.accentBlue.withValues(alpha: 0.25)
+                                        : (isTaken ? Colors.black26 : AppColors.deepBlue.withValues(alpha: 0.6)),
+                                    border: Border.all(
+                                      color: selected ? AppColors.accentBlue : (isTaken ? Colors.transparent : Colors.white12),
+                                      width: selected ? 2 : 1,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Opacity(
+                                    opacity: isTaken ? 0.2 : 1.0,
+                                    child: Image.asset(path, fit: BoxFit.contain),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1076,26 +1229,29 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     ),
                     child: Column(
                       children: [
-                        Stack(
-                          alignment: Alignment.topRight,
-                          children: [
-                            CircleAvatar(
-                              radius: 36,
-                              backgroundColor: AppColors.deepBlue,
-                              child: resolvedIcon != null
-                                  ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(resolvedIcon!, fit: BoxFit.contain)))
-                                  : Text(initial, style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold, fontSize: 26)),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color:        ratingColor,
-                                borderRadius: BorderRadius.circular(12),
-                                border:       Border.all(color: AppColors.headerBlue, width: 2),
+                        GestureDetector(
+                          onTap: _showIconPicker,
+                          child: Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              CircleAvatar(
+                                radius: 36,
+                                backgroundColor: AppColors.deepBlue,
+                                child: resolvedIcon != null
+                                    ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(resolvedIcon!, fit: BoxFit.contain)))
+                                    : Text(initial, style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold, fontSize: 26)),
                               ),
-                              child: Text(nota.toStringAsFixed(1), style: const TextStyle(color: AppColors.headerBlue, fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
-                          ],
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color:        ratingColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:       Border.all(color: AppColors.headerBlue, width: 2),
+                                ),
+                                child: Text(nota.toStringAsFixed(1), style: const TextStyle(color: AppColors.headerBlue, fontWeight: FontWeight.bold, fontSize: 12)),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(displayName, style: const TextStyle(color: AppColors.textWhite, fontSize: 22, fontWeight: FontWeight.bold)),

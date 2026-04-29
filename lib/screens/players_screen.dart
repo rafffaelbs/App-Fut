@@ -181,9 +181,15 @@ class _PlayersScreenState extends State<PlayersScreen> {
     await prefs.setString(_storageKey, jsonEncode(players));
   }
 
-  void _addNewPlayer(String name, String? iconPath) {
+  void _addNewPlayer(String name, double rating, String? iconPath) {
     setState(() {
-      players.add({'id': _uuid.v4(), 'name': name, 'rating': kRatingBase, 'totalGames': 0, 'icon': iconPath});
+      players.add({
+        'id': _uuid.v4(),
+        'name': name,
+        'rating': rating,
+        'totalGames': 0,
+        'icon': iconPath
+      });
     });
     _savePlayers();
   }
@@ -392,33 +398,333 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   void _showAddPlayerDialog() {
     final TextEditingController controller = TextEditingController();
+    String? selectedIcon;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.headerBlue,
-        title:   const Text('Novo Jogador', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style:      const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'Nome', hintStyle: TextStyle(color: Colors.white30)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.white38))),
-          TextButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                _addNewPlayer(controller.text.trim(), null);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Salvar', style: TextStyle(color: AppColors.accentBlue)),
-          ),
-        ],
-      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              backgroundColor: AppColors.headerBlue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Novo Jogador',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Icon selector
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          _showIconPicker(
+                            currentIcon: selectedIcon,
+                            onSelected: (path) {
+                              setStateDialog(() => selectedIcon = path);
+                            },
+                          );
+                        },
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.deepBlue,
+                                border: Border.all(
+                                  color: AppColors.accentBlue.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: selectedIcon != null
+                                  ? ClipOval(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: Image.asset(
+                                          selectedIcon!,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            Icons.person_outline,
+                                            color: Colors.white38,
+                                            size: 32,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.person_outline,
+                                      color: Colors.white38,
+                                      size: 32,
+                                    ),
+                            ),
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.accentBlue,
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        "Toque para escolher ícone",
+                        style: TextStyle(color: Colors.white30, fontSize: 11),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Name field
+                    TextField(
+                      controller: controller,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: InputDecoration(
+                        hintText: "Nome do jogador",
+                        hintStyle: const TextStyle(color: Colors.white30),
+                        filled: true,
+                        fillColor: AppColors.deepBlue.withValues(alpha: 0.6),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: AppColors.accentBlue.withValues(alpha: 0.6),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancelar',
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (controller.text.trim().isNotEmpty) {
+                                _addNewPlayer(
+                                  controller.text.trim(),
+                                  kRatingBase,
+                                  selectedIcon,
+                                );
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: const Text(
+                              'Salvar',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
+  
+  void _showIconPicker({
+    required void Function(String) onSelected,
+    String? currentIcon,
+  }) {
+    // --- NEW: FIND ALL TAKEN ICONS ---
+    // We get all icons currently in use, but we exclude the 'currentIcon'
+    // so the player can keep their own icon if they are just editing!
+    final List<String> takenIcons = players
+        .map((p) => p['icon'] as String?)
+        .where((icon) => icon != null && icon != currentIcon)
+        .cast<String>()
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.headerBlue,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                "Escolher Ícone",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 400, // Fixed height for the scrollable area
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: (_availableIcons.length / 4).ceil(),
+                  itemBuilder: (ctx, rowIndex) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: List.generate(4, (colIndex) {
+                          final iconIndex = rowIndex * 4 + colIndex;
+                          if (iconIndex >= _availableIcons.length) {
+                            return const Expanded(
+                              child: SizedBox(),
+                            ); // Empty placeholder
+                          }
+
+                          final path = _availableIcons[iconIndex];
+                          final bool selected = currentIcon == path;
+                          final bool isTaken = takenIcons.contains(path);
+
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: colIndex < 3 ? 12 : 0,
+                              ),
+                              child: GestureDetector(
+                                onTap: isTaken
+                                    ? null
+                                    : () {
+                                        onSelected(path);
+                                        Navigator.pop(ctx);
+                                      },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  height:
+                                      80, // Fixed height for each icon container
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: selected
+                                        ? AppColors.accentBlue.withValues(
+                                            alpha: 0.25,
+                                          )
+                                        : (isTaken
+                                              ? Colors.black26
+                                              : AppColors.deepBlue.withValues(
+                                                  alpha: 0.6,
+                                                )),
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.accentBlue
+                                          : (isTaken
+                                                ? Colors.transparent
+                                                : Colors.white12),
+                                      width: selected ? 2 : 1,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Opacity(
+                                    opacity: isTaken ? 0.2 : 1.0,
+                                    child: Image.asset(
+                                      path,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) => const Icon(
+                                        Icons.person_outline,
+                                        color: Colors.white38,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+// ─────────────────────────────────────────────────────────────
   // BUILD
   // ─────────────────────────────────────────────────────────────
 

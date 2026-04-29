@@ -11,9 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -241,80 +239,225 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // --- DRAWER HELPERS ---
+  Widget _buildDrawerSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.4),
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.headerBlue.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppColors.accentBlue, size: 22),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 12,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right_rounded,
+          color: Colors.white12,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
 
       drawer: Drawer(
-        backgroundColor: AppColors.headerBlue,
-        child: ListView(
-          padding: EdgeInsets.zero,
+        backgroundColor: AppColors.deepBlue,
+        width: MediaQuery.of(context).size.width * 0.8,
+        child: Column(
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: AppColors.accentBlue),
-              child: Text(
-                'Pelada App',
-                style: TextStyle(color: Colors.white, fontSize: 24),
+            // Custom Premium Header
+            Container(
+              padding: const EdgeInsets.only(
+                top: 60,
+                left: 24,
+                right: 24,
+                bottom: 30,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.accentBlue,
+                    AppColors.accentBlue.withValues(alpha: 0.7),
+                    AppColors.headerBlue,
+                  ],
+                ),
+                borderRadius: const BorderRadius.only(
+                  bottomRight: Radius.circular(32),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white30, width: 1),
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Society™',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.cloud_sync, color: Colors.white),
-              title: const Text(
-                'Cloud Sync',
-                style: TextStyle(color: Colors.white),
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 20,
+                ),
+                children: [
+                  _buildDrawerSection('DADOS E SINCRONIA'),
+                  _buildDrawerTile(
+                    icon: Icons.cloud_sync_rounded,
+                    title: 'Cloud Sync',
+                    subtitle: 'Sincronizar com Firebase',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SyncScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildDrawerTile(
+                    icon: Icons.download_rounded,
+                    title: 'Exportar Banco',
+                    subtitle: 'Salvar backup local (JSON)',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _syncService.exportToFile();
+                    },
+                  ),
+                  _buildDrawerTile(
+                    icon: Icons.upload_file_rounded,
+                    title: 'Importar Banco',
+                    subtitle: 'Restaurar de arquivo JSON',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final imported = await _syncService.importFromFile();
+                      if (!mounted) return;
+                      if (imported) {
+                        await _loadGroups();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Banco importado com sucesso.'),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDrawerSection('APLICATIVO'),
+                  _buildDrawerTile(
+                    icon: Icons.settings_rounded,
+                    title: 'Configurações',
+                    subtitle: 'Preferências do app',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const BlankScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildDrawerTile(
+                    icon: Icons.info_outline_rounded,
+                    title: 'Sobre',
+                    subtitle: 'Versão 1.2.0',
+                    onTap: () {},
+                  ),
+                ],
               ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SyncScreen()),
-                );
-              },
             ),
-            ListTile(
-              leading: const Icon(Icons.download, color: Colors.white),
-              title: const Text(
-                'Export Database',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                await _syncService.exportToFile();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload_file, color: Colors.white),
-              title: const Text(
-                'Import Database',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                final imported = await _syncService.importFromFile();
-                if (!mounted) return;
-                if (imported) {
-                  await _loadGroups();
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Banco importado com sucesso.')),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Importacao cancelada ou invalida.')),
-                  );
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings, color: Colors.white),
-              title: const Text(
-                'Configurações',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const BlankScreen()),
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.copyright_rounded,
+                    size: 14,
+                    color: Colors.white24,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Society™ Team 2024',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
