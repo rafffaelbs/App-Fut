@@ -25,29 +25,85 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   String get _storageKey => 'players_${widget.groupId}';
 
-  static const List<String> _availableIcons = [
-    'assets/players_icons/adriano.png',  'assets/players_icons/arrascaeta.png',
-    'assets/players_icons/balota.png',   'assets/players_icons/bellingham.webp',
-    'assets/players_icons/bruyne.png',   'assets/players_icons/courtois.png',
-    'assets/players_icons/cr7.png',      'assets/players_icons/depay.png',
-    'assets/players_icons/drogba.png',   'assets/players_icons/dybala.png',
-    'assets/players_icons/gullit.png',   'assets/players_icons/haaland.png',
-    'assets/players_icons/ibra.png',     'assets/players_icons/kaka.png',
-    'assets/players_icons/kroos.png',    'assets/players_icons/love.png',
-    'assets/players_icons/maldini.png',  'assets/players_icons/maradona.png',
-    'assets/players_icons/mbappe.png',   'assets/players_icons/messi.png',
-    'assets/players_icons/modric.png',   'assets/players_icons/mouse_hunter.png',
-    'assets/players_icons/neuer.png',    'assets/players_icons/neymar.png',
-    'assets/players_icons/ozil.png',     'assets/players_icons/pele.png',
-    'assets/players_icons/pique.png',    'assets/players_icons/pirlo.png',
-    'assets/players_icons/pogba.webp',   'assets/players_icons/puyol.png',
-    'assets/players_icons/ramos.png',    'assets/players_icons/ribery.png',
-    'assets/players_icons/robben.png',   'assets/players_icons/ronaldinho.png',
-    'assets/players_icons/ronaldo.png',  'assets/players_icons/seedorf.png',
-    'assets/players_icons/vegetti.png',  'assets/players_icons/vini.png',
-    'assets/players_icons/xavi.png',     'assets/players_icons/zidane.png',
+static const List<String> _availableIcons = [
+    'assets/players_icons/adriano.png',
+    'assets/players_icons/arrasca.png',
+    'assets/players_icons/balota.png',
+    'assets/players_icons/beckham.png',
+    'assets/players_icons/bellingham.webp',
+    'assets/players_icons/bruyne.png',
+    'assets/players_icons/calleri.png',
+    'assets/players_icons/courtois.png',
+    'assets/players_icons/cr7.png',
+    'assets/players_icons/cruyff.png',
+    'assets/players_icons/dembele.png',
+    'assets/players_icons/depay.png',
+    'assets/players_icons/drogba.png',
+    'assets/players_icons/dybala.png',
+    'assets/players_icons/endrick.png',
+    'assets/players_icons/gabigol.png',
+    'assets/players_icons/garro.png',
+    'assets/players_icons/gerson.png',
+    'assets/players_icons/gomez.png',
+    'assets/players_icons/gullit.png',
+    'assets/players_icons/haaland.png',
+    'assets/players_icons/henry.png',
+    'assets/players_icons/ibra.png',
+    'assets/players_icons/iniesta.png',
+    'assets/players_icons/jardim.png',
+    'assets/players_icons/jorginho.png',
+    'assets/players_icons/kaka.png',
+    'assets/players_icons/kane.png',
+    'assets/players_icons/kroos.png',
+    'assets/players_icons/lahm.png',
+    'assets/players_icons/love.png',
+    'assets/players_icons/luciano.png',
+    'assets/players_icons/maldini.png',
+    'assets/players_icons/maradona.png',
+    'assets/players_icons/mbappe.png',
+    'assets/players_icons/messi.png',
+    'assets/players_icons/modric.png',
+    'assets/players_icons/mouse_hunter.png',
+    'assets/players_icons/neneca.png',
+    'assets/players_icons/neuer.png',
+    'assets/players_icons/neymar.png',
+    'assets/players_icons/ozil.png',
+    'assets/players_icons/palmer.webp',
+    'assets/players_icons/paqueta.png',
+    'assets/players_icons/pedro.png',
+    'assets/players_icons/pele.png',
+    'assets/players_icons/pique.png',
+    'assets/players_icons/pirlo.png',
+    'assets/players_icons/plata.png',
+    'assets/players_icons/pogba.webp',
+    'assets/players_icons/puma.png',
+    'assets/players_icons/puyol.png',
+    'assets/players_icons/ramos.png',
+    'assets/players_icons/raphinha.webp',
+    'assets/players_icons/rayan.png',
+    'assets/players_icons/ribery.png',
+    'assets/players_icons/riquelme.png',
+    'assets/players_icons/robben.png',
+    'assets/players_icons/ronaldinho.png',
+    'assets/players_icons/ronaldo.png',
+    'assets/players_icons/rooney.png',
+    'assets/players_icons/roque.png',
+    'assets/players_icons/sch.png',
+    'assets/players_icons/seedorf.png',
+    'assets/players_icons/socrates.webp',
+    'assets/players_icons/torres.png',
+    'assets/players_icons/totti.png',
+    'assets/players_icons/valverde.png',
+    'assets/players_icons/vanpersie.png',
+    'assets/players_icons/varela.png',
+    'assets/players_icons/vegetti.png',
+    'assets/players_icons/vini.png',
+    'assets/players_icons/xavi.png',
+    'assets/players_icons/yamal.png',
+    'assets/players_icons/yashin.png',
+    'assets/players_icons/yuri.png',
+    'assets/players_icons/zidane.png',
   ];
-
   @override
   void initState() {
     super.initState();
@@ -64,7 +120,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
     if (playersString != null) {
       final loaded = List<Map<String, dynamic>>.from(jsonDecode(playersString));
-      setState(() { players = ensurePlayerIds(loaded); });
+      setState(() {
+        players = ensurePlayerIds(loaded);
+      });
     }
 
     await _calculateDynamicRatings();
@@ -78,7 +136,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (!prefs.containsKey(sessionsKey)) {
       setState(() {
         for (final p in players) {
-          p['rating']     = kRatingBase;
+          p['rating'] = kRatingBase;
           p['totalGames'] = 0;
         }
       });
@@ -91,35 +149,55 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
     for (final session in allSessions) {
       final String tournamentId = session['id'];
-      final String historyKey   = 'match_history_$tournamentId';
+      final String historyKey = 'match_history_$tournamentId';
       if (!prefs.containsKey(historyKey)) continue;
 
       final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
 
       for (final match in history) {
-        final int scoreRed    = match['scoreRed']   ?? 0;
-        final int scoreWhite  = match['scoreWhite'] ?? 0;
-        final int redStatus   = scoreRed > scoreWhite  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
-        final int whiteStatus = scoreWhite > scoreRed  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
+        final int scoreRed = match['scoreRed'] ?? 0;
+        final int scoreWhite = match['scoreWhite'] ?? 0;
+        final int redStatus = scoreRed > scoreWhite
+            ? 1
+            : (scoreRed == scoreWhite ? 0 : -1);
+        final int whiteStatus = scoreWhite > scoreRed
+            ? 1
+            : (scoreRed == scoreWhite ? 0 : -1);
 
         // Coleta eventos por jogador nesta partida
         final Map<String, Map<String, int>> matchPlayerEvents = {};
         if (match['events'] != null) {
           for (final ev in match['events']) {
-            final String pid   = eventPlayerId(ev, 'player');
+            final String pid = eventPlayerId(ev, 'player');
             final String astId = eventPlayerId(ev, 'assist');
-            final String type  = ev['type'];
+            final String type = ev['type'];
 
             if (pid.isNotEmpty) {
-              matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-              if (type == 'goal')        matchPlayerEvents[pid]!['g']  = matchPlayerEvents[pid]!['g']!  + 1;
-              if (type == 'own_goal')    matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
-              if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
-              if (type == 'red_card')    matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
+              matchPlayerEvents.putIfAbsent(
+                pid,
+                () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+              );
+              if (type == 'goal')
+                matchPlayerEvents[pid]!['g'] =
+                    matchPlayerEvents[pid]!['g']! + 1;
+              if (type == 'own_goal')
+                matchPlayerEvents[pid]!['og'] =
+                    matchPlayerEvents[pid]!['og']! + 1;
+              if (type == 'yellow_card')
+                matchPlayerEvents[pid]!['yc'] =
+                    matchPlayerEvents[pid]!['yc']! + 1;
+              if (type == 'red_card')
+                matchPlayerEvents[pid]!['rc'] =
+                    matchPlayerEvents[pid]!['rc']! + 1;
             }
             if (astId.isNotEmpty) {
-              matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-              if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
+              matchPlayerEvents.putIfAbsent(
+                astId,
+                () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+              );
+              if (type == 'goal')
+                matchPlayerEvents[astId]!['a'] =
+                    matchPlayerEvents[astId]!['a']! + 1;
             }
           }
         }
@@ -132,28 +210,43 @@ class _PlayersScreenState extends State<PlayersScreen> {
           if (playerId.isEmpty || processed.contains(playerId)) return;
           processed.add(playerId);
 
-          globalStats.putIfAbsent(playerId, () => {'games': 0, 'sum_ratings': 0.0});
-          globalStats[playerId]!['games'] = (globalStats[playerId]!['games'] as int) + 1;
+          globalStats.putIfAbsent(
+            playerId,
+            () => {'games': 0, 'sum_ratings': 0.0},
+          );
+          globalStats[playerId]!['games'] =
+              (globalStats[playerId]!['games'] as int) + 1;
 
-          final int g  = matchPlayerEvents[playerId]?['g']  ?? 0;
-          final int a  = matchPlayerEvents[playerId]?['a']  ?? 0;
+          final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
+          final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
           final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
           final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
           final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
           final double matchRating = calculateMatchRating(
-            status: status, goals: g, assists: a,
-            ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+            status: status,
+            goals: g,
+            assists: a,
+            ownGoals: og,
+            conceded: conceded,
+            yellow: yc,
+            red: rc,
             teamWinStreak: 0,
           );
           globalStats[playerId]!['sum_ratings'] =
               (globalStats[playerId]!['sum_ratings'] as double) + matchRating;
         }
 
-        if (match['players']['red']      != null) for (final p in match['players']['red'])   processPlayer(p, redStatus,   scoreWhite);
-        if (match['players']['white']    != null) for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
-        if (match['players']['gk_red']   != null) processPlayer(match['players']['gk_red'],   redStatus,   scoreWhite);
-        if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
+        if (match['players']['red'] != null)
+          for (final p in match['players']['red'])
+            processPlayer(p, redStatus, scoreWhite);
+        if (match['players']['white'] != null)
+          for (final p in match['players']['white'])
+            processPlayer(p, whiteStatus, scoreRed);
+        if (match['players']['gk_red'] != null)
+          processPlayer(match['players']['gk_red'], redStatus, scoreWhite);
+        if (match['players']['gk_white'] != null)
+          processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
       }
     }
 
@@ -161,13 +254,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
       for (int i = 0; i < players.length; i++) {
         final String pId = (players[i]['id'] ?? '').toString();
         if (globalStats.containsKey(pId)) {
-          final data    = globalStats[pId]!;
-          final int games         = data['games'] as int;
+          final data = globalStats[pId]!;
+          final int games = data['games'] as int;
           final double sumRatings = data['sum_ratings'] as double;
-          players[i]['rating']     = calculateFinalRating(sumRatings: sumRatings, games: games);
+          players[i]['rating'] = calculateFinalRating(
+            sumRatings: sumRatings,
+            games: games,
+          );
           players[i]['totalGames'] = games;
         } else {
-          players[i]['rating']     = kRatingBase;
+          players[i]['rating'] = kRatingBase;
           players[i]['totalGames'] = 0;
         }
       }
@@ -188,7 +284,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
         'name': name,
         'rating': rating,
         'totalGames': 0,
-        'icon': iconPath
+        'icon': iconPath,
       });
     });
     _savePlayers();
@@ -210,12 +306,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   Color _ratingColor(double rating) {
     if (rating >= 9.0) return Colors.purpleAccent; // Mitou
-    if (rating >= 8.0) return Colors.green[700]!;  // Joga D+
-    if (rating >= 7.0) return Colors.green;        // Bom
+    if (rating >= 8.0) return Colors.green[700]!; // Joga D+
+    if (rating >= 7.0) return Colors.green; // Bom
     if (rating >= 6.0) return Colors.lightGreenAccent; // Médio
-    if (rating >= 5.0) return Colors.yellow;       // Abaixo
-    if (rating >= 4.0) return Colors.orange;       // Bagre
-    return Colors.red;                             // Pior do mundo
+    if (rating >= 5.0) return Colors.yellow; // Abaixo
+    if (rating >= 4.0) return Colors.orange; // Bagre
+    return Colors.red; // Pior do mundo
   }
 
   String _ratingLabel(double rating, int games) {
@@ -234,11 +330,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
           _toggleOption('Alfabética (A-Z)', 'A-Z'),
-          _toggleOption('Por Nível',        'Nível'),
+          _toggleOption('Por Nível', 'Nível'),
         ],
       ),
     );
@@ -252,14 +351,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color:        active ? AppColors.accentBlue : Colors.transparent,
+            color: active ? AppColors.accentBlue : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color:      active ? Colors.white : Colors.white54,
+                color: active ? Colors.white : Colors.white54,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -274,7 +373,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
       padding: const EdgeInsets.only(top: 8, bottom: 12, left: 4),
       child: Row(
         children: [
-          Text(title, style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(width: 8),
           const Expanded(child: Divider(color: Colors.white12)),
         ],
@@ -283,20 +389,25 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Widget _buildPlayerCard(int index) {
-    final player   = players[index];
-    final String name     = player['name'] ?? '';
-    final String initial  = name.isNotEmpty ? name[0].toUpperCase() : '?';
-    final double rating   = player['rating'] != null ? (player['rating'] as num).toDouble() : kRatingBase;
-    final int games       = player['totalGames'] ?? 0;
+    final player = players[index];
+    final String name = player['name'] ?? '';
+    final String initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final double rating = player['rating'] != null
+        ? (player['rating'] as num).toDouble()
+        : kRatingBase;
+    final int games = player['totalGames'] ?? 0;
     final String? iconPath = player['icon'];
-    final Color rColor    = _ratingColor(rating);
+    final Color rColor = _ratingColor(rating);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color:        AppColors.headerBlue,
+        color: AppColors.headerBlue,
         borderRadius: BorderRadius.circular(14),
-        border:       Border.all(color: Colors.white.withValues(alpha: 0.05), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.05),
+          width: 1,
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -307,10 +418,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
               context,
               MaterialPageRoute(
                 builder: (_) => PlayerDetailScreen(
-                  groupId:           widget.groupId,
-                  playerId:          (player['id'] ?? '').toString(),
+                  groupId: widget.groupId,
+                  playerId: (player['id'] ?? '').toString(),
                   initialPlayerName: name,
-                  playerIcon:        iconPath,
+                  playerIcon: iconPath,
                 ),
               ),
             );
@@ -324,8 +435,20 @@ class _PlayersScreenState extends State<PlayersScreen> {
                   backgroundColor: AppColors.deepBlue,
                   radius: 26,
                   child: iconPath != null
-                      ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(iconPath, fit: BoxFit.contain)))
-                      : Text(initial, style: TextStyle(color: rColor, fontWeight: FontWeight.bold, fontSize: 20)),
+                      ? ClipOval(
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Image.asset(iconPath, fit: BoxFit.contain),
+                          ),
+                        )
+                      : Text(
+                          initial,
+                          style: TextStyle(
+                            color: rColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 14),
 
@@ -334,7 +457,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
@@ -342,15 +472,24 @@ class _PlayersScreenState extends State<PlayersScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(4),
                               child: LinearProgressIndicator(
-                                value:           rating / kMaxRating,
-                                minHeight:       4,
+                                value: rating / kMaxRating,
+                                minHeight: 4,
                                 backgroundColor: Colors.white10,
-                                valueColor:      AlwaysStoppedAnimation<Color>(rColor.withValues(alpha: 0.7)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  rColor.withValues(alpha: 0.7),
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(_ratingLabel(rating, games), style: TextStyle(color: rColor, fontSize: 11, fontWeight: FontWeight.w500)),
+                          Text(
+                            _ratingLabel(rating, games),
+                            style: TextStyle(
+                              color: rColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -360,17 +499,35 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
                 // Badge de nota
                 Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color:        rColor.withValues(alpha: 0.1),
+                    color: rColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border:       Border.all(color: rColor.withValues(alpha: 0.3), width: 1),
+                    border: Border.all(
+                      color: rColor.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(rating.toStringAsFixed(1), style: TextStyle(color: rColor, fontSize: 13, fontWeight: FontWeight.bold, height: 1)),
-                      Text('/10', style: TextStyle(color: rColor.withValues(alpha: 0.5), fontSize: 9)),
+                      Text(
+                        rating.toStringAsFixed(1),
+                        style: TextStyle(
+                          color: rColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          height: 1,
+                        ),
+                      ),
+                      Text(
+                        '/10',
+                        style: TextStyle(
+                          color: rColor.withValues(alpha: 0.5),
+                          fontSize: 9,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -380,12 +537,17 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 GestureDetector(
                   onTap: () => _removePlayer(index),
                   child: Container(
-                    width: 34, height: 34,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
-                      color:        Colors.redAccent.withValues(alpha: 0.08),
+                      color: Colors.redAccent.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 17),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 17,
+                    ),
                   ),
                 ),
               ],
@@ -587,7 +749,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
     );
   }
 
-  
   void _showIconPicker({
     required void Function(String) onSelected,
     String? currentIcon,
@@ -724,7 +885,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
       },
     );
   }
-// ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // BUILD
   // ─────────────────────────────────────────────────────────────
 
@@ -736,8 +897,11 @@ class _PlayersScreenState extends State<PlayersScreen> {
       listItems.add(_buildGroupingToggle());
 
       if (_groupBy == 'A-Z') {
-        players.sort((a, b) =>
-            (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase()));
+        players.sort(
+          (a, b) => (a['name'] as String).toLowerCase().compareTo(
+            (b['name'] as String).toLowerCase(),
+          ),
+        );
 
         String currentLetter = '';
         for (int i = 0; i < players.length; i++) {
@@ -773,17 +937,24 @@ class _PlayersScreenState extends State<PlayersScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accentBlue),
+            )
           : players.isEmpty
-              ? const Center(child: Text('Nenhum jogador no elenco.', style: TextStyle(color: Colors.white54)))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                  children: listItems,
-                ),
+          ? const Center(
+              child: Text(
+                'Nenhum jogador no elenco.',
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              children: listItems,
+            ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.accentBlue,
-        onPressed:       _showAddPlayerDialog,
-        child:           const Icon(Icons.person_add_rounded, color: Colors.white),
+        onPressed: _showAddPlayerDialog,
+        child: const Icon(Icons.person_add_rounded, color: Colors.white),
       ),
     );
   }
