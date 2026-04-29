@@ -386,7 +386,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   _buildDrawerTile(
                     icon: Icons.download_rounded,
-                    title: 'Exportar Banco',
+                    title: 'Exportar',
                     subtitle: 'Salvar backup local (JSON)',
                     onTap: () async {
                       Navigator.pop(context);
@@ -395,7 +395,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   _buildDrawerTile(
                     icon: Icons.upload_file_rounded,
-                    title: 'Importar Banco',
+                    title: 'Importar',
                     subtitle: 'Restaurar de arquivo JSON',
                     onTap: () async {
                       Navigator.pop(context);
@@ -406,7 +406,7 @@ class _HomePageState extends State<HomePage> {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Banco importado com sucesso.'),
+                            content: Text('Dados importados com sucesso.'),
                           ),
                         );
                       }
