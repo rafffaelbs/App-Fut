@@ -122,7 +122,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
         final Set<String> processed = {};
 
-        void processPlayer(dynamic playerObj, int status, int conceded) {
+        void processPlayer(dynamic playerObj, int status, int scored, int conceded) {
           if (playerObj == null) return;
           final String playerId = playerIdFromObject(playerObj);
           if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -160,17 +160,17 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
           final double matchRating = calculateMatchRating(
             status: status, goals: g, assists: a,
-            ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+            ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
             teamWinStreak: 0,
           );
           globalStats[playerId]!['sum_ratings'] =
               (globalStats[playerId]!['sum_ratings'] as double) + matchRating;
         }
 
-        if (match['players']['red']   != null) for (final p in match['players']['red'])   processPlayer(p, redStatus,   scoreWhite);
-        if (match['players']['white'] != null) for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
-        if (match['players']['gk_red']   != null) processPlayer(match['players']['gk_red'],   redStatus,   scoreWhite);
-        if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
+        if (match['players']['red']   != null) for (final p in match['players']['red'])   processPlayer(p, redStatus,   scoreRed, scoreWhite);
+        if (match['players']['white'] != null) for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreWhite, scoreRed);
+        if (match['players']['gk_red']   != null) processPlayer(match['players']['gk_red'],   redStatus,   scoreRed, scoreWhite);
+        if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed);
       }
     }
 

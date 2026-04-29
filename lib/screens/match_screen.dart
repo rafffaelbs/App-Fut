@@ -478,6 +478,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       goals: goals, 
       assists: assists, 
       ownGoals: ownGoals, 
+      teamGoals: myScore,
       conceded: oppScore, 
       yellow: yellow, 
       red: red, 

@@ -9,11 +9,11 @@ import 'package:flutter/material.dart';
 // --------------- Constantes públicas -------------------------
 
 /// A nota de partida de alguém que não fez nada (nem ganhou nem perdeu)
-const double kRatingBase = 5.5;
+const double kRatingBase = 7.0;
 
 /// Impacto do Resultado 
-const double kResultImpactWin  =  1.2;
-const double kResultImpactLoss = -1.2;
+const double kResultImpactWin  =  1.5;
+const double kResultImpactLoss = -1.5;
 
 /// Bônus de Sequência de Vitórias (Win Streak)
 const double kStreakBonus2Wins = 0.5;
@@ -22,14 +22,19 @@ const double kStreakBonus3PlusWins = 1.0;
 /// Impactos Individuais
 const double kWeightGoal       =  1.5; 
 const double kWeightAssist     =  1.0;
-const double kWeightOwnGoal    = -2.0;
+const double kWeightOwnGoal    = -1.0;
 
 /// Impacto de Defesa (Penaliza a zaga que tomou gol)
-const double kWeightConceded   = -0.2; 
+const double kWeightConceded   = -0.3; 
 
 /// Impacto Disciplinar
 const double kWeightYellowCard = -1.0;
 const double kWeightRedCard    = -2.0;
+
+/// Bônus Dinâmicos
+const double kBonusHatTrick    = 1.0;
+const double kBonusPlaymaker   = 1.0; // 3 assists
+const double kBonusTeamGoal    = 0.5; // Time fez pelo menos 1 gol
 
 /// Limites do App
 const double kMinRating = 0.0;
@@ -54,6 +59,7 @@ double calculateMatchRating({
   required int goals,
   required int assists,
   required int ownGoals,
+  required int teamGoals,
   required int conceded,
   required int yellow,
   required int red,
@@ -69,10 +75,18 @@ double calculateMatchRating({
     else if (teamWinStreak >= 3) streakBonus = kStreakBonus3PlusWins;
   }
 
+  // Bônus Dinâmicos
+  double hatTrickBonus = goals >= 3 ? kBonusHatTrick : 0.0;
+  double playmakerBonus = assists >= 3 ? kBonusPlaymaker : 0.0;
+  double teamGoalBonus = teamGoals > 0 ? kBonusTeamGoal : 0.0;
+
   final double attackImpact =
       (goals * kWeightGoal) +
       (assists * kWeightAssist) +
-      (ownGoals * kWeightOwnGoal);
+      (ownGoals * kWeightOwnGoal) +
+      hatTrickBonus +
+      playmakerBonus +
+      teamGoalBonus;
 
   final double defenseImpact = conceded * kWeightConceded;
 
@@ -114,9 +128,10 @@ Color getRatingColor(double rating) {
 
 String getRatingLabel(double rating, int games) {
   if (games < 5) return 'Estreante';
-  if (rating >= 8.5) return 'Elite';
-  if (rating >= 7.5) return 'Ótimo';
-  if (rating >= 6.5) return 'Bom';
-  if (rating >= 5.5) return 'Regular';
+  if (rating >= 9.0) return 'BallonDor'; 
+  if (rating >= 8.0) return 'Elite';
+  if (rating >= 7.0) return 'Ótimo';
+  if (rating >= 6.0) return 'Bom';
+  if (rating >= 5.0) return 'Regular';
   return 'Abaixo';
 }

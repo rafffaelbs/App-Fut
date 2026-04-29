@@ -151,6 +151,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       final int scoreRed   = match['scoreRed']   ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
       final int conceded   = inRed ? scoreWhite : scoreRed;
+      final int scored     = inRed ? scoreRed : scoreWhite;
 
       int myTeamResult = 0;
       if (scoreRed != scoreWhite) {
@@ -203,7 +204,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
       final double matchRating = calculateMatchRating(
         status: myTeamResult, goals: g, assists: a,
-        ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+        ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
         teamWinStreak: 0,
       );
       grouped[groupKey]!['sum_ratings'] += matchRating;

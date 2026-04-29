@@ -79,7 +79,7 @@ class _RankingScreenState extends State<RankingScreen> {
 
       final Set<String> processed = {};
 
-      void processPlayer(dynamic playerObj, int status, int conceded) {
+      void processPlayer(dynamic playerObj, int status, int scored, int conceded) {
         if (playerObj == null) return;
         final String playerId = playerIdFromObject(playerObj);
         if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -117,7 +117,7 @@ class _RankingScreenState extends State<RankingScreen> {
 
         final double matchRating = calculateMatchRating(
           status: status, goals: g, assists: a,
-          ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+          ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
           teamWinStreak: 0,
         );
         stats[playerId]!['sum_ratings'] =
@@ -125,10 +125,10 @@ class _RankingScreenState extends State<RankingScreen> {
       }
 
       if (match['players']['red'] != null) {
-        for (final p in match['players']['red']) processPlayer(p, redStatus, scoreWhite);
+        for (final p in match['players']['red']) processPlayer(p, redStatus, scoreRed, scoreWhite);
       }
       if (match['players']['white'] != null) {
-        for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
+        for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreWhite, scoreRed);
       }
     }
 
