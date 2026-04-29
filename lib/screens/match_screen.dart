@@ -356,38 +356,35 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     _saveMatchState();
   }
 
-  // --- NOVA LÓGICA DE SORTEIO NIVELADO ---
   void _sortearTeams() {
     if (presentPlayers.length < 2) return;
     setState(() {
-      // Pega a quantidade exata (ou até onde der) dos próximos na fila
       int needed = widget.totalPlayers * 2;
       List<Map<String, dynamic>> pool = presentPlayers.take(needed).toList();
       
-      // Ordena do melhor para o pior (Draft Mode)
-      pool.sort((a, b) => ((b['rating'] ?? 7.0) as num).compareTo((a['rating'] ?? 7.0) as num));
+      // Ordena do melhor para o pior (Draft Mode) - Assumindo nota 5.0 como base agora
+      pool.sort((a, b) => ((b['rating'] ?? 5.0) as num).compareTo((a['rating'] ?? 5.0) as num));
       
       teamRed.clear(); 
       teamWhite.clear();
       double sumRed = 0; 
       double sumWhite = 0;
       
-      // Distribui balanceando as somas
       for (var p in pool) {
         if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
           if (sumRed <= sumWhite) { 
             teamRed.add(p); 
-            sumRed += ((p['rating'] ?? 7.0) as num).toDouble(); 
+            sumRed += ((p['rating'] ?? 5.0) as num).toDouble(); 
           } else { 
             teamWhite.add(p); 
-            sumWhite += ((p['rating'] ?? 7.0) as num).toDouble(); 
+            sumWhite += ((p['rating'] ?? 5.0) as num).toDouble(); 
           }
         } else if (teamRed.length < widget.totalPlayers) {
           teamRed.add(p); 
-          sumRed += ((p['rating'] ?? 7.0) as num).toDouble();
+          sumRed += ((p['rating'] ?? 5.0) as num).toDouble();
         } else {
           teamWhite.add(p); 
-          sumWhite += ((p['rating'] ?? 7.0) as num).toDouble();
+          sumWhite += ((p['rating'] ?? 5.0) as num).toDouble();
         }
       }
     });
@@ -461,20 +458,20 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     double disciplineImpact = (yellow * -0.3) + (red * -0.8);
     double defenseImpact = (oppScore * -0.15); 
     
-    // --- MULTIPLICADOR AGRESSIVO: AQUI É 2.5 ---
-    double matchRating = 7.0 + ((resultImpact + attackImpact + defenseImpact + disciplineImpact) * 2.5);
+    // --- NOVO FATOR E NOTA BASE 5.0 ---
+    double matchRating = 5.0 + ((resultImpact + attackImpact + defenseImpact + disciplineImpact) * 3.0);
     return {'nota': matchRating.clamp(0.0, 10.0), 'goals': goals, 'assists': assists, 'ownGoals': ownGoals, 'yellow': yellow, 'red': red, 'ga': goals + assists};
   }
 
   Color _getRatingColor(double rating) {
     if (rating >= 10.0) return Colors.black;
     if (rating >= 9.0) return Colors.purpleAccent;
-    if (rating >= 8.0) return Colors.green[700]!; // Darker green
+    if (rating >= 8.0) return Colors.green[700]!; 
     if (rating >= 7.5) return Colors.green;
-    if (rating >= 7.0) return Colors.lightGreenAccent; // Light green
+    if (rating >= 7.0) return Colors.lightGreenAccent; 
     if (rating >= 6.0) return Colors.yellow;
     if (rating >= 5.0) return Colors.orange;
-    return Colors.red; // Below 5.0
+    return Colors.red; 
   }
 
   List<Widget> _buildEventIconsList(Map<String, dynamic> stats) {
@@ -686,7 +683,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Widget _buildPlayerListTile(Map<String, dynamic> player, bool isRed, Map<String, dynamic> matchStats) {
-    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : 7.0;
+    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : 5.0; // Puxa do db ou base 5
     return InkWell(
       onTap: () { if (isMatchRunning) _showInGameOptions(player, isRed); else _showRemovePopup(player); },
       child: Container(
@@ -736,7 +733,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Widget _buildIndividualPlayerCard({required Map<String, dynamic> player, required int index, required bool isCompleteTeam, required bool isFirstPlayerInTeam, required bool isLastPlayerInTeam, required int teamBatch}) {
-    final iconPath = player['icon'] as String?; final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 7.0;
+    final iconPath = player['icon'] as String?; final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 5.0; // Base 5
     Color teamColor = Colors.white12;
     if (isCompleteTeam) { if (teamBatch == 1) teamColor = AppColors.accentBlue; else if (teamBatch == 2) teamColor = Colors.orangeAccent; else if (teamBatch == 3) teamColor = Colors.purpleAccent; else teamColor = Colors.greenAccent; }
     final EdgeInsets margin = EdgeInsets.only(bottom: isLastPlayerInTeam ? 16 : 2);
@@ -1022,26 +1019,26 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
 
       // --- MÁGICA DO BALANCEAMENTO AQUI TAMBÉM ---
       List<Map<String, dynamic>> pool = List.from(entering);
-      pool.sort((a, b) => ((b['rating'] ?? 7.0) as num).compareTo((a['rating'] ?? 7.0) as num));
+      pool.sort((a, b) => ((b['rating'] ?? 5.0) as num).compareTo((a['rating'] ?? 5.0) as num));
       
-      double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? 7.0) as num).toDouble());
-      double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? 7.0) as num).toDouble());
+      double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? 5.0) as num).toDouble());
+      double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? 5.0) as num).toDouble());
 
       for (var p in pool) {
         if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
           if (sumRed <= sumWhite) { 
             teamRed.add(p); 
-            sumRed += ((p['rating'] ?? 7.0) as num).toDouble(); 
+            sumRed += ((p['rating'] ?? 5.0) as num).toDouble(); 
           } else { 
             teamWhite.add(p); 
-            sumWhite += ((p['rating'] ?? 7.0) as num).toDouble(); 
+            sumWhite += ((p['rating'] ?? 5.0) as num).toDouble(); 
           }
         } else if (teamRed.length < widget.totalPlayers) {
           teamRed.add(p); 
-          sumRed += ((p['rating'] ?? 7.0) as num).toDouble();
+          sumRed += ((p['rating'] ?? 5.0) as num).toDouble();
         } else if (teamWhite.length < widget.totalPlayers) {
           teamWhite.add(p); 
-          sumWhite += ((p['rating'] ?? 7.0) as num).toDouble();
+          sumWhite += ((p['rating'] ?? 5.0) as num).toDouble();
         }
       }
 
