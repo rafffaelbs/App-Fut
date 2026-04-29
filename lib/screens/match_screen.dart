@@ -6,6 +6,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
+import '../utils/rating_calculator.dart';
 
 import '../widgets/match/match_scoreboard.dart';
 
@@ -374,8 +375,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       int needed = widget.totalPlayers * 2;
       List<Map<String, dynamic>> pool = presentPlayers.take(needed).toList();
       
-      // Ordena do melhor para o pior (Draft Mode) - Assumindo nota 5.0 como base agora
-      pool.sort((a, b) => ((b['rating'] ?? 5.0) as num).compareTo((a['rating'] ?? 5.0) as num));
+      pool.sort((a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo((a['rating'] ?? kRatingBase) as num));
       
       teamRed.clear(); 
       teamWhite.clear();
@@ -386,17 +386,17 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
           if (sumRed <= sumWhite) { 
             teamRed.add(p); 
-            sumRed += ((p['rating'] ?? 5.0) as num).toDouble(); 
+            sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
           } else { 
             teamWhite.add(p); 
-            sumWhite += ((p['rating'] ?? 5.0) as num).toDouble(); 
+            sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
           }
         } else if (teamRed.length < widget.totalPlayers) {
           teamRed.add(p); 
-          sumRed += ((p['rating'] ?? 5.0) as num).toDouble();
+          sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
         } else {
           teamWhite.add(p); 
-          sumWhite += ((p['rating'] ?? 5.0) as num).toDouble();
+          sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
         }
       }
     });
@@ -465,25 +465,24 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     }
     int myScore = isRedTeam ? scoreRed : scoreWhite;
     int oppScore = isRedTeam ? scoreWhite : scoreRed;
-    double resultImpact = myScore > oppScore ? 0.5 : (myScore < oppScore ? -0.5 : 0);
-    double attackImpact = (goals * 0.8) + (assists * 0.4) + (ownGoals * -0.7);
-    double disciplineImpact = (yellow * -0.3) + (red * -0.8);
-    double defenseImpact = (oppScore * -0.15); 
     
-    // --- NOVO FATOR E NOTA BASE 5.0 ---
-    double matchRating = 5.0 + ((resultImpact + attackImpact + defenseImpact + disciplineImpact) * 3.0);
-    return {'nota': matchRating.clamp(0.0, 10.0), 'goals': goals, 'assists': assists, 'ownGoals': ownGoals, 'yellow': yellow, 'red': red, 'ga': goals + assists};
-  }
+    // Status para usar na matemática central
+    int status = myScore > oppScore ? 1 : (myScore < oppScore ? -1 : 0);
+    int streak = isRedTeam ? redWinStreak : whiteWinStreak;
 
-  Color _getRatingColor(double rating) {
-    if (rating >= 10.0) return Colors.black;
-    if (rating >= 9.0) return Colors.purpleAccent;
-    if (rating >= 8.0) return Colors.green[700]!; 
-    if (rating >= 7.5) return Colors.green;
-    if (rating >= 7.0) return Colors.lightGreenAccent; 
-    if (rating >= 6.0) return Colors.yellow;
-    if (rating >= 5.0) return Colors.orange;
-    return Colors.red; 
+    // USANDO O RATING CALCULATOR AQUI!
+    double matchRating = calculateMatchRating(
+      status: status, 
+      goals: goals, 
+      assists: assists, 
+      ownGoals: ownGoals, 
+      conceded: oppScore, 
+      yellow: yellow, 
+      red: red, 
+      teamWinStreak: streak
+    );
+
+    return {'nota': matchRating.clamp(0.0, 10.0), 'goals': goals, 'assists': assists, 'ownGoals': ownGoals, 'yellow': yellow, 'red': red, 'ga': goals + assists};
   }
 
   List<Widget> _buildEventIconsList(Map<String, dynamic> stats) {
@@ -684,7 +683,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
               CircleAvatar(radius: 20, backgroundColor: isRed ? Colors.redAccent : Colors.white, child: CircleAvatar(radius: 18, backgroundColor: AppColors.deepBlue, backgroundImage: player['icon'] != null ? AssetImage(player['icon']) : null, child: player['icon'] == null ? Text(player['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)) : null)),
               if (isMotm && stats['nota'] >= 7.0) const Positioned(top: -6, left: -6, child: Icon(Icons.star, color: Colors.amber, size: 16)),
               if (_buildEventIconsList(stats).isNotEmpty) Positioned(top: -5, right: -15, child: Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)), child: Row(mainAxisSize: MainAxisSize.min, children: _buildEventIconsList(stats)))),
-              Positioned(bottom: -6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: _getRatingColor(stats['nota']), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.black87, width: 1)), child: Text(stats['nota'].toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
+              Positioned(bottom: -6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: getRatingColor(stats['nota']), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.black87, width: 1)), child: Text(stats['nota'].toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
             ],
           ),
           const SizedBox(height: 8),
@@ -695,14 +694,14 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Widget _buildPlayerListTile(Map<String, dynamic> player, bool isRed, Map<String, dynamic> matchStats) {
-    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : 5.0; // Puxa do db ou base 5
+    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : kRatingBase;
     return InkWell(
       onTap: () { if (isMatchRunning) _showInGameOptions(player, isRed); else _showRemovePopup(player); },
       child: Container(
         margin: const EdgeInsets.only(bottom: 4, left: 6, right: 6), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
         child: Row(
           children: [
-            Container(width: 22, height: 22, alignment: Alignment.center, decoration: BoxDecoration(color: _getRatingColor(overallRating).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)), child: Text(overallRating.toStringAsFixed(1), style: TextStyle(color: _getRatingColor(overallRating), fontSize: 9, fontWeight: FontWeight.bold))),
+            Container(width: 22, height: 22, alignment: Alignment.center, decoration: BoxDecoration(color: getRatingColor(overallRating).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)), child: Text(overallRating.toStringAsFixed(1), style: TextStyle(color: getRatingColor(overallRating), fontSize: 9, fontWeight: FontWeight.bold))),
             const SizedBox(width: 8),
             Expanded(child: Text(player['name'].toString().split(' ')[0], style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
             Row(mainAxisSize: MainAxisSize.min, children: _buildEventIconsList(matchStats)),
@@ -745,7 +744,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   Widget _buildIndividualPlayerCard({required Map<String, dynamic> player, required int index, required bool isCompleteTeam, required bool isFirstPlayerInTeam, required bool isLastPlayerInTeam, required int teamBatch}) {
-    final iconPath = player['icon'] as String?; final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : 5.0; // Base 5
+    final iconPath = player['icon'] as String?; final rating = player['rating'] != null ? (player['rating'] as num).toDouble() : kRatingBase; 
     Color teamColor = Colors.white12;
     if (isCompleteTeam) { if (teamBatch == 1) teamColor = AppColors.accentBlue; else if (teamBatch == 2) teamColor = Colors.orangeAccent; else if (teamBatch == 3) teamColor = Colors.purpleAccent; else teamColor = Colors.greenAccent; }
     final EdgeInsets margin = EdgeInsets.only(bottom: isLastPlayerInTeam ? 16 : 2);
@@ -1031,26 +1030,26 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
 
       // --- MÁGICA DO BALANCEAMENTO AQUI TAMBÉM ---
       List<Map<String, dynamic>> pool = List.from(entering);
-      pool.sort((a, b) => ((b['rating'] ?? 5.0) as num).compareTo((a['rating'] ?? 5.0) as num));
+      pool.sort((a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo((a['rating'] ?? kRatingBase) as num));
       
-      double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? 5.0) as num).toDouble());
-      double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? 5.0) as num).toDouble());
+      double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble());
+      double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble());
 
       for (var p in pool) {
         if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
           if (sumRed <= sumWhite) { 
             teamRed.add(p); 
-            sumRed += ((p['rating'] ?? 5.0) as num).toDouble(); 
+            sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
           } else { 
             teamWhite.add(p); 
-            sumWhite += ((p['rating'] ?? 5.0) as num).toDouble(); 
+            sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
           }
         } else if (teamRed.length < widget.totalPlayers) {
           teamRed.add(p); 
-          sumRed += ((p['rating'] ?? 5.0) as num).toDouble();
+          sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
         } else if (teamWhite.length < widget.totalPlayers) {
           teamWhite.add(p); 
-          sumWhite += ((p['rating'] ?? 5.0) as num).toDouble();
+          sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
         }
       }
 

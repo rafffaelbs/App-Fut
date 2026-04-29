@@ -185,6 +185,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         final double matchRating = calculateMatchRating(
           status: status, goals: g, assists: a,
           ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+          teamWinStreak: 0,
         );
         stats[playerId]!['sum_ratings'] =
             (stats[playerId]!['sum_ratings'] as double) + matchRating;
@@ -308,6 +309,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       final double matchRating = calculateMatchRating(
         status: myTeamResult, goals: g, assists: a,
         ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+        teamWinStreak: 0,
       );
       grouped[groupKey]!['sum_ratings'] += matchRating;
     }

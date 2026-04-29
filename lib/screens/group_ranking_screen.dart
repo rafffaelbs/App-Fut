@@ -161,6 +161,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           final double matchRating = calculateMatchRating(
             status: status, goals: g, assists: a,
             ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+            teamWinStreak: 0,
           );
           globalStats[playerId]!['sum_ratings'] =
               (globalStats[playerId]!['sum_ratings'] as double) + matchRating;

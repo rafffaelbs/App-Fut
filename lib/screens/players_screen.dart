@@ -144,6 +144,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           final double matchRating = calculateMatchRating(
             status: status, goals: g, assists: a,
             ownGoals: og, conceded: conceded, yellow: yc, red: rc,
+            teamWinStreak: 0,
           );
           globalStats[playerId]!['sum_ratings'] =
               (globalStats[playerId]!['sum_ratings'] as double) + matchRating;
@@ -202,24 +203,23 @@ class _PlayersScreenState extends State<PlayersScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Color _ratingColor(double rating) {
-    if (rating >= 9.0) return Colors.purpleAccent;
-    if (rating >= 8.0) return Colors.green[700]!;
-    if (rating >= 7.0) return Colors.green;
-    if (rating >= 6.0) return Colors.lightGreenAccent;
-    if (rating >= 5.0) return Colors.yellow;
-    if (rating >= 4.0) return Colors.orange;
-    return Colors.red;
+    if (rating >= 9.0) return Colors.purpleAccent; // Mitou
+    if (rating >= 8.0) return Colors.green[700]!;  // Joga D+
+    if (rating >= 7.0) return Colors.green;        // Bom
+    if (rating >= 6.0) return Colors.lightGreenAccent; // Médio
+    if (rating >= 5.0) return Colors.yellow;       // Abaixo
+    if (rating >= 4.0) return Colors.orange;       // Bagre
+    return Colors.red;                             // Pior do mundo
   }
 
   String _ratingLabel(double rating, int games) {
-    if (games < 5)     return 'Estreante';
+    if (games < 5) return 'Estreante';
     if (rating >= 8.5) return 'Elite';
     if (rating >= 7.5) return 'Ótimo';
-    if (rating >= 6.0) return 'Bom';
-    if (rating >= 4.5) return 'Regular';
+    if (rating >= 6.5) return 'Bom';
+    if (rating >= 5.5) return 'Regular';
     return 'Abaixo';
   }
-
   // ─────────────────────────────────────────────────────────────
   // WIDGETS
   // ─────────────────────────────────────────────────────────────
