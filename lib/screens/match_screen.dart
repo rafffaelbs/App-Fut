@@ -42,6 +42,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   int whiteWinStreak = 0;
   bool isMatchRunning = false;
   bool isOvertime = false;
+  int winLimit = 3;
   Timer? _matchTimer;
 
   int _secondsPlayedBeforePause = 0;
@@ -127,6 +128,17 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       if (prefs.containsKey('team_red_$id')) teamRed = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('team_red_$id')!)));
       if (prefs.containsKey('team_white_$id')) teamWhite = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('team_white_$id')!)));
       if (prefs.containsKey('match_events_$id')) matchEvents = List<Map<String, dynamic>>.from(jsonDecode(prefs.getString('match_events_$id')!));
+
+      int sessionWinLimit = 3;
+      final sessionsData = prefs.getString('sessions_${widget.groupId}');
+      if (sessionsData != null) {
+        final List<dynamic> allSessions = jsonDecode(sessionsData);
+        final currentSession = allSessions.firstWhere((s) => s['id'] == widget.tournamentId, orElse: () => null);
+        if (currentSession != null && currentSession is Map && currentSession.containsKey('win_limit')) {
+          sessionWinLimit = currentSession['win_limit'];
+        }
+      }
+      winLimit = sessionWinLimit;
 
       void syncRatings(List<Map<String, dynamic>> list) {
         for (var p in list) {
@@ -602,7 +614,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       child: Column(
         children: [
           if (redWinStreak > 0 || whiteWinStreak > 0)
-            Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text(redWinStreak > 0 ? "🔥 Sequência: $redWinStreak/3" : "", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)), Text(whiteWinStreak > 0 ? "🔥 Sequência: $whiteWinStreak/3" : "", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])),
+            Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text(redWinStreak > 0 ? "🔥 Sequência: $redWinStreak${winLimit > 0 ? '/$winLimit' : ''}" : "", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)), Text(whiteWinStreak > 0 ? "🔥 Sequência: $whiteWinStreak${winLimit > 0 ? '/$winLimit' : ''}" : "", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])),
           
           if (_showTacticalPitch)
             Container(
@@ -956,12 +968,12 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       _playVictorySound();
       if (redWon) {
         redWinStreak++; whiteWinStreak = 0;
-        if (redWinStreak >= 3) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); redWinStreak = 0; popupTitle = "🔥 VERMELHO INVICTO!"; popupMessage = "Vermelho ganhou 3 seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.redAccent; }
-        else { suggestedLeavers.addAll(teamWhite); popupTitle = "Vitória do VERMELHO!"; popupMessage = "Sugestão: Branco sai.\n(Sequência do Vermelho: $redWinStreak/3)"; popupColor = Colors.redAccent; }
+        if (winLimit > 0 && redWinStreak >= winLimit) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); redWinStreak = 0; popupTitle = "🔥 VERMELHO INVICTO!"; popupMessage = "Vermelho ganhou $winLimit seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.redAccent; }
+        else { suggestedLeavers.addAll(teamWhite); popupTitle = "Vitória do VERMELHO!"; popupMessage = winLimit > 0 ? "Sugestão: Branco sai.\n(Sequência do Vermelho: $redWinStreak/$winLimit)" : "Sugestão: Branco sai.\n(Vitórias seguidas: $redWinStreak)"; popupColor = Colors.redAccent; }
       } else {
         whiteWinStreak++; redWinStreak = 0;
-        if (whiteWinStreak >= 3) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); whiteWinStreak = 0; popupTitle = "🔥 BRANCO INVICTO!"; popupMessage = "Branco ganhou 3 seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.white; }
-        else { suggestedLeavers.addAll(teamRed); popupTitle = "Vitória do BRANCO!"; popupMessage = "Sugestão: Vermelho sai.\n(Sequência do Branco: $whiteWinStreak/3)"; popupColor = Colors.white; }
+        if (winLimit > 0 && whiteWinStreak >= winLimit) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); whiteWinStreak = 0; popupTitle = "🔥 BRANCO INVICTO!"; popupMessage = "Branco ganhou $winLimit seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.white; }
+        else { suggestedLeavers.addAll(teamRed); popupTitle = "Vitória do BRANCO!"; popupMessage = winLimit > 0 ? "Sugestão: Vermelho sai.\n(Sequência do Branco: $whiteWinStreak/$winLimit)" : "Sugestão: Vermelho sai.\n(Vitórias seguidas: $whiteWinStreak)"; popupColor = Colors.white; }
       }
     }
 

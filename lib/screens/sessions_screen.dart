@@ -66,6 +66,13 @@ class _SessionsScreenState extends State<SessionsScreen> {
       text: isEditing ? session!['duration'].toString() : '8',
     );
 
+    bool isInfiniteLimit = isEditing ? (session!['win_limit'] == 0) : false;
+    final TextEditingController winLimitController = TextEditingController(
+      text: isEditing && session!['win_limit'] != null && session!['win_limit'] > 0
+          ? session['win_limit'].toString()
+          : '3',
+    );
+
     // --- NEW: DATE LOGIC ---
     DateTime selectedDate = isEditing && session!['timestamp'] != null
         ? DateTime.parse(session['timestamp'])
@@ -222,6 +229,45 @@ class _SessionsScreenState extends State<SessionsScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: winLimitController,
+                          enabled: !isInfiniteLimit,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(color: isInfiniteLimit ? Colors.white38 : Colors.white),
+                          decoration: InputDecoration(
+                            labelText: "Limite de Vitórias Seguidas",
+                            labelStyle: const TextStyle(color: Colors.white54),
+                            enabledBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white24),
+                            ),
+                            focusedBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: AppColors.accentBlue),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: isInfiniteLimit,
+                            activeColor: AppColors.accentBlue,
+                            onChanged: (val) {
+                              setModalState(() {
+                                isInfiniteLimit = val ?? false;
+                              });
+                            },
+                          ),
+                          const Text("Sem limite", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 32),
 
                   SizedBox(
@@ -258,6 +304,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                             'jogadores':
                                 int.tryParse(playersController.text) ?? 5,
                             'duration': int.tryParse(timeController.text) ?? 8,
+                            'win_limit': isInfiniteLimit ? 0 : (int.tryParse(winLimitController.text) ?? 3),
                           };
 
                           if (isEditing) {
