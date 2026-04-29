@@ -27,7 +27,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
 static const List<String> _availableIcons = [
     'assets/players_icons/adriano.png',
-    'assets/players_icons/arrasca.png',
+    'assets/players_icons/arrascaeta.png',
     'assets/players_icons/balota.png',
     'assets/players_icons/beckham.png',
     'assets/players_icons/bellingham.webp',
