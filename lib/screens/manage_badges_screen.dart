@@ -21,9 +21,10 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
   // LISTA DE ASSETS QUE VOCÊ VAI COLOCAR NO GITHUB DEPOIS
   final List<String> _availableAssets = [
     'assets/badges/bola_de_ouro.png',
+    'assets/badges/craque_do_mes.png',
     'assets/badges/bola_de_prata.png',
-    'assets/badges/chuteira_ouro.png',
-    'assets/badges/luva_ouro.png',
+    'assets/badges/chuteira_de_ouro.png',
+    'assets/badges/luva_de_ouro.png',
     'assets/badges/trofeu_campeao.png',
     'assets/badges/estrela_mes.png',
     'assets/badges/craque_galera.png',
