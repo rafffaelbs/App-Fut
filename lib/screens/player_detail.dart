@@ -537,9 +537,14 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     return Colors.red;
   }
 
-  String _formatAdvStat(dynamic stat, String suffix) {
+  String _formatAdvStat(dynamic stat, String suffix, {int total = 0}) {
     if (stat == null || stat['count'] == 0) return '-';
-    return '${stat['name']} (${stat['count']} $suffix)';
+    int count = stat['count'];
+    if (total > 0) {
+      double pct = (count / total) * 100;
+      return '${stat['name']} ($count $suffix - ${pct.toStringAsFixed(1)}%)';
+    }
+    return '${stat['name']} ($count $suffix)';
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1033,6 +1038,15 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final String displayName = playerName.isNotEmpty ? playerName : (widget.initialPlayerName ?? 'Jogador');
     final String initial     = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final Color ratingColor  = _getRatingColor(nota);
+    
+    final int goals = playerStats['goals'] ?? 0;
+    final int assists = playerStats['assists'] ?? 0;
+
+    double aproveitamento = 0;
+    if (totalResults > 0) {
+      aproveitamento = ((wins * 3 + draws * 1) / (totalResults * 3)) * 100;
+    }
+    String aproveitamentoStr = totalResults > 0 ? '${aproveitamento.toStringAsFixed(1)}%' : '-';
 
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
@@ -1165,19 +1179,20 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           Text('Estatísticas Avançadas', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 16),
+                        _buildAdvStatRow('Aproveitamento', aproveitamentoStr, Icons.pie_chart, Colors.purpleAccent),
                         _buildAdvStatRow('Hat-Tricks (3 Gols/Jogo)', '${advancedStats['hatTricks'] ?? 0} marcados', Icons.whatshot, Colors.orangeAccent),
                         _buildAdvStatRow('Faltas Graves', '${playerStats['yellow'] ?? 0} Amarelos / ${playerStats['red'] ?? 0} Vermelhos', Icons.style, Colors.redAccent),
                         const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Garçom Favorito',  _formatAdvStat(advancedStats['topAssister'],  'gols seus'),       Icons.handshake,    Colors.amber),
-                        _buildAdvStatRow('Mais Assistiu',    _formatAdvStat(advancedStats['topAssisted'],  'assistências suas'), Icons.sports_soccer, Colors.greenAccent),
+                        _buildAdvStatRow('Garçom Favorito',  _formatAdvStat(advancedStats['topAssister'],  'gols seus', total: goals),       Icons.handshake,    Colors.amber),
+                        _buildAdvStatRow('Mais Assistiu',    _formatAdvStat(advancedStats['topAssisted'],  'assistências suas', total: assists), Icons.sports_soccer, Colors.greenAccent),
                         const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Mais Jogou Junto', _formatAdvStat(advancedStats['mostPlayedWith'], 'jogos'),     Icons.people,     Colors.white),
-                        _buildAdvStatRow('Mais Venceu Junto',_formatAdvStat(advancedStats['mostWinsWith'],  'vitórias'),  Icons.thumb_up,   Colors.green),
-                        _buildAdvStatRow('Mais Perdeu Junto',_formatAdvStat(advancedStats['mostLossesWith'],'derrotas'),  Icons.thumb_down, Colors.redAccent),
+                        _buildAdvStatRow('Mais Jogou Junto', _formatAdvStat(advancedStats['mostPlayedWith'], 'jogos', total: totalResults),     Icons.people,     Colors.white),
+                        _buildAdvStatRow('Mais Venceu Junto',_formatAdvStat(advancedStats['mostWinsWith'],  'vitórias', total: wins),  Icons.thumb_up,   Colors.green),
+                        _buildAdvStatRow('Mais Perdeu Junto',_formatAdvStat(advancedStats['mostLossesWith'],'derrotas', total: losses),  Icons.thumb_down, Colors.redAccent),
                         const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Maior Freguês (Contra)', _formatAdvStat(advancedStats['mostWinsAgainst'],   'vitórias'), Icons.mood,     Colors.blueAccent),
-                        _buildAdvStatRow('Carrasco (Contra)',       _formatAdvStat(advancedStats['mostLossesAgainst'],'derrotas'), Icons.mood_bad, Colors.red),
-                        _buildAdvStatRow('Rival Equilibrado',       _formatAdvStat(advancedStats['mostDrawsAgainst'], 'empates'),  Icons.balance,  Colors.grey),
+                        _buildAdvStatRow('Maior Freguês (Contra)', _formatAdvStat(advancedStats['mostWinsAgainst'],   'vitórias', total: wins), Icons.mood,     Colors.blueAccent),
+                        _buildAdvStatRow('Carrasco (Contra)',       _formatAdvStat(advancedStats['mostLossesAgainst'],'derrotas', total: losses), Icons.mood_bad, Colors.red),
+                        _buildAdvStatRow('Rival Equilibrado',       _formatAdvStat(advancedStats['mostDrawsAgainst'], 'empates', total: draws),  Icons.balance,  Colors.grey),
                       ],
                     ),
                   ),

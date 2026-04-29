@@ -2,6 +2,4 @@ TODO:
 - Melhorar Screenshot
 - No botão de exportar abrir uma aba se o usuario quer importar de todo o app ou somente de algum dos grupos
 - Adicionar Temporada
-
-- Adicionar do lado dos dados de estatistica avançada a porcentagem
-- Adicionar aproveitamento em cima de hattrick (vitoria = 3 pontos, empate = 1 ponto, aproveitametno = pontos/partidas*3)
+- Atualmente a porcentagem de carrasco e fregues é calculada baseada no numero total de vitorias/derrotas, mas e se ao inves disso calcula-se com base no numero total de partidas jogada contra aquela pessoa. 

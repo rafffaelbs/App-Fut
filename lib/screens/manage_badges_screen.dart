@@ -67,6 +67,15 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
     _saveBadges();
   }
 
+  void _editBadge(int index, String title, String desc, String iconPath) {
+    setState(() {
+      _customBadges[index]['title'] = title;
+      _customBadges[index]['desc'] = desc;
+      _customBadges[index]['icon'] = iconPath;
+    });
+    _saveBadges();
+  }
+
   void _removeBadge(int index) {
     setState(() {
       _customBadges.removeAt(index);
@@ -74,10 +83,13 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
     _saveBadges();
   }
 
-  void _showCreateBadgeSheet() {
-    String selectedIcon = _availableAssets.first;
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
+  void _showBadgeSheet({Map<String, dynamic>? badgeToEdit, int? editIndex}) {
+    String selectedIcon = badgeToEdit != null ? badgeToEdit['icon'] : _availableAssets.first;
+    if (!_availableAssets.contains(selectedIcon)) selectedIcon = _availableAssets.first;
+
+    final titleController = TextEditingController(text: badgeToEdit?['title'] ?? '');
+    final descController = TextEditingController(text: badgeToEdit?['desc'] ?? '');
+    final isEditing = badgeToEdit != null;
 
     showModalBottomSheet(
       context: context,
@@ -94,11 +106,11 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.workspace_premium, color: Colors.amber),
-                    SizedBox(width: 8),
-                    Text("Criar Novo Troféu", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Icon(Icons.workspace_premium, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Text(isEditing ? "Editar Troféu" : "Criar Novo Troféu", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -155,11 +167,15 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 14)),
                     onPressed: () {
                       if (titleController.text.trim().isNotEmpty) {
-                        _addBadge(titleController.text.trim(), descController.text.trim(), selectedIcon);
+                        if (isEditing && editIndex != null) {
+                          _editBadge(editIndex, titleController.text.trim(), descController.text.trim(), selectedIcon);
+                        } else {
+                          _addBadge(titleController.text.trim(), descController.text.trim(), selectedIcon);
+                        }
                         Navigator.pop(ctx);
                       }
                     },
-                    child: const Text("Salvar Troféu", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(isEditing ? "Salvar Alterações" : "Salvar Troféu", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -196,7 +212,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
                         icon: const Icon(Icons.add, color: Colors.black),
                         label: const Text("Criar Primeiro Troféu", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                        onPressed: _showCreateBadgeSheet,
+                        onPressed: () => _showBadgeSheet(),
                       )
                     ],
                   ),
@@ -228,21 +244,30 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
                         ),
                         title: Text(badge['title'], style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 16)),
                         subtitle: Text(badge['desc'], style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => AlertDialog(
-                                backgroundColor: AppColors.headerBlue,
-                                title: const Text("Remover Troféu?", style: TextStyle(color: Colors.white)),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancelar", style: TextStyle(color: Colors.white54))),
-                                  TextButton(onPressed: () { _removeBadge(i); Navigator.pop(c); }, child: const Text("Remover", style: TextStyle(color: Colors.redAccent))),
-                                ],
-                              )
-                            );
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.amber),
+                              onPressed: () => _showBadgeSheet(badgeToEdit: badge, editIndex: i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    backgroundColor: AppColors.headerBlue,
+                                    title: const Text("Remover Troféu?", style: TextStyle(color: Colors.white)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancelar", style: TextStyle(color: Colors.white54))),
+                                      TextButton(onPressed: () { _removeBadge(i); Navigator.pop(c); }, child: const Text("Remover", style: TextStyle(color: Colors.redAccent))),
+                                    ],
+                                  )
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -251,7 +276,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen> {
       floatingActionButton: _customBadges.isNotEmpty
           ? FloatingActionButton.extended(
               backgroundColor: Colors.amber,
-              onPressed: _showCreateBadgeSheet,
+              onPressed: () => _showBadgeSheet(),
               icon: const Icon(Icons.add, color: Colors.black),
               label: const Text("Novo Troféu", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             )
