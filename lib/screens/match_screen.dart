@@ -9,6 +9,8 @@ import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 
 import '../widgets/match/match_scoreboard.dart';
+import '../widgets/match/match_pitch_player.dart';
+import '../widgets/match/match_player_tile.dart';
 
 class MatchScreen extends StatefulWidget {
   final String tournamentName;
@@ -623,8 +625,8 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
               child: Stack(
                 children: [
                   Align(alignment: Alignment.center, child: Container(width: 2, color: Colors.white30)), Align(alignment: Alignment.center, child: Container(width: 80, height: 80, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white30, width: 2)))),
-                  ...teamRed.asMap().entries.map((entry) => Align(alignment: redAlignments[entry.key % redAlignments.length], child: _buildPitchPlayer(entry.value, true, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
-                  ...teamWhite.asMap().entries.map((entry) => Align(alignment: whiteAlignments[entry.key % whiteAlignments.length], child: _buildPitchPlayer(entry.value, false, _pid(entry.value) == motmPlayerId, allStats[_pid(entry.value)]!))),
+                  ...teamRed.asMap().entries.map((entry) => Align(alignment: redAlignments[entry.key % redAlignments.length], child: MatchPitchPlayer(player: entry.value, isRed: true, isMotm: _pid(entry.value) == motmPlayerId, stats: allStats[_pid(entry.value)]!, onTap: () { if (isMatchRunning) _showInGameOptions(entry.value, true); else _showRemovePopup(entry.value); }, eventIcons: _buildEventIconsList(allStats[_pid(entry.value)]!)))),
+                  ...teamWhite.asMap().entries.map((entry) => Align(alignment: whiteAlignments[entry.key % whiteAlignments.length], child: MatchPitchPlayer(player: entry.value, isRed: false, isMotm: _pid(entry.value) == motmPlayerId, stats: allStats[_pid(entry.value)]!, onTap: () { if (isMatchRunning) _showInGameOptions(entry.value, false); else _showRemovePopup(entry.value); }, eventIcons: _buildEventIconsList(allStats[_pid(entry.value)]!)))),
                 ],
               ),
             ),
@@ -640,7 +642,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
                   child: Column(
                     children: [
                       const Padding(padding: EdgeInsets.only(top: 12.0, bottom: 8.0), child: Text("Linha Vermelho", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12))),
-                      ...teamRed.map((p) => _buildPlayerListTile(p, true, allStats[_pid(p)]!)),
+                      ...teamRed.map((p) => MatchPlayerTile(player: p, isRed: true, matchStats: allStats[_pid(p)]!, onTap: () { if (isMatchRunning) _showInGameOptions(p, true); else _showRemovePopup(p); }, eventIcons: _buildEventIconsList(allStats[_pid(p)]!))),
                     ],
                   ),
                 ),
@@ -649,7 +651,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
                 child: Column(
                   children: [
                     const Padding(padding: EdgeInsets.only(top: 12.0, bottom: 8.0), child: Text("Linha Branco", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12))),
-                    ...teamWhite.map((p) => _buildPlayerListTile(p, false, allStats[_pid(p)]!)),
+                    ...teamWhite.map((p) => MatchPlayerTile(player: p, isRed: false, matchStats: allStats[_pid(p)]!, onTap: () { if (isMatchRunning) _showInGameOptions(p, false); else _showRemovePopup(p); }, eventIcons: _buildEventIconsList(allStats[_pid(p)]!))),
                   ],
                 ),
               ),
@@ -671,45 +673,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildPitchPlayer(Map<String, dynamic> player, bool isRed, bool isMotm, Map<String, dynamic> stats) {
-    return GestureDetector(
-      onTap: () { if (isMatchRunning) _showInGameOptions(player, isRed); else _showRemovePopup(player); },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            clipBehavior: Clip.none, alignment: Alignment.center,
-            children: [
-              CircleAvatar(radius: 20, backgroundColor: isRed ? Colors.redAccent : Colors.white, child: CircleAvatar(radius: 18, backgroundColor: AppColors.deepBlue, backgroundImage: player['icon'] != null ? AssetImage(player['icon']) : null, child: player['icon'] == null ? Text(player['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)) : null)),
-              if (isMotm && stats['nota'] >= 7.0) const Positioned(top: -6, left: -6, child: Icon(Icons.star, color: Colors.amber, size: 16)),
-              if (_buildEventIconsList(stats).isNotEmpty) Positioned(top: -5, right: -15, child: Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4)), child: Row(mainAxisSize: MainAxisSize.min, children: _buildEventIconsList(stats)))),
-              Positioned(bottom: -6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1), decoration: BoxDecoration(color: getRatingColor(stats['nota']), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.black87, width: 1)), child: Text(stats['nota'].toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(player['name'].toString().split(' ')[0], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600, shadows: [Shadow(color: Colors.black, blurRadius: 2)])),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildPlayerListTile(Map<String, dynamic> player, bool isRed, Map<String, dynamic> matchStats) {
-    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : kRatingBase;
-    return InkWell(
-      onTap: () { if (isMatchRunning) _showInGameOptions(player, isRed); else _showRemovePopup(player); },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 4, left: 6, right: 6), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
-        child: Row(
-          children: [
-            Container(width: 22, height: 22, alignment: Alignment.center, decoration: BoxDecoration(color: getRatingColor(overallRating).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)), child: Text(overallRating.toStringAsFixed(1), style: TextStyle(color: getRatingColor(overallRating), fontSize: 9, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 8),
-            Expanded(child: Text(player['name'].toString().split(' ')[0], style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-            Row(mainAxisSize: MainAxisSize.min, children: _buildEventIconsList(matchStats)),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildNextTeamsTab() {
     final waiting = presentPlayers.where((p) { final id = _pid(p); return !teamRed.any((t) => _pid(t) == id) && !teamWhite.any((t) => _pid(t) == id); }).toList();

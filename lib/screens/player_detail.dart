@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../utils/stats_calculator.dart';
+import '../widgets/shared/icon_picker_modal.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
   final String groupId;
@@ -49,86 +51,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   List<Map<String, dynamic>> manualBadges = [];
   List<Map<String, dynamic>> _allPlayers = [];
 
-static const List<String> _availableIcons = [
-    'assets/players_icons/adriano.png',
-    'assets/players_icons/arrascaeta.png',
-    'assets/players_icons/balota.png',
-    'assets/players_icons/beckham.png',
-    'assets/players_icons/bellingham.webp',
-    'assets/players_icons/bruyne.png',
-    'assets/players_icons/calleri.png',
-    'assets/players_icons/courtois.png',
-    'assets/players_icons/cr7.png',
-    'assets/players_icons/cruyff.png',
-    'assets/players_icons/dembele.png',
-    'assets/players_icons/depay.png',
-    'assets/players_icons/drogba.png',
-    'assets/players_icons/dybala.png',
-    'assets/players_icons/endrick.png',
-    'assets/players_icons/gabigol.png',
-    'assets/players_icons/garro.png',
-    'assets/players_icons/gerson.png',
-    'assets/players_icons/gomez.png',
-    'assets/players_icons/gullit.png',
-    'assets/players_icons/haaland.png',
-    'assets/players_icons/henry.png',
-    'assets/players_icons/ibra.png',
-    'assets/players_icons/iniesta.png',
-    'assets/players_icons/jardim.png',
-    'assets/players_icons/jorginho.png',
-    'assets/players_icons/kaka.png',
-    'assets/players_icons/kane.png',
-    'assets/players_icons/kroos.png',
-    'assets/players_icons/lahm.png',
-    'assets/players_icons/love.png',
-    'assets/players_icons/luciano.png',
-    'assets/players_icons/maldini.png',
-    'assets/players_icons/maradona.png',
-    'assets/players_icons/mbappe.png',
-    'assets/players_icons/messi.png',
-    'assets/players_icons/modric.png',
-    'assets/players_icons/mouse_hunter.png',
-    'assets/players_icons/neneca.png',
-    'assets/players_icons/neuer.png',
-    'assets/players_icons/neymar.png',
-    'assets/players_icons/ozil.png',
-    'assets/players_icons/palmer.webp',
-    'assets/players_icons/paqueta.png',
-    'assets/players_icons/pedro.png',
-    'assets/players_icons/pele.png',
-    'assets/players_icons/pique.png',
-    'assets/players_icons/pirlo.png',
-    'assets/players_icons/plata.png',
-    'assets/players_icons/pogba.webp',
-    'assets/players_icons/puma.png',
-    'assets/players_icons/puyol.png',
-    'assets/players_icons/ramos.png',
-    'assets/players_icons/raphinha.webp',
-    'assets/players_icons/rayan.png',
-    'assets/players_icons/ribery.png',
-    'assets/players_icons/riquelme.png',
-    'assets/players_icons/robben.png',
-    'assets/players_icons/ronaldinho.png',
-    'assets/players_icons/ronaldo.png',
-    'assets/players_icons/rooney.png',
-    'assets/players_icons/roque.png',
-    'assets/players_icons/sch.png',
-    'assets/players_icons/seedorf.png',
-    'assets/players_icons/socrates.webp',
-    'assets/players_icons/torres.png',
-    'assets/players_icons/totti.png',
-    'assets/players_icons/valverde.png',
-    'assets/players_icons/vanpersie.png',
-    'assets/players_icons/varela.png',
-    'assets/players_icons/vegetti.png',
-    'assets/players_icons/vini.png',
-    'assets/players_icons/xavi.png',
-    'assets/players_icons/yamal.png',
-    'assets/players_icons/yashin.png',
-    'assets/players_icons/yuri.png',
-    'assets/players_icons/zidane.png',
-  ];
-  
+
+
   @override
   void initState() {
     super.initState();
@@ -161,30 +85,14 @@ static const List<String> _availableIcons = [
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
     }
 
-    // Agrega histórico de todas as sessões do grupo
-    final String sessionsKey = 'sessions_${widget.groupId}';
-    final List<dynamic> allHistory = [];
+    final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
+    final globalStats = calculateGlobalStats(allHistory);
 
-    if (prefs.containsKey(sessionsKey)) {
-      final List<dynamic> sessions = jsonDecode(prefs.getString(sessionsKey)!);
-      for (final session in sessions) {
-        final String? tId = session['id'];
-        final String? sessionTimestamp = session['timestamp'];
-        if (tId == null) continue;
+    final List<Map<String, dynamic>> leaderboard = globalStats.values
+        .where((data) => (data['games'] as int) >= kMinGamesForGlobalRanking)
+        .toList();
+    leaderboard.sort((a, b) => (b['nota'] as double).compareTo(a['nota'] as double));
 
-        final String historyKey = 'match_history_$tId';
-        if (!prefs.containsKey(historyKey)) continue;
-
-        final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
-        // Injeta a data da sessão em cada partida para o gráfico
-        if (sessionTimestamp != null) {
-          for (final match in history) match['session_date'] = sessionTimestamp;
-        }
-        allHistory.addAll(history);
-      }
-    }
-
-    final List<Map<String, dynamic>> leaderboard = _calculateAllTimeLeaderboard(allHistory);
     final int index = leaderboard.indexWhere((p) => (p['id'] as String) == widget.playerId);
     final Map<String, dynamic> advStats = _calculateAdvancedStats(allHistory);
 
@@ -200,125 +108,18 @@ static const List<String> _availableIcons = [
         rankPosition = index + 1;
         playerStats  = leaderboard[index];
       } else {
-        playerStats['id']   = widget.playerId;
-        playerStats['name'] = resolvedName;
-        playerStats['nota'] = kRatingBase;
+        if (globalStats.containsKey(widget.playerId)) {
+          playerStats = globalStats[widget.playerId]!;
+        } else {
+          playerStats['id']   = widget.playerId;
+          playerStats['name'] = resolvedName;
+          playerStats['nota'] = kRatingBase;
+        }
       }
     });
 
     _calculateChartData();
     setState(() => isLoading = false);
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // CÁLCULO DO LEADERBOARD HISTÓRICO (todos os torneios do grupo)
-  // ─────────────────────────────────────────────────────────────
-
-  List<Map<String, dynamic>> _calculateAllTimeLeaderboard(List<dynamic> allHistory) {
-    final Map<String, Map<String, dynamic>> stats = {};
-
-    for (final match in allHistory) {
-      final int scoreRed    = match['scoreRed']   ?? 0;
-      final int scoreWhite  = match['scoreWhite'] ?? 0;
-      final int redStatus   = scoreRed > scoreWhite  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
-      final int whiteStatus = scoreWhite > scoreRed  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
-
-      // Coleta eventos desta partida
-      final Map<String, Map<String, int>> matchPlayerEvents = {};
-      if (match['events'] != null) {
-        for (final ev in match['events']) {
-          final String pid   = eventPlayerId(ev, 'player');
-          final String astId = eventPlayerId(ev, 'assist');
-          final String type  = ev['type'];
-
-          if (pid.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal')        matchPlayerEvents[pid]!['g']  = matchPlayerEvents[pid]!['g']!  + 1;
-            if (type == 'own_goal')    matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
-            if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
-            if (type == 'red_card')    matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
-          }
-          if (astId.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
-          }
-        }
-      }
-
-      final Set<String> processed = {};
-
-      void processPlayer(dynamic playerObj, int status, int conceded) {
-        if (playerObj == null) return;
-        final String playerId = playerIdFromObject(playerObj);
-        if (playerId.isEmpty || processed.contains(playerId)) return;
-        processed.add(playerId);
-
-        stats.putIfAbsent(playerId, () => {
-          'id': playerId, 'name': (playerObj['name'] ?? '').toString(),
-          'goals': 0, 'assists': 0, 'games': 0,
-          'wins': 0, 'draws': 0, 'losses': 0,
-          'yellow': 0, 'red': 0, 'sum_ratings': 0.0,
-        });
-
-        stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
-        if (status == 1)       stats[playerId]!['wins']   = (stats[playerId]!['wins']   as int) + 1;
-        else if (status == -1) stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else                   stats[playerId]!['draws']  = (stats[playerId]!['draws']  as int) + 1;
-
-        final int g  = matchPlayerEvents[playerId]?['g']  ?? 0;
-        final int a  = matchPlayerEvents[playerId]?['a']  ?? 0;
-        final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
-        final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
-        final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
-
-        stats[playerId]!['goals']   = (stats[playerId]!['goals']   as int) + g;
-        stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
-        stats[playerId]!['yellow']  = (stats[playerId]!['yellow']  as int) + yc;
-        stats[playerId]!['red']     = (stats[playerId]!['red']     as int) + rc;
-
-        final double matchRating = calculateMatchRating(
-          status: status, goals: g, assists: a,
-          ownGoals: og, conceded: conceded, yellow: yc, red: rc,
-          teamWinStreak: 0,
-        );
-        stats[playerId]!['sum_ratings'] =
-            (stats[playerId]!['sum_ratings'] as double) + matchRating;
-      }
-
-      if (match['players']['red']      != null) for (final p in match['players']['red'])   processPlayer(p, redStatus,   scoreWhite);
-      if (match['players']['white']    != null) for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreRed);
-      if (match['players']['gk_red']   != null) processPlayer(match['players']['gk_red'],   redStatus,   scoreWhite);
-      if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreRed);
-    }
-
-    // Leaderboard do detalhe exige mínimo de jogos
-    final List<Map<String, dynamic>> sortedList = [];
-    stats.forEach((id, data) {
-      final int games       = data['games'] as int;
-      final double sumRatings = data['sum_ratings'] as double;
-
-      if (games >= kMinGamesForGlobalRanking) {
-        final int g = data['goals']   as int;
-        final int a = data['assists'] as int;
-        sortedList.add({
-          'id':      id,
-          'name':    data['name'],
-          'goals':   g,
-          'assists': a,
-          'yellow':  data['yellow'],
-          'red':     data['red'],
-          'ga':      g + a,
-          'games':   games,
-          'wins':    data['wins'],
-          'draws':   data['draws'],
-          'losses':  data['losses'],
-          'nota':    calculateFinalRating(sumRatings: sumRatings, games: games),
-        });
-      }
-    });
-
-    sortedList.sort((a, b) => (b['nota'] as double).compareTo(a['nota'] as double));
-    return sortedList;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -789,106 +590,7 @@ static const List<String> _availableIcons = [
     );
   }
 
-  void _showIconPicker() {
-    final List<String> takenIcons = _allPlayers
-        .map((p) => p['icon'] as String?)
-        .where((icon) => icon != null && icon != resolvedIcon)
-        .cast<String>()
-        .toList();
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.headerBlue,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const Text(
-                "Escolher Ícone",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 400,
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: (_availableIcons.length / 4).ceil(),
-                  itemBuilder: (ctx, rowIndex) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        children: List.generate(4, (colIndex) {
-                          final iconIndex = rowIndex * 4 + colIndex;
-                          if (iconIndex >= _availableIcons.length) return const Expanded(child: SizedBox());
-
-                          final path = _availableIcons[iconIndex];
-                          final bool selected = resolvedIcon == path;
-                          final bool isTaken = takenIcons.contains(path);
-
-                          return Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(right: colIndex < 3 ? 12 : 0),
-                              child: GestureDetector(
-                                onTap: isTaken ? null : () {
-                                  _savePlayerIcon(path);
-                                  Navigator.pop(ctx);
-                                },
-                                child: Container(
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: selected
-                                        ? AppColors.accentBlue.withValues(alpha: 0.25)
-                                        : (isTaken ? Colors.black26 : AppColors.deepBlue.withValues(alpha: 0.6)),
-                                    border: Border.all(
-                                      color: selected ? AppColors.accentBlue : (isTaken ? Colors.transparent : Colors.white12),
-                                      width: selected ? 2 : 1,
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  child: Opacity(
-                                    opacity: isTaken ? 0.2 : 1.0,
-                                    child: Image.asset(path, fit: BoxFit.contain),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   // ─────────────────────────────────────────────────────────────
   // WIDGETS DE CONTEÚDO
@@ -1287,7 +989,19 @@ static const List<String> _availableIcons = [
                     child: Column(
                       children: [
                         GestureDetector(
-                          onTap: _showIconPicker,
+                          onTap: () {
+                            final List<String> takenIcons = _allPlayers
+                                .map((p) => p['icon'] as String?)
+                                .where((icon) => icon != null && icon != resolvedIcon)
+                                .cast<String>()
+                                .toList();
+                            showIconPickerModal(
+                              context: context,
+                              takenIcons: takenIcons,
+                              currentIcon: resolvedIcon,
+                              onSelected: (path) => _savePlayerIcon(path),
+                            );
+                          },
                           child: Stack(
                             alignment: Alignment.topRight,
                             children: [
