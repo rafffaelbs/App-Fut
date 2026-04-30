@@ -1,7 +1,7 @@
-<h1 align="center">⚽ Pelada Manager</h1>
+<h1 align="center">⚽ Pelada Manager (App-Fut)</h1>
 
 <p align="center">
-  A Flutter app for managing your <em>pelada</em> (casual football match) groups — track players, organize teams, score matches, and view rankings, all from your phone.
+  The ultimate Flutter app for managing your <em>pelada</em> (casual football match) groups. Draft teams, log goals, calculate automatic player ratings, and track everything in a comprehensive statistics dashboard!
 </p>
 
 <p align="center">
@@ -19,70 +19,101 @@
 |:----:|:--------:|:----------:|
 | ![Home](screenshots/home.png) | ![Sessions](screenshots/sessions.png) | ![Match](screenshots/match.png) |
 
-| Rankings | Player Detail | Sync |
+| Statistics Dashboard | Player Detail | Sync |
 |:--------:|:-------------:|:----:|
-| ![Rankings](screenshots/rankings.png) | ![Player](screenshots/player_detail.png) | ![Sync](screenshots/sync.png) |
+| *(Insert image here)* | ![Player](screenshots/player_detail.png) | ![Sync](screenshots/sync.png) |
 
 ---
 
-## 📱 Features
+## 📱 Core Features
 
-### 🏘️ Group Management
-- Create multiple football groups (e.g., "Futebol de Quinta")
-- Each group has its own independent roster, sessions, and statistics
+### 🏘️ Group & Season Management
+- **Multiple Groups:** Create independent football groups (e.g., "Thursday Football", "Work Match").
+- **Season Management (Admin):** Define date intervals (e.g., "Season 2026.1") protected by a password to organize your match history.
+- **Roster Management:** Control the player roster, add custom avatars, and configure technical levels (1-5 stars) for automatic team drafting.
 
-### 📅 Sessions (Peladas)
-- Create match sessions with a name, date, and players-per-team count
-- Sessions are sorted newest-first and display live/finished status
-- Configurable match duration (in minutes)
+### ⚔️ Live Match & Team Draft
+- **Arrival Queue:** Add players in the order they arrive at the pitch.
+- **Balanced Draft:** The app instantly shuffles players into two balanced teams based on their star ratings.
+- **Live Scoreboard:** Real-time score tracker with a built-in match timer.
+- **In-game Events:** Log Goals, Assists, Own Goals, Yellow Cards, and Red Cards as they happen.
+- **Goalkeeper Rotation:** Easily swap goalkeepers from the waiting list mid-match.
 
-### ⚔️ Live Match Screen
-- **Arrival Queue** — Add players as they show up; drag to reorder the queue
-- **Random Team Draw** — Shuffle players into two balanced teams instantly
-- **Live Scoreboard** — Real-time score tracker with timer (overtime detection)
-- **In-game Events** — Log goals and assists per player during the match
-- **Goal Scorers Panel** — See scorer names and timestamps displayed below the scoreboard
-- **Goalkeeper Rotation** — Swap goalkeepers from the waiting list mid-match
-- **Next Teams** — Preview which players are up next while the current match is live
-- Audio whistle sound on match start and end
+### 📊 Statistics Dashboard
+- **Dynamic Filters:** Filter the dashboard by **Current Month**, specific **Season**, or **All-Time** history.
+- **The Podium (Top 3):** Highlight cards featuring the top 3 players with Gold, Silver, and Bronze borders for the following categories:
+  - 🥇 **Golden Balls:** Highest average ratings.
+  - ⚽ **Offensive Contributions:** Most Goals + Assists (G+A).
+  - 🥅 **Top Scorers:** Most Goals.
+  - 👟 **Playmakers:** Most Assists.
+- **Expanded Rankings:** Tap on any Podium card to view the full, pre-sorted leaderboard for that specific metric.
+- **Pelada Evolution:** A line chart showing the variation of the group's overall technical quality over time.
 
-### 👤 Player Management
-- Full player roster per group with custom icons and star ratings (1–5)
-- Player detail page with:
-  - All-time stats: Goals, Assists, G+A, Wins, Draws, Losses
-  - Win/draw/loss ratio bar
-  - **Advanced stats**: hat-tricks, favourite assist partner, most wins/losses with a teammate, biggest rival, most frequent opponent
+### 👤 Player Profile & Trophy Room
+- **Individual Evolution:** Interactive charts showing the player's performance trend over time.
+- **Trophy Room:** 
+  - *Automatic Badges:* The app automatically awards medals based on match history (e.g., "King of Wins", "Playmaker").
+  - *Manual Badges:* Group admins can award custom, funny, or honorary badges to players.
 
-### 🏆 Rankings
-- Group-wide leaderboard with sortable columns: G+A, Goals, Assists, Wins, Draws, Losses, Games
-- Filter by month to view period-specific standings
-- Medal icons (🥇🥈🥉) for the top 3 players
-- Per-session tournament ranking screen
-
-### 📤 Data Sync & Backup
-- **Cloud Sync** via Firebase Firestore — sync your data across devices using a personal sync code
-- **Export / Import** — save your full database as a JSON file and restore it on any device
+### 📤 Cloud Sync & Backup
+- **Cloud Sync:** Sync your data across multiple devices using Firebase Firestore with a personal group access code.
+- **Export / Import:** Take full local backups of your database via JSON files.
 
 ---
 
-## 🛠️ Tech Stack
+## 🧠 Rating System Algorithm
+
+App-Fut stands out with its **Dynamic Rating System**. Every player receives an automatic rating at the end of each match based on the match result and their individual performance. The single source of truth for this logic is located in `lib/utils/rating_calculator.dart`.
+
+**How is the rating calculated?**
+1. **Base Rating:** Every player starts the match with a base rating of `7.0`.
+2. **Result Impact:** Winning the match adds `+1.5`. Losing subtracts `-1.5`. Draws have no impact.
+3. **Win Streak:** Winning consecutive matches on the same day grants bonuses: `+0.5` (2 wins) and `+1.0` (3+ wins).
+4. **Offensive Impact:** Each Goal is worth `+1.5` and each Assist `+1.0`.
+5. **Defensive Impact:** Every goal conceded by the team penalizes the player's rating by `-0.3`.
+6. **Disciplinary & Errors:** Yellow Card (`-1.0`), Red Card (`-2.0`), Own Goal (`-1.0`).
+7. **Dynamic Bonuses (Highlights):**
+   - **Hat Trick:** `+1.0` bonus for scoring 3 or more goals in a single match.
+   - **Playmaker:** `+1.0` bonus for providing 3 or more assists in a single match.
+   - **Offensive Team:** `+0.5` bonus if the player's team scores at least 1 goal in the match.
+
+> The application aggregates these ratings to generate a weighted Average Rating displayed on the Statistics Dashboard and the Player Profile.
+
+---
+
+## 🛠️ Architecture & Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Flutter (Material 3, dark theme) |
+| Framework | Flutter (Material 3, Dark Theme) |
 | Language | Dart 3 |
 | Local Storage | `shared_preferences` |
 | Cloud Sync | Firebase Firestore (`cloud_firestore`) |
+| Charts | `fl_chart` |
 | Audio | `audioplayers` |
-| File I/O | `file_picker` + `path_provider` |
-| Sharing | `share_plus` |
-| IDs | `uuid` |
+| State Management | `StatefulWidget` & Callbacks |
 
----
+## 📁 Folder Structure
 
-## ⬇️ Download
-
-Grab the latest release APK directly from the [Releases page](../../releases/latest) — no build tools needed.
+```text
+lib/
+├── constants/
+│   └── app_colors.dart             # Centralized color palette
+├── screens/
+│   ├── group_dashboard_screen.dart # Main hub with bottom navigation tabs
+│   ├── group_ranking_screen.dart   # Statistics Dashboard / Podiums
+│   ├── match_screen.dart           # Live Match scoreboard
+│   ├── player_detail.dart          # Individual stats & charts
+│   ├── manage_seasons_screen.dart  # Admin Panel: Season creation
+│   ├── manage_badges_screen.dart   # Admin Panel: Custom badge creation
+│   └── ...
+├── utils/
+│   ├── rating_calculator.dart      # The brain of the Rating System
+│   ├── stats_calculator.dart       # JSON history parsing & aggregation
+│   └── constants.dart              # Avatars and boundaries
+└── widgets/
+    └── shared/                     # Reusable UI components
+```
 
 ---
 
@@ -114,42 +145,7 @@ flutter run
 ```bash
 flutter build apk --release
 ```
-
-The APK will be generated at `build/app/outputs/flutter-apk/app-release.apk`.
-
----
-
-## 📁 Project Structure
-
-```
-lib/
-├── main.dart               # App entry point, group management home screen
-├── firebase_options.dart   # Firebase configuration (auto-generated)
-├── constants/
-│   └── app_colors.dart     # Centralized color palette
-├── screens/
-│   ├── match_screen.dart          # Live match with timer, teams, events
-│   ├── sessions_screen.dart       # List of sessions per group
-│   ├── players_screen.dart        # Player roster management
-│   ├── player_detail.dart         # Individual player stats & advanced analytics
-│   ├── group_ranking_screen.dart  # Group leaderboard (sortable, filterable)
-│   ├── group_dashboard_screen.dart
-│   ├── tournament_screen.dart
-│   ├── tournament_dashboard_screen.dart
-│   ├── history_screen.dart
-│   ├── ranking_screen.dart
-│   ├── sync_screen.dart           # Cloud sync with Firebase
-│   ├── edit_match_screen.dart
-│   └── blank_screen.dart
-├── services/
-│   └── sync_service.dart   # Export/import JSON + Firebase sync logic
-├── utils/
-│   └── player_identity.dart # Stable player ID resolution helpers
-└── widgets/
-    └── match/
-        ├── match_scoreboard.dart
-        └── player_field_slot.dart
-```
+The generated APK will be located at `build/app/outputs/flutter-apk/app-release.apk`.
 
 ---
 
@@ -158,12 +154,10 @@ lib/
 Contributions, issues, and feature requests are welcome!
 
 1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'feat: add my feature'`
-4. Push to the branch: `git push origin feature/my-feature`
+2. Create your feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -m 'feat: add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
 5. Open a Pull Request
-
----
 
 ## 📄 License
 
