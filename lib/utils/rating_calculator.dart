@@ -20,8 +20,8 @@ const double kStreakBonus2Wins = 0.5;
 const double kStreakBonus3PlusWins = 1.0;
 
 /// Impactos Individuais
-const double kWeightGoal       =  1.5; 
-const double kWeightAssist     =  1.0;
+const double kWeightGoal       =  0.7; 
+const double kWeightAssist     =  0.7;
 const double kWeightOwnGoal    = -1.0;
 
 /// Impacto de Defesa (Penaliza a zaga que tomou gol)
@@ -32,8 +32,8 @@ const double kWeightYellowCard = -1.0;
 const double kWeightRedCard    = -2.0;
 
 /// Bônus Dinâmicos
-const double kBonusHatTrick    = 1.0;
-const double kBonusPlaymaker   = 1.0; // 3 assists
+const double kBonusHatTrick    = 0.4;
+const double kBonusPlaymaker   = 0.4; // 3 assists
 const double kBonusTeamGoal    = 0.5; // Time fez pelo menos 1 gol
 const double kBonusCleanSheet  = 1.0; // Time não tomou gols
 

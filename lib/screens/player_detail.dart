@@ -52,12 +52,22 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   List<Map<String, dynamic>> manualBadges = [];
   List<Map<String, dynamic>> _allPlayers = [];
 
-
+  bool _showRadarChart = true;
 
   @override
   void initState() {
     super.initState();
+    _loadPreferences();
     _loadPlayerDetails();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _showRadarChart = prefs.getBool('show_radar_chart') ?? true;
+      });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -240,6 +250,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final Map<String, int> gamesWith        = {};
     final Map<String, int> winsWith         = {};
     final Map<String, int> lossesWith       = {};
+    final Map<String, int> gamesAgainst     = {};
     final Map<String, int> winsAgainst      = {};
     final Map<String, int> lossesAgainst    = {};
     final Map<String, int> drawsAgainst     = {};
@@ -252,6 +263,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     String biggestWinScore = "-";
     int biggestLossMargin = 0;
     String biggestLossScore = "-";
+    int totalTeamGoalsWhenPlaying = 0;
 
     final Map<String, String> playerNamesMap = {};
     final String myId = widget.playerId;
@@ -295,6 +307,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       int myTeamGoals = myTeam == 'red' ? scoreRed : scoreWhite;
       int opponentGoals = myTeam == 'red' ? scoreWhite : scoreRed;
       
+      totalTeamGoalsWhenPlaying += myTeamGoals;
+
       if (myTeamGoals > opponentGoals) myTeamResult = 1;
       else if (myTeamGoals < opponentGoals) myTeamResult = -1;
 
@@ -337,6 +351,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       for (final o in opponents) {
         final String oId = playerIdFromObject(o);
         if (oId == myId || oId.isEmpty) continue;
+        gamesAgainst[oId] = (gamesAgainst[oId] ?? 0) + 1;
         if (myTeamResult ==  1) winsAgainst[oId]   = (winsAgainst[oId]   ?? 0) + 1;
         if (myTeamResult == -1) lossesAgainst[oId] = (lossesAgainst[oId] ?? 0) + 1;
         if (myTeamResult ==  0) drawsAgainst[oId]  = (drawsAgainst[oId]  ?? 0) + 1;
@@ -378,6 +393,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       'mostPlayedWith':    findMax(gamesWith),
       'mostWinsWith':      findMax(winsWith),
       'mostLossesWith':    findMax(lossesWith),
+      'mostPlayedAgainst': findMax(gamesAgainst),
       'mostWinsAgainst':   findMax(winsAgainst),
       'mostLossesAgainst': findMax(lossesAgainst),
       'mostDrawsAgainst':  findMax(drawsAgainst),
@@ -387,6 +403,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       'biggestWinScore':   biggestWinScore,
       'biggestLossScore':  biggestLossScore,
       'maxUnbeatenStreak': maxUnbeatenStreak,
+      'totalTeamGoals':    totalTeamGoalsWhenPlaying,
     };
   }
 
@@ -1148,9 +1165,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final int goals = playerStats['goals'] ?? 0;
     final int assists = playerStats['assists'] ?? 0;
     final int cleanSheets = advancedStats['cleanSheets'] ?? 0;
-    final int yellow = playerStats['yellow'] ?? 0;
-    final int red = playerStats['red'] ?? 0;
-    final int ownGoals = advancedStats['ownGoals'] ?? 0;
+    final int teamGoals = advancedStats['totalTeamGoals'] ?? 0;
     final int wins = playerStats['wins'] ?? 0;
     final int draws = playerStats['draws'] ?? 0;
 
@@ -1163,8 +1178,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     double defenseScore = (cleanSheets / games) * 200;
     if (defenseScore > 100) defenseScore = 100;
 
-    double tacticScore = 100.0 - (yellow * 5) - (red * 20) - (ownGoals * 15);
-    if (tacticScore < 0) tacticScore = 0;
+    double tacticScore = 0;
+    if (teamGoals > 0) {
+      int indirectGoals = teamGoals - goals - assists;
+      if (indirectGoals < 0) indirectGoals = 0;
+      tacticScore = (indirectGoals / teamGoals) * 100;
+    }
 
     double ganaScore = 0;
     if (games > 0) ganaScore = ((wins * 3 + draws * 1) / (games * 3)) * 100;
@@ -1196,7 +1215,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         'Ataque: Média de Gols por jogo.\n\n'
                         'Visão: Média de Assistências por jogo.\n\n'
                         'Defesa: Frequência de jogos sem sofrer gol (Clean Sheets).\n\n'
-                        'Tática: Cai se o jogador levar muitos cartões ou fizer gols contra.\n\n'
+                        'Tática: Porcentagem de gols do time sem sua participação direta.\n\n'
                         'Gana: Taxa de vitórias e empates (Aproveitamento).',
                         style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
@@ -1425,7 +1444,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   const SizedBox(height: 16),
 
                   // ── Estatísticas Avançadas ────────────────────────────
-                  _buildRadarChart(),
+                  if (_showRadarChart) _buildRadarChart(),
 
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -1462,6 +1481,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                             _buildGridCard('Mais Assistiu', _formatAdvStat(advancedStats['topAssisted'], 'suas assist.', total: assists), Icons.sports_soccer, Colors.greenAccent),
                             _buildGridCard('Mais Jogou Junto', _formatAdvStat(advancedStats['mostPlayedWith'], 'jogos', total: totalResults), Icons.people, Colors.white),
                             _buildGridCard('Mais Venceu Junto', _formatAdvStat(advancedStats['mostWinsWith'], 'vitórias', total: wins), Icons.thumb_up, Colors.green),
+                            _buildGridCard('Maior Rival', _formatAdvStat(advancedStats['mostPlayedAgainst'], 'jogos contra', total: totalResults), Icons.local_fire_department, Colors.orange),
                             _buildGridCard('Maior Freguês', _formatAdvStat(advancedStats['mostWinsAgainst'], 'vitórias', total: wins), Icons.mood, Colors.blueAccent),
                             _buildGridCard('Carrasco', _formatAdvStat(advancedStats['mostLossesAgainst'], 'derrotas', total: losses), Icons.mood_bad, Colors.red),
                           ],

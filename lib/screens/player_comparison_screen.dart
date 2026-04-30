@@ -37,6 +37,8 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
   int h2hDraws = 0;
   int h2hTotal = 0;
 
+  bool _showRadarChart = true;
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +49,8 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
     final prefs = await SharedPreferences.getInstance();
     final String playersKey = 'players_${widget.groupId}';
     
+    bool showRadar = prefs.getBool('show_radar_chart') ?? true;
+
     List<Map<String, dynamic>> allPlayers = [];
     if (prefs.containsKey(playersKey)) {
       allPlayers = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(playersKey)!)));
@@ -100,6 +104,7 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
       p2WinsH2h = p2W;
       h2hDraws = drw;
       h2hTotal = tot;
+      _showRadarChart = showRadar;
       isLoading = false;
     });
   }
@@ -107,6 +112,7 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
   Map<String, dynamic> _calcAdvStats(String playerId, List<dynamic> allHistory) {
     int cleanSheets = 0;
     int ownGoals = 0;
+    int teamGoals = 0;
 
     for (final match in allHistory) {
       final List<dynamic> redPlayers = [...(match['players']['red'] ?? []), match['players']['gk_red']].where((p) => p != null).toList();
@@ -120,6 +126,9 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
       final int scoreRed = match['scoreRed'] ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
 
+      int myTeamGoals = myTeam == 'red' ? scoreRed : scoreWhite;
+      teamGoals += myTeamGoals;
+
       int opponentGoals = myTeam == 'red' ? scoreWhite : scoreRed;
       if (opponentGoals == 0) cleanSheets++;
 
@@ -131,10 +140,10 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
         }
       }
     }
-    return {'cleanSheets': cleanSheets, 'ownGoals': ownGoals};
+    return {'cleanSheets': cleanSheets, 'ownGoals': ownGoals, 'teamGoals': teamGoals};
   }
 
-  double _getRadarScore(int games, int goals, int assists, int cleanSheets, int yellow, int red, int ownGoals, int wins, int draws, int metricIndex) {
+  double _getRadarScore(int games, int goals, int assists, int cleanSheets, int yellow, int red, int ownGoals, int wins, int draws, int teamGoals, int metricIndex) {
     if (games == 0) return 0;
     
     switch (metricIndex) {
@@ -145,7 +154,12 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
       case 2: // Defesa
         return ((cleanSheets / games) * 200).clamp(0, 100);
       case 3: // Tática
-        return (100.0 - (yellow * 5) - (red * 20) - (ownGoals * 15)).clamp(0, 100);
+        if (teamGoals > 0) {
+          int indirectGoals = teamGoals - goals - assists;
+          if (indirectGoals < 0) indirectGoals = 0;
+          return ((indirectGoals / teamGoals) * 100).clamp(0, 100);
+        }
+        return 0;
       case 4: // Gana
         return (((wins * 3 + draws * 1) / (games * 3)) * 100).clamp(0, 100);
       default:
@@ -234,14 +248,14 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
     final p1Scores = List.generate(5, (i) => _getRadarScore(
       stats1['games'] ?? 0, stats1['goals'] ?? 0, stats1['assists'] ?? 0,
       adv1['cleanSheets'] ?? 0, stats1['yellow'] ?? 0, stats1['red'] ?? 0,
-      adv1['ownGoals'] ?? 0, stats1['wins'] ?? 0, stats1['draws'] ?? 0, i,
+      adv1['ownGoals'] ?? 0, stats1['wins'] ?? 0, stats1['draws'] ?? 0, adv1['teamGoals'] ?? 0, i,
     ));
 
     // Calc Radar Scores P2
     final p2Scores = List.generate(5, (i) => _getRadarScore(
       stats2['games'] ?? 0, stats2['goals'] ?? 0, stats2['assists'] ?? 0,
       adv2['cleanSheets'] ?? 0, stats2['yellow'] ?? 0, stats2['red'] ?? 0,
-      adv2['ownGoals'] ?? 0, stats2['wins'] ?? 0, stats2['draws'] ?? 0, i,
+      adv2['ownGoals'] ?? 0, stats2['wins'] ?? 0, stats2['draws'] ?? 0, adv2['teamGoals'] ?? 0, i,
     ));
 
     double aprov1 = 0, aprov2 = 0;
@@ -277,43 +291,45 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
             const SizedBox(height: 32),
 
             // Radar Chart Overlap
-            Container(
-              height: 250,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
-              child: RadarChart(
-                RadarChartData(
-                  tickCount: 5,
-                  ticksTextStyle: const TextStyle(color: Colors.transparent),
-                  tickBorderData: const BorderSide(color: Colors.white12),
-                  gridBorderData: const BorderSide(color: Colors.white24, width: 1.5),
-                  radarBackgroundColor: Colors.transparent,
-                  borderData: FlBorderData(show: false),
-                  radarBorderData: const BorderSide(color: Colors.transparent),
-                  getTitle: (index, angle) {
-                    final text = ['Ataque', 'Visão', 'Defesa', 'Tática', 'Gana'][index];
-                    return RadarChartTitle(text: text, angle: angle);
-                  },
-                  dataSets: [
-                    RadarDataSet(
-                      fillColor: colorP1.withValues(alpha: 0.4),
-                      borderColor: colorP1,
-                      entryRadius: 3,
-                      dataEntries: p1Scores.map((s) => RadarEntry(value: s)).toList(),
-                    ),
-                    RadarDataSet(
-                      fillColor: colorP2.withValues(alpha: 0.4),
-                      borderColor: colorP2,
-                      entryRadius: 3,
-                      dataEntries: p2Scores.map((s) => RadarEntry(value: s)).toList(),
-                    )
-                  ],
+            if (_showRadarChart) ...[
+              Container(
+                height: 250,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
+                child: RadarChart(
+                  RadarChartData(
+                    tickCount: 5,
+                    ticksTextStyle: const TextStyle(color: Colors.transparent),
+                    tickBorderData: const BorderSide(color: Colors.white12),
+                    gridBorderData: const BorderSide(color: Colors.white24, width: 1.5),
+                    radarBackgroundColor: Colors.transparent,
+                    borderData: FlBorderData(show: false),
+                    radarBorderData: const BorderSide(color: Colors.transparent),
+                    getTitle: (index, angle) {
+                      final text = ['Ataque', 'Visão', 'Defesa', 'Tática', 'Gana'][index];
+                      return RadarChartTitle(text: text, angle: angle);
+                    },
+                    dataSets: [
+                      RadarDataSet(
+                        fillColor: colorP1.withValues(alpha: 0.4),
+                        borderColor: colorP1,
+                        entryRadius: 3,
+                        dataEntries: p1Scores.map((s) => RadarEntry(value: s)).toList(),
+                      ),
+                      RadarDataSet(
+                        fillColor: colorP2.withValues(alpha: 0.4),
+                        borderColor: colorP2,
+                        entryRadius: 3,
+                        dataEntries: p2Scores.map((s) => RadarEntry(value: s)).toList(),
+                      )
+                    ],
+                  ),
+                  swapAnimationDuration: const Duration(milliseconds: 150),
+                  swapAnimationCurve: Curves.linear,
                 ),
-                swapAnimationDuration: const Duration(milliseconds: 150),
-                swapAnimationCurve: Curves.linear,
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
+            ],
 
             // Comparativo Numérico
             Container(

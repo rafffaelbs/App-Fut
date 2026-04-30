@@ -5,6 +5,7 @@ import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
 import 'package:app_do_fut/screens/manage_seasons_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class GroupDashboardScreen extends StatefulWidget {
   final String groupId;
@@ -95,6 +96,50 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                   context,
                   MaterialPageRoute(builder: (context) => ManageSeasonsScreen(groupId: widget.groupId)),
                 );
+              } else if (value == 'settings') {
+                showDialog(
+                  context: context,
+                  builder: (ctx) {
+                    return FutureBuilder<SharedPreferences>(
+                      future: SharedPreferences.getInstance(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                        final prefs = snapshot.data!;
+                        bool showRadar = prefs.getBool('show_radar_chart') ?? true;
+                        
+                        return StatefulBuilder(
+                          builder: (context, setDialogState) {
+                            return AlertDialog(
+                              backgroundColor: AppColors.headerBlue,
+                              title: const Text('Configurações', style: TextStyle(color: Colors.white)),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SwitchListTile(
+                                    title: const Text('Exibir Gráfico Radar', style: TextStyle(color: Colors.white)),
+                                    subtitle: const Text('Mostra o gráfico no perfil e X1', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                    activeColor: AppColors.accentBlue,
+                                    value: showRadar,
+                                    onChanged: (val) {
+                                      prefs.setBool('show_radar_chart', val);
+                                      setDialogState(() { showRadar = val; });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Fechar', style: TextStyle(color: AppColors.accentBlue)),
+                                ),
+                              ],
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
               }
             },
             itemBuilder: (context) => [
@@ -105,6 +150,10 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
               const PopupMenuItem(
                 value: 'seasons',
                 child: Row(children: [Icon(Icons.calendar_month, color: AppColors.accentBlue, size: 20), SizedBox(width: 8), Text('Gerenciar Temporadas', style: TextStyle(color: Colors.white))]),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(children: [Icon(Icons.settings, color: Colors.grey, size: 20), SizedBox(width: 8), Text('Configurações', style: TextStyle(color: Colors.white))]),
               ),
             ],
           ),

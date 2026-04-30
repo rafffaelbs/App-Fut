@@ -305,7 +305,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               alignment: Alignment.center,
-                              child: Text("Draft (Capitães)", style: TextStyle(color: isDraftMode ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+                              child: Text("Draft (Capitães) - Beta", style: TextStyle(color: isDraftMode ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ),

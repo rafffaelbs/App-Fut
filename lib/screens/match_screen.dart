@@ -847,7 +847,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [
       ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), 
       if (!isDraftMode) ListTile(leading: const Icon(Icons.balance, color: Colors.orangeAccent), title: const Text('Sorteio Nivelado', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), 
-      if (isDraftMode) ListTile(leading: const Icon(Icons.sports_soccer, color: Colors.orangeAccent), title: const Text('Iniciar Times (Fila)', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _iniciarTimesDraft(); }), 
+      if (isDraftMode) ListTile(leading: const Icon(Icons.sports_soccer, color: Colors.orangeAccent), title: const Text('Iniciar Draft (Beta)', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _iniciarTimesDraft(); }), 
       ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })
     ]));
   }
