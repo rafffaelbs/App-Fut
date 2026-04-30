@@ -45,6 +45,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   int whiteWinStreak = 0;
   bool isMatchRunning = false;
   bool isOvertime = false;
+  bool isDraftMode = false;
   int winLimit = 3;
   Timer? _matchTimer;
 
@@ -137,8 +138,13 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       if (sessionsData != null) {
         final List<dynamic> allSessions = jsonDecode(sessionsData);
         final currentSession = allSessions.firstWhere((s) => s['id'] == widget.tournamentId, orElse: () => null);
-        if (currentSession != null && currentSession is Map && currentSession.containsKey('win_limit')) {
-          sessionWinLimit = currentSession['win_limit'];
+        if (currentSession != null && currentSession is Map) {
+          if (currentSession.containsKey('win_limit')) {
+            sessionWinLimit = currentSession['win_limit'];
+          }
+          if (currentSession.containsKey('draft_mode')) {
+            isDraftMode = currentSession['draft_mode'];
+          }
         }
       }
       winLimit = sessionWinLimit;
@@ -399,6 +405,24 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         } else {
           teamWhite.add(p); 
           sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
+        }
+      }
+    });
+    _saveMatchState();
+  }
+
+  void _iniciarTimesDraft() {
+    if (presentPlayers.length < 2) return;
+    setState(() {
+      int needed = widget.totalPlayers * 2;
+      List<Map<String, dynamic>> pool = presentPlayers.take(needed).toList();
+      teamRed.clear(); 
+      teamWhite.clear();
+      for (var p in pool) {
+        if (teamRed.length < widget.totalPlayers) {
+          teamRed.add(p);
+        } else {
+          teamWhite.add(p);
         }
       }
     });
@@ -820,7 +844,12 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   }
 
   void _showActionSheet() {
-    showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), ListTile(leading: const Icon(Icons.balance, color: Colors.orangeAccent), title: const Text('Sorteio Nivelado', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })]));
+    showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [
+      ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), 
+      if (!isDraftMode) ListTile(leading: const Icon(Icons.balance, color: Colors.orangeAccent), title: const Text('Sorteio Nivelado', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), 
+      if (isDraftMode) ListTile(leading: const Icon(Icons.sports_soccer, color: Colors.orangeAccent), title: const Text('Iniciar Times (Fila)', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _iniciarTimesDraft(); }), 
+      ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })
+    ]));
   }
 
   void _confirmEventDialog(String type, Map<String, dynamic> player, bool isRedTeam, {String? assist, String? assistId}) {
@@ -995,19 +1024,25 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
 
       // --- MÁGICA DO BALANCEAMENTO AQUI TAMBÉM ---
       List<Map<String, dynamic>> pool = List.from(entering);
-      pool.sort((a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo((a['rating'] ?? kRatingBase) as num));
+      if (!isDraftMode) {
+        pool.sort((a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo((a['rating'] ?? kRatingBase) as num));
+      }
       
       double sumRed = teamRed.fold(0.0, (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble());
       double sumWhite = teamWhite.fold(0.0, (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble());
 
       for (var p in pool) {
         if (teamRed.length < widget.totalPlayers && teamWhite.length < widget.totalPlayers) {
-          if (sumRed <= sumWhite) { 
-            teamRed.add(p); 
-            sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
-          } else { 
-            teamWhite.add(p); 
-            sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
+          if (isDraftMode) {
+            teamRed.add(p);
+          } else {
+            if (sumRed <= sumWhite) { 
+              teamRed.add(p); 
+              sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
+            } else { 
+              teamWhite.add(p); 
+              sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble(); 
+            }
           }
         } else if (teamRed.length < widget.totalPlayers) {
           teamRed.add(p); 

@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/expanded_ranking_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:screenshot/screenshot.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 
@@ -19,6 +23,9 @@ class GroupRankingScreen extends StatefulWidget {
 class _GroupRankingScreenState extends State<GroupRankingScreen> {
   List<Map<String, dynamic>> _globalLeaderboard = [];
   bool _isLoading = true;
+  bool _isSharing = false;
+
+  final ScreenshotController _screenshotController = ScreenshotController();
 
   List<dynamic> _allSessions = [];
   List<Map<String, dynamic>> _seasons = [];
@@ -168,7 +175,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
             'wins':       0,
             'draws':      0,
             'losses':     0,
-            'sum_ratings': 0.0,
+            'ratings':     <double>[],
           });
           if (playerName.isNotEmpty) globalStats[playerId]!['name'] = playerName;
 
@@ -192,8 +199,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
             ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
             teamWinStreak: 0,
           );
-          globalStats[playerId]!['sum_ratings'] =
-              (globalStats[playerId]!['sum_ratings'] as double) + matchRating;
+          (globalStats[playerId]!['ratings'] as List<double>).add(matchRating);
           
           sessionRatings[sessionLabel]!.add(matchRating);
         }
@@ -208,7 +214,6 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     final List<Map<String, dynamic>> sortedList = [];
     globalStats.forEach((id, data) {
       final int games       = data['games'] as int;
-      final double sumRatings = data['sum_ratings'] as double;
       final int g           = data['goals']   as int;
       final int a           = data['assists'] as int;
 
@@ -223,7 +228,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           'wins':    data['wins'],
           'draws':   data['draws'],
           'losses':  data['losses'],
-          'nota':    calculateFinalRating(sumRatings: sumRatings, games: games),
+          'nota':    calculateFinalRating(ratings: data['ratings'] as List<double>),
         });
       }
     });
@@ -571,30 +576,60 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
-                  : SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Column(
-                        children: [
-                          if (_globalLeaderboard.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(40),
-                              child: Text('Nenhum jogo registrado nesse período.', style: TextStyle(color: Colors.white54)),
-                            )
-                          else ...[
-                            _buildTop3Card(title: 'Os Melhores', players: _topNota, metric: 'nota', sortColumn: 'nota', highlightColor: Colors.amber),
-                            _buildTop3Card(title: 'Part. Ofensivas (G+A)', players: _topGA, metric: 'ga', sortColumn: 'ga', highlightColor: AppColors.highlightGreen),
-                            _buildTop3Card(title: 'Artilheiros', players: _topGoals, metric: 'goals', sortColumn: 'goals', highlightColor: Colors.blueAccent),
-                            _buildTop3Card(title: 'Garçons (Assist.)', players: _topAssists, metric: 'assists', sortColumn: 'assists', highlightColor: Colors.deepPurpleAccent),
-                            _buildEvolutionChart(),
-                          ],
-                          const SizedBox(height: 30),
-                        ],
+                  : Screenshot(
+                      controller: _screenshotController,
+                      child: Container(
+                        color: AppColors.deepBlue,
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            children: [
+                              if (_globalLeaderboard.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(40),
+                                  child: Text('Nenhum jogo registrado nesse período.', style: TextStyle(color: Colors.white54)),
+                                )
+                              else ...[
+                                _buildTop3Card(title: 'Os Melhores', players: _topNota, metric: 'nota', sortColumn: 'nota', highlightColor: Colors.amber),
+                                _buildTop3Card(title: 'Part. Ofensivas (G+A)', players: _topGA, metric: 'ga', sortColumn: 'ga', highlightColor: AppColors.highlightGreen),
+                                _buildTop3Card(title: 'Artilheiros', players: _topGoals, metric: 'goals', sortColumn: 'goals', highlightColor: Colors.blueAccent),
+                                _buildTop3Card(title: 'Garçons (Assist.)', players: _topAssists, metric: 'assists', sortColumn: 'assists', highlightColor: Colors.deepPurpleAccent),
+                                _buildEvolutionChart(),
+                              ],
+                              const SizedBox(height: 30),
+                            ],
+                          ),
                       ),
                     ),
+                  ),
             ),
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppColors.accentBlue,
+        onPressed: _isSharing ? null : _shareRanking,
+        child: _isSharing
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Icon(Icons.share, color: Colors.white),
+      ),
     );
+  }
+
+  Future<void> _shareRanking() async {
+    setState(() => _isSharing = true);
+    try {
+      final imageFile = await _screenshotController.capture(delay: const Duration(milliseconds: 10));
+      if (imageFile != null) {
+        final directory = await getApplicationDocumentsDirectory();
+        final imagePath = await File('${directory.path}/ranking.png').create();
+        await imagePath.writeAsBytes(imageFile);
+        await Share.shareXFiles([XFile(imagePath.path)], text: 'Confira o Ranking da Pelada!');
+      }
+    } catch (e) {
+      debugPrint('Erro ao compartilhar: \$e');
+    } finally {
+      setState(() => _isSharing = false);
+    }
   }
 }

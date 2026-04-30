@@ -96,7 +96,7 @@ class _RankingScreenState extends State<RankingScreen> {
           'wins': 0,
           'draws': 0,
           'losses': 0,
-          'sum_ratings': 0.0,
+          'ratings': <double>[],
         });
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
@@ -120,8 +120,7 @@ class _RankingScreenState extends State<RankingScreen> {
           ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
           teamWinStreak: 0,
         );
-        stats[playerId]!['sum_ratings'] =
-            (stats[playerId]!['sum_ratings'] as double) + matchRating;
+        (stats[playerId]!['ratings'] as List<double>).add(matchRating);
       }
 
       if (match['players']['red'] != null) {
@@ -136,7 +135,6 @@ class _RankingScreenState extends State<RankingScreen> {
     final List<Map<String, dynamic>> sortedList = [];
     stats.forEach((id, data) {
       final int games       = data['games'] as int;
-      final double sumRatings = data['sum_ratings'] as double;
       final int g           = data['goals'] as int;
       final int a           = data['assists'] as int;
 
@@ -151,7 +149,7 @@ class _RankingScreenState extends State<RankingScreen> {
           'wins':    data['wins'],
           'draws':   data['draws'],
           'losses':  data['losses'],
-          'nota':    calculateFinalRating(sumRatings: sumRatings, games: games),
+          'nota':    calculateFinalRating(ratings: data['ratings'] as List<double>),
         });
       }
     });

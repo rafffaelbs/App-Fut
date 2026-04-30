@@ -72,6 +72,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           ? session['win_limit'].toString()
           : '3',
     );
+    bool isDraftMode = isEditing ? (session!['draft_mode'] ?? false) : false;
 
     // --- NEW: DATE LOGIC ---
     DateTime selectedDate = isEditing && session!['timestamp'] != null
@@ -268,6 +269,49 @@ class _SessionsScreenState extends State<SessionsScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  
+                  // Modo Draft Toggle
+                  const Text("Modo de Formação de Times", style: TextStyle(color: Colors.white54, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setModalState(() => isDraftMode = false),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: !isDraftMode ? AppColors.accentBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text("Sorteio", style: TextStyle(color: !isDraftMode ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setModalState(() => isDraftMode = true),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isDraftMode ? AppColors.accentBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text("Draft (Capitães)", style: TextStyle(color: isDraftMode ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 32),
 
                   SizedBox(
@@ -305,6 +349,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                                 int.tryParse(playersController.text) ?? 5,
                             'duration': int.tryParse(timeController.text) ?? 8,
                             'win_limit': isInfiniteLimit ? 0 : (int.tryParse(winLimitController.text) ?? 3),
+                            'draft_mode': isDraftMode,
                           };
 
                           if (isEditing) {

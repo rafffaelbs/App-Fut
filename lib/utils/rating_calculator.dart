@@ -35,6 +35,7 @@ const double kWeightRedCard    = -2.0;
 const double kBonusHatTrick    = 1.0;
 const double kBonusPlaymaker   = 1.0; // 3 assists
 const double kBonusTeamGoal    = 0.5; // Time fez pelo menos 1 gol
+const double kBonusCleanSheet  = 1.0; // Time não tomou gols
 
 /// Limites do App
 const double kMinRating = 0.0;
@@ -93,21 +94,34 @@ double calculateMatchRating({
   final double disciplineImpact =
       (yellow * kWeightYellowCard) + (red * kWeightRedCard);
 
-  final double raw = kRatingBase + resultImpact + streakBonus + attackImpact + defenseImpact + disciplineImpact;
+  double raw = kRatingBase + resultImpact + streakBonus + attackImpact + defenseImpact + disciplineImpact;
   
+  if (conceded == 0 && status >= 0) {
+    raw += kBonusCleanSheet;
+  }
+
   return raw.clamp(kMinRating, kMaxRating);
 }
 
 /// Calcula a Média Geral Histórica.
 double calculateFinalRating({
-  required double sumRatings,
-  required int games,
+  required List<double> ratings,
 }) {
+  final int games = ratings.length;
   if (games == 0) return kRatingBase;
 
+  double weightedSum = 0.0;
+  double totalWeight = 0.0;
+  
+  for (int i = 0; i < games; i++) {
+    double weight = (i >= games - 3) ? 2.0 : 1.0;
+    weightedSum += ratings[i] * weight;
+    totalWeight += weight;
+  }
+
   final double bayesianRating =
-      ((kBayesianPriorGames * kBayesianPriorRating) + sumRatings) /
-      (kBayesianPriorGames + games);
+      ((kBayesianPriorGames * kBayesianPriorRating) + weightedSum) /
+      (kBayesianPriorGames + totalWeight);
 
   final double volumeBonus = (games ~/ kVolumeBonusEveryN) * kVolumeBonusPerN;
 

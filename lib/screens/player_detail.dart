@@ -172,7 +172,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         'goals': 0, 'assists': 0, 'own_goals': 0, 'games': 0,
         'yellow': 0, 'red': 0,
         'wins': 0, 'draws': 0, 'losses': 0,
-        'goals_conceded': 0, 'sum_ratings': 0.0, 'date': dt,
+        'goals_conceded': 0, 'ratings': <double>[], 'date': dt,
       });
 
       grouped[groupKey]!['games']         += 1;
@@ -207,14 +207,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
         teamWinStreak: 0,
       );
-      grouped[groupKey]!['sum_ratings'] += matchRating;
+      (grouped[groupKey]!['ratings'] as List<double>).add(matchRating);
     }
 
     final List<Map<String, dynamic>> chartList = [];
     grouped.forEach((key, data) {
       final int games         = data['games'] as int;
-      final double sumRatings = data['sum_ratings'] as double;
-      final double avgNota    = calculateFinalRating(sumRatings: sumRatings, games: games);
+      final double avgNota    = calculateFinalRating(ratings: data['ratings'] as List<double>);
 
       chartList.add({
         'label':        key,

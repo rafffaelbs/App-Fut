@@ -79,7 +79,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
       globalStats.putIfAbsent(playerId, () => {
         'id': playerId,
         'games': 0, 'wins': 0, 'draws': 0, 'losses': 0,
-        'goals': 0, 'assists': 0, 'yellow': 0, 'red': 0, 'sum_ratings': 0.0,
+        'goals': 0, 'assists': 0, 'yellow': 0, 'red': 0, 'ratings': <double>[],
         'name': (playerObj['name'] ?? '').toString()
       });
       
@@ -106,7 +106,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
         ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
         teamWinStreak: 0,
       );
-      playerStats['sum_ratings'] = (playerStats['sum_ratings'] as double) + matchRating;
+      (playerStats['ratings'] as List<double>).add(matchRating);
     }
 
     if (match['players'] != null && match['players'] is Map) {
@@ -123,9 +123,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
 
   // Precalcula a nota final (já usando as regras matemáticas definidas no rating_calculator)
   globalStats.forEach((id, data) {
-    final int games = data['games'] as int;
-    final double sumRatings = data['sum_ratings'] as double;
-    data['nota'] = calculateFinalRating(sumRatings: sumRatings, games: games);
+    data['nota'] = calculateFinalRating(ratings: data['ratings'] as List<double>);
     data['ga'] = (data['goals'] as int) + (data['assists'] as int);
   });
 
