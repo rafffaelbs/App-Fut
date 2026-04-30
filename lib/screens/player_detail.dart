@@ -7,6 +7,7 @@ import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
 import '../widgets/shared/icon_picker_modal.dart';
+import 'player_comparison_screen.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
   final String groupId;
@@ -243,10 +244,26 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final Map<String, int> lossesAgainst    = {};
     final Map<String, int> drawsAgainst     = {};
     int hatTricks = 0;
+    int cleanSheets = 0;
+    int ownGoals = 0;
+    int currentUnbeatenStreak = 0;
+    int maxUnbeatenStreak = 0;
+    int biggestWinMargin = 0;
+    String biggestWinScore = "-";
+    int biggestLossMargin = 0;
+    String biggestLossScore = "-";
+
     final Map<String, String> playerNamesMap = {};
     final String myId = widget.playerId;
 
-    for (final match in allHistory) {
+    final List<dynamic> sortedHistory = List.from(allHistory);
+    sortedHistory.sort((a, b) {
+      DateTime da = DateTime.tryParse(a['date'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      DateTime db = DateTime.tryParse(b['date'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return da.compareTo(db);
+    });
+
+    for (final match in sortedHistory) {
       final List<dynamic> redPlayers = [
         ...(match['players']['red'] ?? []),
         match['players']['gk_red'],
@@ -275,11 +292,35 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       final int scoreWhite = match['scoreWhite'] ?? 0;
 
       int myTeamResult = 0;
-      if (scoreRed != scoreWhite) {
-        myTeamResult = (myTeam == 'red' && scoreRed > scoreWhite) ||
-                (myTeam == 'white' && scoreWhite > scoreRed)
-            ? 1
-            : -1;
+      int myTeamGoals = myTeam == 'red' ? scoreRed : scoreWhite;
+      int opponentGoals = myTeam == 'red' ? scoreWhite : scoreRed;
+      
+      if (myTeamGoals > opponentGoals) myTeamResult = 1;
+      else if (myTeamGoals < opponentGoals) myTeamResult = -1;
+
+      if (opponentGoals == 0) cleanSheets++;
+
+      if (myTeamResult == 1) {
+        int margin = myTeamGoals - opponentGoals;
+        if (margin > biggestWinMargin) {
+          biggestWinMargin = margin;
+          biggestWinScore = "$myTeamGoals x $opponentGoals";
+        }
+      }
+
+      if (myTeamResult == -1) {
+        int margin = opponentGoals - myTeamGoals;
+        if (margin > biggestLossMargin) {
+          biggestLossMargin = margin;
+          biggestLossScore = "$opponentGoals x $myTeamGoals";
+        }
+      }
+
+      if (myTeamResult >= 0) {
+        currentUnbeatenStreak++;
+        if (currentUnbeatenStreak > maxUnbeatenStreak) maxUnbeatenStreak = currentUnbeatenStreak;
+      } else {
+        currentUnbeatenStreak = 0;
       }
 
       final List<dynamic> teammates = myTeam == 'red' ? redPlayers  : whitePlayers;
@@ -304,6 +345,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       int goalsInThisMatch = 0;
       if (match['events'] != null) {
         for (final ev in match['events']) {
+          if (ev['type'] == 'own_goal' && eventPlayerId(ev, 'player') == myId) {
+             ownGoals++;
+          }
           if (ev['type'] != 'goal') continue;
           final String scorerId = eventPlayerId(ev, 'player');
           final String assistId = eventPlayerId(ev, 'assist');
@@ -338,6 +382,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       'mostLossesAgainst': findMax(lossesAgainst),
       'mostDrawsAgainst':  findMax(drawsAgainst),
       'hatTricks':         hatTricks,
+      'cleanSheets':       cleanSheets,
+      'ownGoals':          ownGoals,
+      'biggestWinScore':   biggestWinScore,
+      'biggestLossScore':  biggestLossScore,
+      'maxUnbeatenStreak': maxUnbeatenStreak,
     };
   }
 
@@ -487,6 +536,100 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             child: const Text('Salvar', style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showCompareModal() {
+    // Filter out the current player
+    final List<Map<String, dynamic>> rivals = _allPlayers
+        .where((p) => (p['id'] ?? '').toString() != widget.playerId)
+        .toList();
+
+    String searchQuery = '';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.deepBlue,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final filteredRivals = rivals.where((r) {
+            final name = (r['name'] ?? '').toString().toLowerCase();
+            return name.contains(searchQuery.toLowerCase());
+          }).toList();
+
+          return FractionallySizedBox(
+            heightFactor: 0.8,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Comparar com...', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Selecione um jogador do grupo para iniciar o X1.', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    onChanged: (val) {
+                      setModalState(() {
+                        searchQuery = val;
+                      });
+                    },
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Pesquisar nome...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                      filled: true,
+                      fillColor: AppColors.headerBlue,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filteredRivals.length,
+                      itemBuilder: (context, index) {
+                        final rival = filteredRivals[index];
+                        final String rivalId = (rival['id'] ?? '').toString();
+                        final String rivalName = (rival['name'] ?? 'Desconhecido').toString();
+                        final String? rivalIcon = rival['icon'];
+                        final String initial = rivalName.isNotEmpty ? rivalName[0].toUpperCase() : '?';
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.headerBlue,
+                            radius: 18,
+                            child: rivalIcon != null
+                                ? ClipOval(child: Padding(padding: const EdgeInsets.all(2), child: Image.asset(rivalIcon, fit: BoxFit.contain)))
+                                : Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          ),
+                          title: Text(rivalName, style: const TextStyle(color: Colors.white)),
+                          trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PlayerComparisonScreen(
+                                  groupId: widget.groupId,
+                                  player1Id: widget.playerId,
+                                  player2Id: rivalId,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
       ),
     );
   }
@@ -789,7 +932,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildBadgesSection() {
-    final List<Map<String, dynamic>> autoBadges = _generateAutomaticBadges();
+    final List<Map<String, dynamic>> allAutoBadges = _generateAutomaticBadges();
+    final List<Map<String, dynamic>> autoBadges = allAutoBadges.take(3).toList();
+    final bool hasMoreBadges = allAutoBadges.length > 3;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -805,10 +950,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 SizedBox(width: 8),
                 Text('Sala de Troféus', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               ]),
-              IconButton(
-                icon:    const Icon(Icons.add_circle_outline, color: AppColors.accentBlue),
-                tooltip: 'Dar Prêmio Manual',
-                onPressed: _showAddManualBadgeDialog,
+              Row(
+                children: [
+                  if (hasMoreBadges)
+                    TextButton(
+                      onPressed: () => _showAllBadgesModal(allAutoBadges),
+                      child: const Text('Ver Todas', style: TextStyle(color: AppColors.accentBlue, fontSize: 12)),
+                    ),
+                  IconButton(
+                    icon:    const Icon(Icons.add_circle_outline, color: AppColors.accentBlue),
+                    tooltip: 'Dar Prêmio Manual',
+                    onPressed: _showAddManualBadgeDialog,
+                  ),
+                ],
               ),
             ],
           ),
@@ -828,7 +982,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: manualBadges.length,
-                  itemBuilder: (_, i) => _buildBadgeCard(manualBadges[i], isManual: true, index: i),
+                  itemBuilder: (_, i) => SizedBox(width: 85, child: Padding(padding: const EdgeInsets.only(right: 12), child: _buildBadgeCard(manualBadges[i], isManual: true, index: i))),
                 ),
               ),
               const SizedBox(height: 12),
@@ -841,7 +995,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: autoBadges.length,
-                  itemBuilder: (_, i) => _buildBadgeCard(autoBadges[i], isManual: false),
+                  itemBuilder: (_, i) => SizedBox(width: 85, child: Padding(padding: const EdgeInsets.only(right: 12), child: _buildBadgeCard(autoBadges[i], isManual: false))),
                 ),
               ),
             ],
@@ -851,13 +1005,41 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     );
   }
 
+  void _showAllBadgesModal(List<Map<String, dynamic>> allBadges) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.deepBlue,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Todas as Conquistas', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: allBadges.length,
+                itemBuilder: (context, index) => _buildBadgeCard(allBadges[index], isManual: false),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBadgeCard(Map<String, dynamic> badge, {required bool isManual, int? index}) {
     final Color badgeColor = isManual ? Colors.amber : (badge['color'] as Color? ?? Colors.blueAccent);
     return GestureDetector(
       onLongPress: () { if (isManual && index != null) _showRemoveManualBadgeDialog(index); },
       child: Container(
-        width: 85,
-        margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           color:        badgeColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
@@ -931,6 +1113,141 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
                 Text(value, style: const TextStyle(color: Colors.white,   fontSize: 14, fontWeight: FontWeight.w600)),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGridCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.deepBlue,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadarChart() {
+    final int games = playerStats['games'] ?? 0;
+    if (games == 0) return const SizedBox();
+
+    final int goals = playerStats['goals'] ?? 0;
+    final int assists = playerStats['assists'] ?? 0;
+    final int cleanSheets = advancedStats['cleanSheets'] ?? 0;
+    final int yellow = playerStats['yellow'] ?? 0;
+    final int red = playerStats['red'] ?? 0;
+    final int ownGoals = advancedStats['ownGoals'] ?? 0;
+    final int wins = playerStats['wins'] ?? 0;
+    final int draws = playerStats['draws'] ?? 0;
+
+    double attackScore = (goals / games) * 100;
+    if (attackScore > 100) attackScore = 100;
+
+    double visionScore = (assists / games) * 100;
+    if (visionScore > 100) visionScore = 100;
+
+    double defenseScore = (cleanSheets / games) * 200;
+    if (defenseScore > 100) defenseScore = 100;
+
+    double tacticScore = 100.0 - (yellow * 5) - (red * 20) - (ownGoals * 15);
+    if (tacticScore < 0) tacticScore = 0;
+
+    double ganaScore = 0;
+    if (games > 0) ganaScore = ((wins * 3 + draws * 1) / (games * 3)) * 100;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(children: [
+                Icon(Icons.radar, color: AppColors.accentBlue),
+                SizedBox(width: 8),
+                Text('Perfil do Jogador', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              ]),
+              IconButton(
+                icon: const Icon(Icons.info_outline, color: Colors.white54, size: 20),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppColors.deepBlue,
+                      title: const Text('Entenda o Gráfico', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      content: const Text(
+                        'Ataque: Média de Gols por jogo.\n\n'
+                        'Visão: Média de Assistências por jogo.\n\n'
+                        'Defesa: Frequência de jogos sem sofrer gol (Clean Sheets).\n\n'
+                        'Tática: Cai se o jogador levar muitos cartões ou fizer gols contra.\n\n'
+                        'Gana: Taxa de vitórias e empates (Aproveitamento).',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Entendi', style: TextStyle(color: AppColors.accentBlue)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 220,
+            child: RadarChart(
+              RadarChartData(
+                tickCount: 5,
+                ticksTextStyle: const TextStyle(color: Colors.transparent),
+                tickBorderData: const BorderSide(color: Colors.white12),
+                gridBorderData: const BorderSide(color: Colors.white24, width: 1.5),
+                radarBackgroundColor: Colors.transparent,
+                borderData: FlBorderData(show: false),
+                radarBorderData: const BorderSide(color: Colors.transparent),
+                getTitle: (index, angle) {
+                  final text = ['Ataque', 'Visão', 'Defesa', 'Tática', 'Gana'][index];
+                  return RadarChartTitle(
+                    text: text,
+                    angle: angle,
+                  );
+                },
+                dataSets: [
+                  RadarDataSet(
+                    fillColor: AppColors.accentBlue.withValues(alpha: 0.4),
+                    borderColor: AppColors.accentBlue,
+                    entryRadius: 3,
+                    dataEntries: [
+                      RadarEntry(value: attackScore),
+                      RadarEntry(value: visionScore),
+                      RadarEntry(value: defenseScore),
+                      RadarEntry(value: tacticScore),
+                      RadarEntry(value: ganaScore),
+                    ],
+                  )
+                ],
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 150),
+              swapAnimationCurve: Curves.linear,
             ),
           ),
         ],
@@ -1027,11 +1344,23 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         const SizedBox(height: 12),
                         Text(displayName, style: const TextStyle(color: AppColors.textWhite, fontSize: 22, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: _showEditNameDialog,
-                          icon:  const Icon(Icons.edit, size: 16),
-                          label: const Text('Editar nome'),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _showEditNameDialog,
+                              icon:  const Icon(Icons.edit, size: 16),
+                              label: const Text('Editar nome'),
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton.icon(
+                              onPressed: _showCompareModal,
+                              icon:  const Icon(Icons.compare_arrows, size: 16),
+                              label: const Text('Comparar'),
+                              style: OutlinedButton.styleFrom(foregroundColor: AppColors.highlightGreen, side: const BorderSide(color: AppColors.highlightGreen)),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -1096,6 +1425,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   const SizedBox(height: 16),
 
                   // ── Estatísticas Avançadas ────────────────────────────
+                  _buildRadarChart(),
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: AppColors.headerBlue, borderRadius: BorderRadius.circular(18)),
@@ -1111,17 +1442,30 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         _buildAdvStatRow('Aproveitamento', aproveitamentoStr, Icons.pie_chart, Colors.purpleAccent),
                         _buildAdvStatRow('Hat-Tricks (3 Gols/Jogo)', '${advancedStats['hatTricks'] ?? 0} marcados', Icons.whatshot, Colors.orangeAccent),
                         _buildAdvStatRow('Faltas Graves', '${playerStats['yellow'] ?? 0} Amarelos / ${playerStats['red'] ?? 0} Vermelhos', Icons.style, Colors.redAccent),
+                        _buildAdvStatRow('Clean Sheets', '${advancedStats['cleanSheets'] ?? 0} jogos sem tomar gol', Icons.shield, Colors.blueAccent),
+                        _buildAdvStatRow('Gols Contra', '${advancedStats['ownGoals'] ?? 0} marcados', Icons.error_outline, Colors.red),
+                        _buildAdvStatRow('Maior Sequência Invicta', '${advancedStats['maxUnbeatenStreak'] ?? 0} jogos', Icons.local_fire_department, Colors.orange),
+                        _buildAdvStatRow('Maior Goleada a Favor', '${advancedStats['biggestWinScore'] ?? "-"}', Icons.sentiment_very_satisfied, Colors.greenAccent),
+                        _buildAdvStatRow('Maior Derrota', '${advancedStats['biggestLossScore'] ?? "-"}', Icons.sentiment_very_dissatisfied, Colors.redAccent),
                         const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Garçom Favorito',  _formatAdvStat(advancedStats['topAssister'],  'gols seus', total: goals),       Icons.handshake,    Colors.amber),
-                        _buildAdvStatRow('Mais Assistiu',    _formatAdvStat(advancedStats['topAssisted'],  'assistências suas', total: assists), Icons.sports_soccer, Colors.greenAccent),
-                        const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Mais Jogou Junto', _formatAdvStat(advancedStats['mostPlayedWith'], 'jogos', total: totalResults),     Icons.people,     Colors.white),
-                        _buildAdvStatRow('Mais Venceu Junto',_formatAdvStat(advancedStats['mostWinsWith'],  'vitórias', total: wins),  Icons.thumb_up,   Colors.green),
-                        _buildAdvStatRow('Mais Perdeu Junto',_formatAdvStat(advancedStats['mostLossesWith'],'derrotas', total: losses),  Icons.thumb_down, Colors.redAccent),
-                        const Divider(color: Colors.white12, height: 24),
-                        _buildAdvStatRow('Maior Freguês (Contra)', _formatAdvStat(advancedStats['mostWinsAgainst'],   'vitórias', total: wins), Icons.mood,     Colors.blueAccent),
-                        _buildAdvStatRow('Carrasco (Contra)',       _formatAdvStat(advancedStats['mostLossesAgainst'],'derrotas', total: losses), Icons.mood_bad, Colors.red),
-                        _buildAdvStatRow('Rival Equilibrado',       _formatAdvStat(advancedStats['mostDrawsAgainst'], 'empates', total: draws),  Icons.balance,  Colors.grey),
+                        const Text('Curiosidades e Rivalidades', style: TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          childAspectRatio: 1.15,
+                          children: [
+                            _buildGridCard('Garçom Favorito', _formatAdvStat(advancedStats['topAssister'], 'gols seus', total: goals), Icons.handshake, Colors.amber),
+                            _buildGridCard('Mais Assistiu', _formatAdvStat(advancedStats['topAssisted'], 'suas assist.', total: assists), Icons.sports_soccer, Colors.greenAccent),
+                            _buildGridCard('Mais Jogou Junto', _formatAdvStat(advancedStats['mostPlayedWith'], 'jogos', total: totalResults), Icons.people, Colors.white),
+                            _buildGridCard('Mais Venceu Junto', _formatAdvStat(advancedStats['mostWinsWith'], 'vitórias', total: wins), Icons.thumb_up, Colors.green),
+                            _buildGridCard('Maior Freguês', _formatAdvStat(advancedStats['mostWinsAgainst'], 'vitórias', total: wins), Icons.mood, Colors.blueAccent),
+                            _buildGridCard('Carrasco', _formatAdvStat(advancedStats['mostLossesAgainst'], 'derrotas', total: losses), Icons.mood_bad, Colors.red),
+                          ],
+                        ),
                       ],
                     ),
                   ),
