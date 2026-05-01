@@ -390,7 +390,12 @@ class _RankingScreenState extends State<RankingScreen> {
       setModal(() {});
     }
 
-    Widget colHeader(String label, String col, double width, StateSetter setModal) {
+    Widget colHeader(
+      String label,
+      String col,
+      double width,
+      StateSetter setModal,
+    ) {
       final bool active = modalSort == col;
       return GestureDetector(
         onTap: () {
@@ -419,8 +424,8 @@ class _RankingScreenState extends State<RankingScreen> {
               Icon(
                 active
                     ? (modalDesc
-                        ? Icons.arrow_downward_rounded
-                        : Icons.arrow_upward_rounded)
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded)
                     : Icons.unfold_more_rounded,
                 size: 10,
                 color: active ? Colors.white70 : Colors.white24,
