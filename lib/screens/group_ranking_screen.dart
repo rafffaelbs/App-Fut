@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/expanded_ranking_screen.dart';
+import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -31,8 +32,13 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   List<Map<String, dynamic>> _seasons = [];
   Map<String, dynamic> _playersMap = {};
 
-  String _filterType = 'Mês Atual'; // Mês Atual, Temporada, Geral
+  String _filterType = 'Tudo'; // Tudo, Mês, Temporadas
   String? _selectedSeasonId;
+  DateTime _selectedMonth = DateTime.now();
+  int _activeTab = 0; // 0: Pódios, 1: Tabela
+
+  String _sortColumn = 'ga';
+  bool _sortDescending = true;
 
   // Top 3 lists
   List<Map<String, dynamic>> _topNota = [];
@@ -57,7 +63,8 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     if (prefs.containsKey(playersKey)) {
       final List<dynamic> pList = jsonDecode(prefs.getString(playersKey)!);
       for (var p in pList) {
-        _playersMap[p['id'].toString()] = p;
+        final String pid = p['id'].toString();
+        _playersMap[pid] = p;
       }
     }
 
@@ -87,21 +94,23 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         ? DateTime.parse(session['timestamp'])
         : DateTime.now();
 
-    if (_filterType == 'Mês Atual') {
-      final now = DateTime.now();
-      return date.year == now.year && date.month == now.month;
+    if (_filterType == 'Mês') {
+      return date.year == _selectedMonth.year &&
+          date.month == _selectedMonth.month;
     }
 
-    if (_filterType == 'Temporada') {
+    if (_filterType == 'Temporadas') {
       if (_selectedSeasonId == null) return false;
-      final seasonDef = _seasons.firstWhere((s) => s['id'] == _selectedSeasonId, orElse: () => {});
+      final seasonDef = _seasons.firstWhere(
+        (s) => s['id'] == _selectedSeasonId,
+        orElse: () => {},
+      );
       if (seasonDef.isEmpty) return false;
-      
+
       final DateTime start = DateTime.parse(seasonDef['startDate']);
       final DateTime end = DateTime.parse(seasonDef['endDate']);
-      // A sessão tem que estar entre start e end, ignorando as horas finais (usamos isBefore/isAfter ou limites)
-      return (date.isAfter(start.subtract(const Duration(days: 1))) && 
-              date.isBefore(end.add(const Duration(days: 1))));
+      return (date.isAfter(start.subtract(const Duration(days: 1))) &&
+          date.isBefore(end.add(const Duration(days: 1))));
     }
 
     return true;
@@ -110,6 +119,18 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
   void _calculateGlobalRankings() async {
     final prefs = await SharedPreferences.getInstance();
     final Map<String, Map<String, dynamic>> globalStats = {};
+
+    // Mapa de normalização (Nome -> ID Real)
+    final Map<String, String> nameToIdMap = {};
+    final String playersKey = 'players_${widget.groupId}';
+    if (prefs.containsKey(playersKey)) {
+      final List<dynamic> pList = jsonDecode(prefs.getString(playersKey)!);
+      for (var p in pList) {
+        final String pid = p['id'].toString();
+        final String name = (p['name'] ?? '').toString();
+        if (name.isNotEmpty) nameToIdMap[name] = pid;
+      }
+    }
 
     // Dados para o gráfico
     final Map<String, List<double>> sessionRatings = {};
@@ -138,9 +159,13 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         final Map<String, Map<String, int>> matchPlayerEvents = {};
         if (match['events'] != null) {
           for (final ev in match['events']) {
-            final String pid   = eventPlayerId(ev, 'player');
-            final String astId = eventPlayerId(ev, 'assist');
+            String pid   = eventPlayerId(ev, 'player');
+            String astId = eventPlayerId(ev, 'assist');
             final String type  = ev['type'];
+
+            // Normalização de eventos
+            if (nameToIdMap.containsKey(pid)) pid = nameToIdMap[pid]!;
+            if (nameToIdMap.containsKey(astId)) astId = nameToIdMap[astId]!;
 
             if (pid.isNotEmpty) {
               matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
@@ -160,11 +185,16 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
 
         void processPlayer(dynamic playerObj, int status, int scored, int conceded) {
           if (playerObj == null) return;
-          final String playerId = playerIdFromObject(playerObj);
+          String playerId = playerIdFromObject(playerObj);
+          final String playerName = (playerObj['name'] ?? '').toString();
+
+          // Normalização: se o ID no histórico for igual ao nome, tenta ver se esse jogador agora tem um ID real
+          if (playerId == playerName && nameToIdMap.containsKey(playerName)) {
+            playerId = nameToIdMap[playerName]!;
+          }
+
           if (playerId.isEmpty || processed.contains(playerId)) return;
           processed.add(playerId);
-
-          final String playerName = (playerObj['name'] ?? '').toString();
 
           globalStats.putIfAbsent(playerId, () => {
             'id':         playerId,
@@ -285,7 +315,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
-        children: ['Mês Atual', 'Temporada', 'Geral'].map((filter) {
+        children: ['Tudo', 'Mês', 'Temporadas'].map((filter) {
           final bool active = _filterType == filter;
           return Expanded(
             child: GestureDetector(
@@ -314,8 +344,76 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     );
   }
 
+  Widget _buildMonthSelector() {
+    if (_filterType != 'Mês') return const SizedBox.shrink();
+
+    final months = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, color: Colors.white54),
+            onPressed: () {
+              setState(() {
+                _selectedMonth = DateTime(
+                  _selectedMonth.year,
+                  _selectedMonth.month - 1,
+                );
+                _isLoading = true;
+              });
+              _calculateGlobalRankings();
+            },
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.headerBlue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${months[_selectedMonth.month - 1]} ${_selectedMonth.year}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, color: Colors.white54),
+            onPressed: () {
+              setState(() {
+                _selectedMonth = DateTime(
+                  _selectedMonth.year,
+                  _selectedMonth.month + 1,
+                );
+                _isLoading = true;
+              });
+              _calculateGlobalRankings();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSeasonSelector() {
-    if (_filterType != 'Temporada') return const SizedBox.shrink();
+    if (_filterType != 'Temporadas') return const SizedBox.shrink();
 
     if (_seasons.isEmpty) {
       return const Padding(
@@ -380,28 +478,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: TextStyle(color: highlightColor, fontSize: 16, fontWeight: FontWeight.bold)),
-              GestureDetector(
-                onTap: () {
-                  if (_globalLeaderboard.isEmpty) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ExpandedRankingScreen(
-                        groupId: widget.groupId,
-                        title: title,
-                        initialSortColumn: sortColumn,
-                        leaderboard: _globalLeaderboard,
-                        playersMap: _playersMap,
-                      ),
-                    ),
-                  );
-                },
-                child: const Row(
-                  children: [
-                    Text('Ver Todos', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                    Icon(Icons.chevron_right, color: Colors.white54, size: 16),
-                  ],
+              Text(
+                title,
+                style: TextStyle(
+                  color: highlightColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
@@ -439,45 +521,79 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Stack(
-          alignment: Alignment.bottomCenter,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: borderColor, width: position == 1 ? 3 : 2),
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PlayerDetailScreen(
+                  groupId: widget.groupId,
+                  playerId: player['id'].toString(),
+                  initialPlayerName: player['name'],
+                ),
               ),
-              child: CircleAvatar(
-                radius: radius,
-                backgroundColor: AppColors.deepBlue,
-                child: iconPath != null 
-                  ? ClipOval(child: Padding(padding: EdgeInsets.all(position == 1 ? 8.0 : 6.0), child: Image.asset(iconPath)))
-                  : const Icon(Icons.person, color: Colors.white38),
+            );
+          },
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: borderColor,
+                    width: position == 1 ? 3 : 2,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: radius,
+                  backgroundColor: AppColors.deepBlue,
+                  child: iconPath != null
+                      ? ClipOval(
+                        child: Padding(
+                          padding: EdgeInsets.all(position == 1 ? 8.0 : 6.0),
+                          child: Image.asset(iconPath),
+                        ),
+                      )
+                      : const Icon(Icons.person, color: Colors.white38),
+                ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: borderColor,
-                borderRadius: BorderRadius.circular(10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: borderColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${position}º',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              child: Text(
-                '${position}º',
-                style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         Text(
-          player['name'].split(' ')[0], 
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+          player['name'].split(' ')[0],
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
         Text(
           valText,
-          style: TextStyle(color: highlight, fontSize: 14, fontWeight: FontWeight.w900),
+          style: TextStyle(
+            color: highlight,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+          ),
         ),
       ],
     );
@@ -564,19 +680,261 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
     );
   }
 
+  Widget _buildTabToggle() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _tabItem(0, 'Destaques', Icons.emoji_events),
+          _tabItem(1, 'Ranking Geral', Icons.format_list_numbered),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabItem(int index, String label, IconData icon) {
+    final bool active = _activeTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _activeTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? AppColors.accentBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: active ? Colors.white : Colors.white38,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white38,
+                  fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _onColumnSort(String column) {
+    setState(() {
+      if (_sortColumn == column) {
+        _sortDescending = !_sortDescending;
+      } else {
+        _sortColumn = column;
+        _sortDescending = true;
+      }
+    });
+  }
+
+  Widget _sortHeader(String label, String column, Color color) {
+    final bool active = _sortColumn == column;
+    return GestureDetector(
+      onTap: () => _onColumnSort(column),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            active
+                ? (_sortDescending
+                    ? Icons.arrow_downward_rounded
+                    : Icons.arrow_upward_rounded)
+                : Icons.unfold_more_rounded,
+            size: 11,
+            color: active ? Colors.white54 : color.withValues(alpha: 0.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFullTable() {
+    if (_globalLeaderboard.isEmpty) return const SizedBox.shrink();
+
+    // Ordenar dinamicamente
+    final List<Map<String, dynamic>> sorted = List.from(_globalLeaderboard);
+    sorted.sort((a, b) {
+      int cmp = (a[_sortColumn] as num).compareTo(b[_sortColumn] as num);
+      if (cmp == 0 && _sortColumn == 'ga') {
+        cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+      }
+      return _sortDescending ? -cmp : cmp;
+    });
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.white.withValues(alpha: 0.05),
+        ),
+        child: DataTable(
+          showCheckboxColumn: false,
+          headingRowHeight: 40,
+          dataRowMinHeight: 52,
+          dataRowMaxHeight: 52,
+          columnSpacing: 16,
+          horizontalMargin: 16,
+          columns: [
+            const DataColumn(
+              label: Text(
+                '#',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
+            const DataColumn(
+              label: Text(
+                'JOGADOR',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            DataColumn(numeric: true, label: _sortHeader('NOTA', 'nota', Colors.amber)),
+            DataColumn(numeric: true, label: _sortHeader('G+A', 'ga', AppColors.highlightGreen)),
+            DataColumn(numeric: true, label: _sortHeader('GOLS', 'goals', Colors.white38)),
+            DataColumn(numeric: true, label: _sortHeader('AST', 'assists', Colors.white38)),
+            DataColumn(numeric: true, label: _sortHeader('VIT', 'wins', Colors.greenAccent)),
+            DataColumn(numeric: true, label: _sortHeader('EMP', 'draws', Colors.orangeAccent)),
+            DataColumn(numeric: true, label: _sortHeader('DER', 'losses', Colors.redAccent)),
+            DataColumn(numeric: true, label: _sortHeader('JOGOS', 'games', Colors.white24)),
+          ],
+          rows: List<DataRow>.generate(sorted.length, (index) {
+            final p = sorted[index];
+            final String? icon = _playersMap[p['id']]?['icon'];
+            return DataRow(
+              onSelectChanged: (_) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlayerDetailScreen(
+                      groupId: widget.groupId,
+                      playerId: p['id'].toString(),
+                      initialPlayerName: p['name'],
+                      playerIcon: icon,
+                    ),
+                  ),
+                );
+              },
+              cells: [
+                DataCell(
+                  Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      color: index < 3 ? Colors.amber : Colors.white24,
+                      fontSize: 12,
+                      fontWeight:
+                          index < 3 ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: Colors.white10,
+                        child:
+                            icon != null
+                                ? ClipOval(child: Image.asset(icon))
+                                : const Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: Colors.white38,
+                                ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        p['name'],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    (p['nota'] as double).toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['ga']}',
+                    style: const TextStyle(
+                      color: AppColors.highlightGreen,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                DataCell(Text('${p['goals']}', style: const TextStyle(color: Colors.white70))),
+                DataCell(Text('${p['assists']}', style: const TextStyle(color: Colors.white70))),
+                DataCell(Text('${p['wins']}', style: const TextStyle(color: Colors.greenAccent))),
+                DataCell(Text('${p['draws']}', style: const TextStyle(color: Colors.orangeAccent))),
+                DataCell(Text('${p['losses']}', style: const TextStyle(color: Colors.redAccent))),
+                DataCell(Text('${p['games']}', style: const TextStyle(color: Colors.white30, fontSize: 12))),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.deepBlue,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildFilterToggle(),
-            _buildSeasonSelector(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
-                  : Screenshot(
+      backgroundColor: Colors.transparent,
+      body: Column(
+        children: [
+          _buildTabToggle(),
+          _buildFilterToggle(),
+          _buildMonthSelector(),
+          _buildSeasonSelector(),
+          Expanded(
+            child:
+                _isLoading
+                    ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.accentBlue,
+                      ),
+                    )
+                    : Screenshot(
                       controller: _screenshotController,
                       child: Container(
                         color: AppColors.deepBlue,
@@ -587,31 +945,66 @@ class _GroupRankingScreenState extends State<GroupRankingScreen> {
                               if (_globalLeaderboard.isEmpty)
                                 const Padding(
                                   padding: EdgeInsets.all(40),
-                                  child: Text('Nenhum jogo registrado nesse período.', style: TextStyle(color: Colors.white54)),
+                                  child: Text(
+                                    'Nenhum jogo registrado nesse período.',
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
                                 )
-                              else ...[
-                                _buildTop3Card(title: 'Os Melhores', players: _topNota, metric: 'nota', sortColumn: 'nota', highlightColor: Colors.amber),
-                                _buildTop3Card(title: 'Part. Ofensivas (G+A)', players: _topGA, metric: 'ga', sortColumn: 'ga', highlightColor: AppColors.highlightGreen),
-                                _buildTop3Card(title: 'Artilheiros', players: _topGoals, metric: 'goals', sortColumn: 'goals', highlightColor: Colors.blueAccent),
-                                _buildTop3Card(title: 'Garçons (Assist.)', players: _topAssists, metric: 'assists', sortColumn: 'assists', highlightColor: Colors.deepPurpleAccent),
+                              else if (_activeTab == 0) ...[
+                                _buildTop3Card(
+                                  title: 'Os Melhores',
+                                  players: _topNota,
+                                  metric: 'nota',
+                                  sortColumn: 'nota',
+                                  highlightColor: Colors.amber,
+                                ),
+                                _buildTop3Card(
+                                  title: 'Part. Ofensivas (G+A)',
+                                  players: _topGA,
+                                  metric: 'ga',
+                                  sortColumn: 'ga',
+                                  highlightColor: AppColors.highlightGreen,
+                                ),
+                                _buildTop3Card(
+                                  title: 'Artilheiros',
+                                  players: _topGoals,
+                                  metric: 'goals',
+                                  sortColumn: 'goals',
+                                  highlightColor: Colors.blueAccent,
+                                ),
+                                _buildTop3Card(
+                                  title: 'Garçons (Assist.)',
+                                  players: _topAssists,
+                                  metric: 'assists',
+                                  sortColumn: 'assists',
+                                  highlightColor: Colors.deepPurpleAccent,
+                                ),
                                 _buildEvolutionChart(),
-                              ],
+                              ] else
+                                _buildFullTable(),
                               const SizedBox(height: 30),
                             ],
                           ),
+                        ),
                       ),
                     ),
-                  ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.accentBlue,
         onPressed: _isSharing ? null : _shareRanking,
-        child: _isSharing
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.share, color: Colors.white),
+        child:
+            _isSharing
+                ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+                : const Icon(Icons.share, color: Colors.white),
       ),
     );
   }

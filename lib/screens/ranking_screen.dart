@@ -63,14 +63,20 @@ class _RankingScreenState extends State<RankingScreen> {
       return;
     }
 
-    // Carrega ícones do banco de jogadores salvos
+    // Carrega ícones do banco de jogadores salvos e cria mapa de normalização (Nome -> ID Real)
     final Map<String, String?> iconMap = {};
+    final Map<String, String> nameToIdMap = {};
+
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
       final List<dynamic> dbPlayers = jsonDecode(dbData);
       for (final p in dbPlayers) {
         final String pid = playerIdFromObject(p as Map<String, dynamic>);
-        if (pid.isNotEmpty) iconMap[pid] = p['icon'] as String?;
+        final String name = (p['name'] ?? '').toString();
+        if (pid.isNotEmpty) {
+          iconMap[pid] = p['icon'] as String?;
+          if (name.isNotEmpty) nameToIdMap[name] = pid;
+        }
       }
     }
 
@@ -90,9 +96,13 @@ class _RankingScreenState extends State<RankingScreen> {
       final Map<String, Map<String, int>> matchPlayerEvents = {};
       if (match['events'] != null) {
         for (final ev in match['events']) {
-          final String pid = eventPlayerId(ev, 'player');
-          final String astId = eventPlayerId(ev, 'assist');
+          String pid = eventPlayerId(ev, 'player');
+          String astId = eventPlayerId(ev, 'assist');
           final String type = ev['type'];
+
+          // Normalização de eventos (se o ID for o nome, tenta achar o ID real)
+          if (nameToIdMap.containsKey(pid)) pid = nameToIdMap[pid]!;
+          if (nameToIdMap.containsKey(astId)) astId = nameToIdMap[astId]!;
 
           if (pid.isNotEmpty) {
             matchPlayerEvents.putIfAbsent(
@@ -132,11 +142,16 @@ class _RankingScreenState extends State<RankingScreen> {
         int conceded,
       ) {
         if (playerObj == null) return;
-        final String playerId = playerIdFromObject(playerObj);
+        String playerId = playerIdFromObject(playerObj);
+        final String playerName = (playerObj['name'] ?? '').toString();
+
+        // Normalização: se o ID no histórico for igual ao nome, tenta ver se esse jogador agora tem um ID real
+        if (playerId == playerName && nameToIdMap.containsKey(playerName)) {
+          playerId = nameToIdMap[playerName]!;
+        }
+
         if (playerId.isEmpty || processed.contains(playerId)) return;
         processed.add(playerId);
-
-        final String playerName = (playerObj['name'] ?? '').toString();
 
         stats.putIfAbsent(
           playerId,
@@ -375,7 +390,7 @@ class _RankingScreenState extends State<RankingScreen> {
       setModal(() {});
     }
 
-    Widget colHeader(String label, String col, StateSetter setModal) {
+    Widget colHeader(String label, String col, double width, StateSetter setModal) {
       final bool active = modalSort == col;
       return GestureDetector(
         onTap: () {
@@ -387,27 +402,31 @@ class _RankingScreenState extends State<RankingScreen> {
           }
           applyModalSort(setModal);
         },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: active ? Colors.white : Colors.white54,
-                fontWeight: FontWeight.w600,
-                fontSize: 10,
+        child: SizedBox(
+          width: width,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white54,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 10,
+                ),
               ),
-            ),
-            Icon(
-              active
-                  ? (modalDesc
+              Icon(
+                active
+                    ? (modalDesc
                         ? Icons.arrow_downward_rounded
                         : Icons.arrow_upward_rounded)
-                  : Icons.unfold_more_rounded,
-              size: 10,
-              color: active ? Colors.white70 : Colors.white24,
-            ),
-          ],
+                    : Icons.unfold_more_rounded,
+                size: 10,
+                color: active ? Colors.white70 : Colors.white24,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -486,15 +505,15 @@ class _RankingScreenState extends State<RankingScreen> {
                               ),
                             ),
                           ),
-                          colHeader('Nota', 'nota', setModal),
+                          colHeader('Nota', 'nota', 40, setModal),
                           const SizedBox(width: 8),
-                          colHeader('G', 'goals', setModal),
-                          const SizedBox(width: 6),
-                          colHeader('A', 'assists', setModal),
-                          const SizedBox(width: 6),
-                          colHeader('G+A', 'ga', setModal),
+                          colHeader('G+A', 'ga', 40, setModal),
                           const SizedBox(width: 8),
-                          colHeader('V', 'wins', setModal),
+                          colHeader('G', 'goals', 22, setModal),
+                          const SizedBox(width: 2),
+                          colHeader('A', 'assists', 22, setModal),
+                          const SizedBox(width: 6),
+                          colHeader('V', 'wins', 22, setModal),
                           const SizedBox(width: 4),
                           const Text(
                             '/',
@@ -504,7 +523,7 @@ class _RankingScreenState extends State<RankingScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          colHeader('E', 'draws', setModal),
+                          colHeader('E', 'draws', 22, setModal),
                           const SizedBox(width: 4),
                           const Text(
                             '/',
@@ -514,9 +533,9 @@ class _RankingScreenState extends State<RankingScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          colHeader('D', 'losses', setModal),
+                          colHeader('D', 'losses', 22, setModal),
                           const SizedBox(width: 8),
-                          colHeader('Jgs', 'games', setModal),
+                          colHeader('Jgs', 'games', 28, setModal),
                         ],
                       ),
                     ),
@@ -579,7 +598,7 @@ class _RankingScreenState extends State<RankingScreen> {
                                   ),
                                   // Nota
                                   SizedBox(
-                                    width: 34,
+                                    width: 40,
                                     child: Text(
                                       nota.toStringAsFixed(1),
                                       style: TextStyle(
@@ -587,13 +606,27 @@ class _RankingScreenState extends State<RankingScreen> {
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
-                                      textAlign: TextAlign.right,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // G+A
+                                  SizedBox(
+                                    width: 40,
+                                    child: Text(
+                                      '${player['ga']}',
+                                      style: const TextStyle(
+                                        color: AppColors.highlightGreen,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   // G
                                   SizedBox(
-                                    width: 20,
+                                    width: 22,
                                     child: Text(
                                       '${player['goals']}',
                                       style: const TextStyle(
@@ -607,7 +640,7 @@ class _RankingScreenState extends State<RankingScreen> {
                                   const SizedBox(width: 2),
                                   // A
                                   SizedBox(
-                                    width: 20,
+                                    width: 22,
                                     child: Text(
                                       '${player['assists']}',
                                       style: const TextStyle(
@@ -618,27 +651,35 @@ class _RankingScreenState extends State<RankingScreen> {
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
-                                  const SizedBox(width: 2),
-                                  // G+A
+                                  const SizedBox(width: 6),
+                                  // V/E/D
                                   SizedBox(
-                                    width: 28,
+                                    width: 22,
                                     child: Text(
-                                      '${player['ga']}',
+                                      '${player['wins']}',
                                       style: const TextStyle(
-                                        color: AppColors.highlightGreen,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.greenAccent,
                                         fontSize: 11,
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  // V/E/D
                                   Text(
-                                    '${player['wins']}',
+                                    '/',
                                     style: const TextStyle(
-                                      color: Colors.greenAccent,
+                                      color: Colors.white24,
                                       fontSize: 11,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 22,
+                                    child: Text(
+                                      '${player['draws']}',
+                                      style: const TextStyle(
+                                        color: Colors.orangeAccent,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   Text(
@@ -648,31 +689,21 @@ class _RankingScreenState extends State<RankingScreen> {
                                       fontSize: 11,
                                     ),
                                   ),
-                                  Text(
-                                    '${player['draws']}',
-                                    style: const TextStyle(
-                                      color: Colors.orangeAccent,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  Text(
-                                    '/',
-                                    style: const TextStyle(
-                                      color: Colors.white24,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${player['losses']}',
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontSize: 11,
+                                  SizedBox(
+                                    width: 22,
+                                    child: Text(
+                                      '${player['losses']}',
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   // Jogos
                                   SizedBox(
-                                    width: 24,
+                                    width: 28,
                                     child: Text(
                                       '${player['games']}',
                                       style: const TextStyle(
@@ -941,9 +972,9 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  // ─── 4º e 5º lugar ─────────────────────────────────────────
+  // ─── 4º ao 8º lugar ─────────────────────────
 
-  Widget _buildTop4And5(List<Map<String, dynamic>> items) {
+  Widget _buildTop4To8(List<Map<String, dynamic>> items) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       children: List.generate(items.length, (i) {
@@ -1199,17 +1230,17 @@ class _RankingScreenState extends State<RankingScreen> {
                       ),
                       const SizedBox(height: 8),
 
-                      // ── 4º e 5º lugar ─────────────────────────
+                      // ── 4º ao 8º lugar ─────────────────────────
                       if (leaderboard.length > 3)
-                        _buildTop4And5(
+                        _buildTop4To8(
                           leaderboard.sublist(
                             3,
-                            leaderboard.length.clamp(3, 5),
+                            leaderboard.length.clamp(3, 8),
                           ),
                         ),
 
                       // ── Botão "Ver todos" ──────────────────────
-                      if (leaderboard.length > 5) ...[
+                      if (leaderboard.length > 8) ...[
                         const SizedBox(height: 12),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
