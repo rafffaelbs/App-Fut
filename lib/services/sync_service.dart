@@ -16,6 +16,7 @@ class SyncService {
   Future<void> exportDataToFirebase(String syncCode) async {
     final prefs = await SharedPreferences.getInstance();
     await _normalizeUuidData(prefs);
+    await _normalizeSessionIds(prefs);
     final keys = prefs.getKeys();
     
     Map<String, dynamic> data = {};
@@ -296,6 +297,54 @@ class SyncService {
         }
       }
       await prefs.setString(key, jsonEncode(history));
+    }
+  }
+
+  Future<void> _normalizeSessionIds(SharedPreferences prefs) async {
+    final sessionKeys =
+        prefs.getKeys().where((k) => k.startsWith('sessions_')).toList();
+
+    for (final key in sessionKeys) {
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty) continue;
+
+      final List<dynamic> sessions = jsonDecode(raw);
+      bool changed = false;
+
+      for (int i = 0; i < sessions.length; i++) {
+        final session = sessions[i];
+        String oldId = session['id'].toString();
+
+        // Regex para detectar o formato antigo: session_ seguido de muitos dígitos (timestamp)
+        final oldFormat = RegExp(r'^session_\d{10,13}$');
+        if (oldFormat.hasMatch(oldId)) {
+          String name = (session['title'] ?? 'pelada')
+              .toString()
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]'), '_');
+          String random = const Uuid().v4().substring(0, 4);
+          String newId = 'session_${name}_$random';
+
+          // Renomeia a chave do histórico de partidas se ela existir
+          final oldHistoryKey = 'match_history_$oldId';
+          final newHistoryKey = 'match_history_$newId';
+
+          if (prefs.containsKey(oldHistoryKey)) {
+            final historyData = prefs.getString(oldHistoryKey);
+            if (historyData != null) {
+              await prefs.setString(newHistoryKey, historyData);
+              await prefs.remove(oldHistoryKey);
+            }
+          }
+
+          session['id'] = newId;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await prefs.setString(key, jsonEncode(sessions));
+      }
     }
   }
 }

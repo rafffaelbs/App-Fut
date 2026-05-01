@@ -36,12 +36,12 @@ class _RankingScreenState extends State<RankingScreen> {
 
   // Opções do dropdown de ordenação do pódio
   static const List<Map<String, String>> _sortOptions = [
-    {'value': 'ga',      'label': 'G+A'},
-    {'value': 'nota',    'label': 'Nota'},
-    {'value': 'goals',   'label': 'Gols'},
+    {'value': 'ga', 'label': 'G+A'},
+    {'value': 'nota', 'label': 'Nota'},
+    {'value': 'goals', 'label': 'Gols'},
     {'value': 'assists', 'label': 'Assistências'},
-    {'value': 'wins',    'label': 'Vitórias'},
-    {'value': 'games',   'label': 'Jogos'},
+    {'value': 'wins', 'label': 'Vitórias'},
+    {'value': 'games', 'label': 'Jogos'},
   ];
 
   @override
@@ -78,35 +78,59 @@ class _RankingScreenState extends State<RankingScreen> {
     final Map<String, Map<String, dynamic>> stats = {};
 
     for (final match in history) {
-      final int scoreRed   = match['scoreRed']   ?? 0;
+      final int scoreRed = match['scoreRed'] ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
-      final int redStatus   = scoreRed > scoreWhite  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
-      final int whiteStatus = scoreWhite > scoreRed  ? 1 : (scoreRed == scoreWhite  ? 0 : -1);
+      final int redStatus = scoreRed > scoreWhite
+          ? 1
+          : (scoreRed == scoreWhite ? 0 : -1);
+      final int whiteStatus = scoreWhite > scoreRed
+          ? 1
+          : (scoreRed == scoreWhite ? 0 : -1);
 
       final Map<String, Map<String, int>> matchPlayerEvents = {};
       if (match['events'] != null) {
         for (final ev in match['events']) {
-          final String pid   = eventPlayerId(ev, 'player');
+          final String pid = eventPlayerId(ev, 'player');
           final String astId = eventPlayerId(ev, 'assist');
-          final String type  = ev['type'];
+          final String type = ev['type'];
 
           if (pid.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(pid, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal')        matchPlayerEvents[pid]!['g']  = matchPlayerEvents[pid]!['g']!  + 1;
-            if (type == 'own_goal')    matchPlayerEvents[pid]!['og'] = matchPlayerEvents[pid]!['og']! + 1;
-            if (type == 'yellow_card') matchPlayerEvents[pid]!['yc'] = matchPlayerEvents[pid]!['yc']! + 1;
-            if (type == 'red_card')    matchPlayerEvents[pid]!['rc'] = matchPlayerEvents[pid]!['rc']! + 1;
+            matchPlayerEvents.putIfAbsent(
+              pid,
+              () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+            );
+            if (type == 'goal')
+              matchPlayerEvents[pid]!['g'] = matchPlayerEvents[pid]!['g']! + 1;
+            if (type == 'own_goal')
+              matchPlayerEvents[pid]!['og'] =
+                  matchPlayerEvents[pid]!['og']! + 1;
+            if (type == 'yellow_card')
+              matchPlayerEvents[pid]!['yc'] =
+                  matchPlayerEvents[pid]!['yc']! + 1;
+            if (type == 'red_card')
+              matchPlayerEvents[pid]!['rc'] =
+                  matchPlayerEvents[pid]!['rc']! + 1;
           }
           if (astId.isNotEmpty) {
-            matchPlayerEvents.putIfAbsent(astId, () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0});
-            if (type == 'goal') matchPlayerEvents[astId]!['a'] = matchPlayerEvents[astId]!['a']! + 1;
+            matchPlayerEvents.putIfAbsent(
+              astId,
+              () => {'g': 0, 'a': 0, 'og': 0, 'yc': 0, 'rc': 0},
+            );
+            if (type == 'goal')
+              matchPlayerEvents[astId]!['a'] =
+                  matchPlayerEvents[astId]!['a']! + 1;
           }
         }
       }
 
       final Set<String> processed = {};
 
-      void processPlayer(dynamic playerObj, int status, int scored, int conceded) {
+      void processPlayer(
+        dynamic playerObj,
+        int status,
+        int scored,
+        int conceded,
+      ) {
         if (playerObj == null) return;
         final String playerId = playerIdFromObject(playerObj);
         if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -114,68 +138,82 @@ class _RankingScreenState extends State<RankingScreen> {
 
         final String playerName = (playerObj['name'] ?? '').toString();
 
-        stats.putIfAbsent(playerId, () => {
-          'id': playerId,
-          'name': playerName,
-          'goals': 0,
-          'assists': 0,
-          'games': 0,
-          'wins': 0,
-          'draws': 0,
-          'losses': 0,
-          'ratings': <double>[],
-        });
+        stats.putIfAbsent(
+          playerId,
+          () => {
+            'id': playerId,
+            'name': playerName,
+            'goals': 0,
+            'assists': 0,
+            'games': 0,
+            'wins': 0,
+            'draws': 0,
+            'losses': 0,
+            'ratings': <double>[],
+          },
+        );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
         stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
 
-        if (status == 1)       stats[playerId]!['wins']   = (stats[playerId]!['wins']   as int) + 1;
-        else if (status == -1) stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else                   stats[playerId]!['draws']  = (stats[playerId]!['draws']  as int) + 1;
+        if (status == 1)
+          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+        else if (status == -1)
+          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+        else
+          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
 
-        final int g  = matchPlayerEvents[playerId]?['g']  ?? 0;
-        final int a  = matchPlayerEvents[playerId]?['a']  ?? 0;
+        final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
+        final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
         final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
         final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
         final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-        stats[playerId]!['goals']   = (stats[playerId]!['goals']   as int) + g;
+        stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
         final double matchRating = calculateMatchRating(
-          status: status, goals: g, assists: a,
-          ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
+          status: status,
+          goals: g,
+          assists: a,
+          ownGoals: og,
+          teamGoals: scored,
+          conceded: conceded,
+          yellow: yc,
+          red: rc,
           teamWinStreak: 0,
         );
         (stats[playerId]!['ratings'] as List<double>).add(matchRating);
       }
 
       if (match['players']['red'] != null) {
-        for (final p in match['players']['red']) processPlayer(p, redStatus, scoreRed, scoreWhite);
+        for (final p in match['players']['red'])
+          processPlayer(p, redStatus, scoreRed, scoreWhite);
       }
       if (match['players']['white'] != null) {
-        for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreWhite, scoreRed);
+        for (final p in match['players']['white'])
+          processPlayer(p, whiteStatus, scoreWhite, scoreRed);
       }
     }
 
     final List<Map<String, dynamic>> sortedList = [];
     stats.forEach((id, data) {
-      final int games   = data['games'] as int;
-      final int g       = data['goals'] as int;
-      final int a       = data['assists'] as int;
+      final int games = data['games'] as int;
+      final int g = data['goals'] as int;
+      final int a = data['assists'] as int;
 
       if (games > 0) {
         sortedList.add({
-          'id':      id,
-          'name':    data['name'],
-          'icon':    iconMap[id],          // ← ícone do banco de jogadores
-          'goals':   g,
+          'id': id,
+          'name': data['name'],
+          'icon': iconMap[id], // ← ícone do banco de jogadores
+          'goals': g,
           'assists': a,
-          'ga':      g + a,
-          'games':   games,
-          'wins':    data['wins'],
-          'draws':   data['draws'],
-          'losses':  data['losses'],
+          'ga': g + a,
+          'games': games,
+          'wins': data['wins'],
+          'draws': data['draws'],
+          'losses': data['losses'],
           // Ranking da pelada usa média simples (useBayesian: false)
           'nota': calculateFinalRating(
             ratings: data['ratings'] as List<double>,
@@ -188,7 +226,7 @@ class _RankingScreenState extends State<RankingScreen> {
     _applySorting(sortedList);
     setState(() {
       leaderboard = sortedList;
-      isLoading   = false;
+      isLoading = false;
     });
   }
 
@@ -197,18 +235,34 @@ class _RankingScreenState extends State<RankingScreen> {
       int cmp = 0;
 
       switch (_sortColumn) {
-        case 'ga':      cmp = (a['ga']      as num).compareTo(b['ga']      as num); break;
-        case 'goals':   cmp = (a['goals']   as num).compareTo(b['goals']   as num); break;
-        case 'nota':    cmp = (a['nota']    as num).compareTo(b['nota']    as num); break;
-        case 'assists': cmp = (a['assists'] as num).compareTo(b['assists'] as num); break;
-        case 'wins':    cmp = (a['wins']    as num).compareTo(b['wins']    as num); break;
-        case 'games':   cmp = (a['games']   as num).compareTo(b['games']   as num); break;
-        default:        cmp = (a[_sortColumn] as num).compareTo(b[_sortColumn] as num);
+        case 'ga':
+          cmp = (a['ga'] as num).compareTo(b['ga'] as num);
+          break;
+        case 'goals':
+          cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+          break;
+        case 'nota':
+          cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+          break;
+        case 'assists':
+          cmp = (a['assists'] as num).compareTo(b['assists'] as num);
+          break;
+        case 'wins':
+          cmp = (a['wins'] as num).compareTo(b['wins'] as num);
+          break;
+        case 'games':
+          cmp = (a['games'] as num).compareTo(b['games'] as num);
+          break;
+        default:
+          cmp = (a[_sortColumn] as num).compareTo(b[_sortColumn] as num);
       }
 
-      if (cmp == 0 && _sortColumn != 'ga')    cmp = (a['ga']    as num).compareTo(b['ga']    as num);
-      if (cmp == 0 && _sortColumn != 'goals') cmp = (a['goals'] as num).compareTo(b['goals'] as num);
-      if (cmp == 0 && _sortColumn != 'nota')  cmp = (a['nota']  as num).compareTo(b['nota']  as num);
+      if (cmp == 0 && _sortColumn != 'ga')
+        cmp = (a['ga'] as num).compareTo(b['ga'] as num);
+      if (cmp == 0 && _sortColumn != 'goals')
+        cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+      if (cmp == 0 && _sortColumn != 'nota')
+        cmp = (a['nota'] as num).compareTo(b['nota'] as num);
 
       return _sortDescending ? -cmp : cmp;
     });
@@ -217,7 +271,7 @@ class _RankingScreenState extends State<RankingScreen> {
   void _onSortChanged(String? newColumn) {
     if (newColumn == null) return;
     setState(() {
-      _sortColumn     = newColumn;
+      _sortColumn = newColumn;
       _sortDescending = true;
       final copy = List<Map<String, dynamic>>.from(leaderboard);
       _applySorting(copy);
@@ -230,7 +284,7 @@ class _RankingScreenState extends State<RankingScreen> {
       if (_sortColumn == column) {
         _sortDescending = !_sortDescending;
       } else {
-        _sortColumn     = column;
+        _sortColumn = column;
         _sortDescending = true;
       }
       final copy = List<Map<String, dynamic>>.from(leaderboard);
@@ -251,17 +305,21 @@ class _RankingScreenState extends State<RankingScreen> {
       final image = await _screenshotController.capture(pixelRatio: 2.5);
       if (image == null) return;
 
-      final dir  = await getTemporaryDirectory();
-      final file = await File('${dir.path}/ranking_pelada.png').writeAsBytes(image);
+      final dir = await getTemporaryDirectory();
+      final file = await File(
+        '${dir.path}/ranking_pelada.png',
+      ).writeAsBytes(image);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Ranking da Pelada 🏆⚽',
-      );
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Ranking da Pelada 🏆⚽');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao compartilhar: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Erro ao compartilhar: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     } finally {
@@ -276,24 +334,42 @@ class _RankingScreenState extends State<RankingScreen> {
   void _showFullRankingModal() {
     // Cópia independente com sua própria ordenação
     String modalSort = _sortColumn;
-    bool modalDesc   = _sortDescending;
-    List<Map<String, dynamic>> modalList = List<Map<String, dynamic>>.from(leaderboard);
+    bool modalDesc = _sortDescending;
+    List<Map<String, dynamic>> modalList = List<Map<String, dynamic>>.from(
+      leaderboard,
+    );
 
     void applyModalSort(StateSetter setModal) {
       modalList.sort((a, b) {
         int cmp = 0;
         switch (modalSort) {
-          case 'ga':      cmp = (a['ga']      as num).compareTo(b['ga']      as num); break;
-          case 'goals':   cmp = (a['goals']   as num).compareTo(b['goals']   as num); break;
-          case 'nota':    cmp = (a['nota']    as num).compareTo(b['nota']    as num); break;
-          case 'assists': cmp = (a['assists'] as num).compareTo(b['assists'] as num); break;
-          case 'wins':    cmp = (a['wins']    as num).compareTo(b['wins']    as num); break;
-          case 'games':   cmp = (a['games']   as num).compareTo(b['games']   as num); break;
-          default:        cmp = (a[modalSort] as num).compareTo(b[modalSort] as num);
+          case 'ga':
+            cmp = (a['ga'] as num).compareTo(b['ga'] as num);
+            break;
+          case 'goals':
+            cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+            break;
+          case 'nota':
+            cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+            break;
+          case 'assists':
+            cmp = (a['assists'] as num).compareTo(b['assists'] as num);
+            break;
+          case 'wins':
+            cmp = (a['wins'] as num).compareTo(b['wins'] as num);
+            break;
+          case 'games':
+            cmp = (a['games'] as num).compareTo(b['games'] as num);
+            break;
+          default:
+            cmp = (a[modalSort] as num).compareTo(b[modalSort] as num);
         }
-        if (cmp == 0 && modalSort != 'ga')    cmp = (a['ga']    as num).compareTo(b['ga']    as num);
-        if (cmp == 0 && modalSort != 'goals') cmp = (a['goals'] as num).compareTo(b['goals'] as num);
-        if (cmp == 0 && modalSort != 'nota')  cmp = (a['nota']  as num).compareTo(b['nota']  as num);
+        if (cmp == 0 && modalSort != 'ga')
+          cmp = (a['ga'] as num).compareTo(b['ga'] as num);
+        if (cmp == 0 && modalSort != 'goals')
+          cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+        if (cmp == 0 && modalSort != 'nota')
+          cmp = (a['nota'] as num).compareTo(b['nota'] as num);
         return modalDesc ? -cmp : cmp;
       });
       setModal(() {});
@@ -314,10 +390,22 @@ class _RankingScreenState extends State<RankingScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: TextStyle(color: active ? Colors.white : Colors.white54, fontWeight: FontWeight.w600, fontSize: 10)),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? Colors.white : Colors.white54,
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+              ),
+            ),
             Icon(
-              active ? (modalDesc ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded) : Icons.unfold_more_rounded,
-              size: 10, color: active ? Colors.white70 : Colors.white24,
+              active
+                  ? (modalDesc
+                        ? Icons.arrow_downward_rounded
+                        : Icons.arrow_upward_rounded)
+                  : Icons.unfold_more_rounded,
+              size: 10,
+              color: active ? Colors.white70 : Colors.white24,
             ),
           ],
         ),
@@ -328,7 +416,9 @@ class _RankingScreenState extends State<RankingScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.deepBlue,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModal) {
@@ -342,39 +432,91 @@ class _RankingScreenState extends State<RankingScreen> {
                   children: [
                     // Handle + título
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.headerBlue,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
                       ),
                       child: Column(
                         children: [
-                          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                          Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                           const SizedBox(height: 10),
-                          const Text('Ranking Completo', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                          const Text(
+                            'Ranking Completo',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     // Cabeçalho das colunas
                     Container(
                       color: AppColors.headerBlue.withValues(alpha: 0.7),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       child: Row(
                         children: [
-                          const SizedBox(width: 28),  // posição
-                          const SizedBox(width: 32),  // avatar
+                          const SizedBox(width: 28), // posição
+                          const SizedBox(width: 32), // avatar
                           const SizedBox(width: 8),
-                          Expanded(child: Text('Jogador', style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600))),
-                          colHeader('Nota', 'nota', setModal), const SizedBox(width: 8),
-                          colHeader('G',    'goals', setModal), const SizedBox(width: 6),
-                          colHeader('A',    'assists', setModal), const SizedBox(width: 6),
-                          colHeader('G+A',  'ga', setModal), const SizedBox(width: 8),
-                          colHeader('V',    'wins', setModal), const SizedBox(width: 4),
-                          const Text('/', style: TextStyle(color: Colors.white12, fontSize: 10)),  const SizedBox(width: 4),
-                          colHeader('E',    'draws', setModal), const SizedBox(width: 4),
-                          const Text('/', style: TextStyle(color: Colors.white12, fontSize: 10)),  const SizedBox(width: 4),
-                          colHeader('D',    'losses', setModal), const SizedBox(width: 8),
-                          colHeader('Jgs',  'games', setModal),
+                          Expanded(
+                            child: Text(
+                              'Jogador',
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          colHeader('Nota', 'nota', setModal),
+                          const SizedBox(width: 8),
+                          colHeader('G', 'goals', setModal),
+                          const SizedBox(width: 6),
+                          colHeader('A', 'assists', setModal),
+                          const SizedBox(width: 6),
+                          colHeader('G+A', 'ga', setModal),
+                          const SizedBox(width: 8),
+                          colHeader('V', 'wins', setModal),
+                          const SizedBox(width: 4),
+                          const Text(
+                            '/',
+                            style: TextStyle(
+                              color: Colors.white12,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          colHeader('E', 'draws', setModal),
+                          const SizedBox(width: 4),
+                          const Text(
+                            '/',
+                            style: TextStyle(
+                              color: Colors.white12,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          colHeader('D', 'losses', setModal),
+                          const SizedBox(width: 8),
+                          colHeader('Jgs', 'games', setModal),
                         ],
                       ),
                     ),
@@ -401,42 +543,145 @@ class _RankingScreenState extends State<RankingScreen> {
                               ),
                             ),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
                               decoration: BoxDecoration(
-                                color: i.isOdd ? Colors.white.withValues(alpha: 0.03) : Colors.transparent,
+                                color: i.isOdd
+                                    ? Colors.white.withValues(alpha: 0.03)
+                                    : Colors.transparent,
                               ),
                               child: Row(
                                 children: [
                                   SizedBox(
                                     width: 28,
-                                    child: Text('${i + 1}', style: const TextStyle(color: Colors.white30, fontSize: 12, fontWeight: FontWeight.w600)),
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white30,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
                                   _playerAvatar(player, radius: 16),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(player['name'], style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis),
+                                    child: Text(
+                                      player['name'],
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                   // Nota
-                                  SizedBox(width: 34, child: Text(nota.toStringAsFixed(1), style: TextStyle(color: getRatingColor(nota), fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.right)),
+                                  SizedBox(
+                                    width: 34,
+                                    child: Text(
+                                      nota.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        color: getRatingColor(nota),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
                                   const SizedBox(width: 8),
                                   // G
-                                  SizedBox(width: 20, child: Text('${player['goals']}', style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.center)),
+                                  SizedBox(
+                                    width: 20,
+                                    child: Text(
+                                      '${player['goals']}',
+                                      style: const TextStyle(
+                                        color: Colors.greenAccent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                   const SizedBox(width: 2),
                                   // A
-                                  SizedBox(width: 20, child: Text('${player['assists']}', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.center)),
+                                  SizedBox(
+                                    width: 20,
+                                    child: Text(
+                                      '${player['assists']}',
+                                      style: const TextStyle(
+                                        color: Colors.lightBlueAccent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                   const SizedBox(width: 2),
                                   // G+A
-                                  SizedBox(width: 28, child: Text('${player['ga']}', style: const TextStyle(color: AppColors.highlightGreen, fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                                  SizedBox(
+                                    width: 28,
+                                    child: Text(
+                                      '${player['ga']}',
+                                      style: const TextStyle(
+                                        color: AppColors.highlightGreen,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                   const SizedBox(width: 6),
                                   // V/E/D
-                                  Text('${player['wins']}',   style: const TextStyle(color: Colors.greenAccent,  fontSize: 11)),
-                                  Text('/',                   style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-                                  Text('${player['draws']}',  style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
-                                  Text('/',                   style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-                                  Text('${player['losses']}', style: const TextStyle(color: Colors.redAccent,    fontSize: 11)),
+                                  Text(
+                                    '${player['wins']}',
+                                    style: const TextStyle(
+                                      color: Colors.greenAccent,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Text(
+                                    '/',
+                                    style: const TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${player['draws']}',
+                                    style: const TextStyle(
+                                      color: Colors.orangeAccent,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Text(
+                                    '/',
+                                    style: const TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${player['losses']}',
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 11,
+                                    ),
+                                  ),
                                   const SizedBox(width: 8),
                                   // Jogos
-                                  SizedBox(width: 24, child: Text('${player['games']}', style: const TextStyle(color: Colors.white38, fontSize: 11), textAlign: TextAlign.right)),
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      '${player['games']}',
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -465,10 +710,22 @@ class _RankingScreenState extends State<RankingScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(color: active ? Colors.white : color, fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 0.4)),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
           const SizedBox(width: 2),
           Icon(
-            active ? (_sortDescending ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded) : Icons.unfold_more_rounded,
+            active
+                ? (_sortDescending
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded)
+                : Icons.unfold_more_rounded,
             size: 11,
             color: active ? Colors.white54 : color.withValues(alpha: 0.35),
           ),
@@ -482,11 +739,19 @@ class _RankingScreenState extends State<RankingScreen> {
     return CircleAvatar(
       radius: radius,
       backgroundColor: AppColors.headerBlue,
-      backgroundImage: icon != null && icon.isNotEmpty ? AssetImage(icon) : null,
+      backgroundImage: icon != null && icon.isNotEmpty
+          ? AssetImage(icon)
+          : null,
       child: (icon == null || icon.isEmpty)
           ? Text(
-              (p['name'] as String).isNotEmpty ? (p['name'] as String)[0].toUpperCase() : '?',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: radius * 0.7),
+              (p['name'] as String).isNotEmpty
+                  ? (p['name'] as String)[0].toUpperCase()
+                  : '?',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: radius * 0.7,
+              ),
             )
           : null,
     );
@@ -502,26 +767,31 @@ class _RankingScreenState extends State<RankingScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Expanded(child: _podiumSlot(p2, 2, 80,  Colors.grey[300]!)),
+        Expanded(child: _podiumSlot(p2, 2, 80, Colors.grey[300]!)),
         Expanded(child: _podiumSlot(p1, 1, 110, Colors.amber)),
-        Expanded(child: _podiumSlot(p3, 3, 60,  Colors.brown[300]!)),
+        Expanded(child: _podiumSlot(p3, 3, 60, Colors.brown[300]!)),
       ],
     );
   }
 
-  Widget _podiumSlot(Map<String, dynamic>? player, int position, double barHeight, Color accentColor) {
+  Widget _podiumSlot(
+    Map<String, dynamic>? player,
+    int position,
+    double barHeight,
+    Color accentColor,
+  ) {
     if (player == null) return const SizedBox.shrink();
 
-    final double nota   = player['nota']    as double;
-    final int    wins   = player['wins']    as int;
-    final int    draws  = player['draws']   as int;
-    final int    losses = player['losses']  as int;
-    final int    games  = player['games']   as int;
-    final int    goals  = player['goals']   as int;
-    final int    assists = player['assists'] as int;
-    final int    ga     = goals + assists;
+    final double nota = player['nota'] as double;
+    final int wins = player['wins'] as int;
+    final int draws = player['draws'] as int;
+    final int losses = player['losses'] as int;
+    final int games = player['games'] as int;
+    final int goals = player['goals'] as int;
+    final int assists = player['assists'] as int;
+    final int ga = goals + assists;
 
-    final String medal  = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
+    final String medal = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -543,7 +813,11 @@ class _RankingScreenState extends State<RankingScreen> {
           // Nome
           Text(
             player['name'],
-            style: TextStyle(color: Colors.white, fontSize: position == 1 ? 13 : 11, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: position == 1 ? 13 : 11,
+              fontWeight: FontWeight.bold,
+            ),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -552,7 +826,11 @@ class _RankingScreenState extends State<RankingScreen> {
           // Nota
           Text(
             nota.toStringAsFixed(1),
-            style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, fontSize: position == 1 ? 16 : 14),
+            style: TextStyle(
+              color: accentColor,
+              fontWeight: FontWeight.bold,
+              fontSize: position == 1 ? 16 : 14,
+            ),
           ),
           const SizedBox(height: 4),
           // G+A com breakdown Gols/Assists
@@ -561,16 +839,38 @@ class _RankingScreenState extends State<RankingScreen> {
             children: [
               // Gols
               Text('⚽', style: TextStyle(fontSize: position == 1 ? 11 : 10)),
-              Text('$goals', style: TextStyle(color: Colors.greenAccent, fontSize: position == 1 ? 12 : 10, fontWeight: FontWeight.bold)),
+              Text(
+                '$goals',
+                style: TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: position == 1 ? 12 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(width: 4),
               // Assistências
-              Icon(Icons.handshake, color: Colors.lightBlueAccent, size: position == 1 ? 12 : 10),
-              Text('$assists', style: TextStyle(color: Colors.lightBlueAccent, fontSize: position == 1 ? 12 : 10, fontWeight: FontWeight.bold)),
+              Icon(
+                Icons.handshake,
+                color: Colors.lightBlueAccent,
+                size: position == 1 ? 12 : 10,
+              ),
+              Text(
+                '$assists',
+                style: TextStyle(
+                  color: Colors.lightBlueAccent,
+                  fontSize: position == 1 ? 12 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(width: 4),
               // G+A total
               Text(
                 'G+A $ga',
-                style: TextStyle(color: accentColor.withValues(alpha: 0.85), fontSize: position == 1 ? 11 : 9, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: accentColor.withValues(alpha: 0.85),
+                  fontSize: position == 1 ? 11 : 9,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -579,24 +879,62 @@ class _RankingScreenState extends State<RankingScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('$wins',   style: const TextStyle(color: Colors.greenAccent,  fontSize: 11, fontWeight: FontWeight.bold)),
-              Text('/',       style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-              Text('$draws',  style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-              Text('/',       style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-              Text('$losses', style: const TextStyle(color: Colors.redAccent,    fontSize: 11, fontWeight: FontWeight.bold)),
+              Text(
+                '$wins',
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$draws',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$losses',
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
-          Text('$games jogos', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          Text(
+            '$games jogos',
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
+          ),
           const SizedBox(height: 6),
           // Degrau do pódio
           Container(
             height: barHeight,
             decoration: BoxDecoration(
               color: accentColor.withValues(alpha: 0.2),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), topRight: Radius.circular(6)),
-              border: Border.all(color: accentColor.withValues(alpha: 0.5), width: 1.5),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(6),
+                topRight: Radius.circular(6),
+              ),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.5),
+                width: 1.5,
+              ),
             ),
-            child: Center(child: Text(medal, style: const TextStyle(fontSize: 22))),
+            child: Center(
+              child: Text(medal, style: const TextStyle(fontSize: 22)),
+            ),
           ),
         ],
       ),
@@ -610,11 +948,11 @@ class _RankingScreenState extends State<RankingScreen> {
     return Column(
       children: List.generate(items.length, (i) {
         final player = items[i];
-        final int    pos  = i + 4;
-        final double nota = player['nota']    as double;
-        final int    goals   = player['goals']   as int;
-        final int    assists = player['assists'] as int;
-        final int    ga      = goals + assists;
+        final int pos = i + 4;
+        final double nota = player['nota'] as double;
+        final int goals = player['goals'] as int;
+        final int assists = player['assists'] as int;
+        final int ga = goals + assists;
         return GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -639,35 +977,101 @@ class _RankingScreenState extends State<RankingScreen> {
               children: [
                 SizedBox(
                   width: 28,
-                  child: Text('$pos', style: const TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.w700)),
+                  child: Text(
+                    '$pos',
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 _playerAvatar(player, radius: 18),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(player['name'], style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                  child: Text(
+                    player['name'],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
                 // Nota
-                Text(nota.toStringAsFixed(1), style: TextStyle(color: getRatingColor(nota), fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(
+                  nota.toStringAsFixed(1),
+                  style: TextStyle(
+                    color: getRatingColor(nota),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 // Gols + Assists + GA
                 Row(
                   children: [
                     const Text('⚽', style: TextStyle(fontSize: 11)),
-                    Text('$goals', style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      '$goals',
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.handshake, color: Colors.lightBlueAccent, size: 12),
-                    Text('$assists', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const Icon(
+                      Icons.handshake,
+                      color: Colors.lightBlueAccent,
+                      size: 12,
+                    ),
+                    Text(
+                      '$assists',
+                      style: const TextStyle(
+                        color: Colors.lightBlueAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(width: 4),
-                    Text('($ga)', style: const TextStyle(color: AppColors.highlightGreen, fontSize: 11)),
+                    Text(
+                      '($ga)',
+                      style: const TextStyle(
+                        color: AppColors.highlightGreen,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(width: 8),
                 // V/E/D
-                Text('${player['wins']}',   style: const TextStyle(color: Colors.greenAccent,  fontSize: 11)),
-                Text('/',                   style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-                Text('${player['draws']}',  style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
-                Text('/',                   style: const TextStyle(color: Colors.white24,       fontSize: 11)),
-                Text('${player['losses']}', style: const TextStyle(color: Colors.redAccent,    fontSize: 11)),
+                Text(
+                  '${player['wins']}',
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 11,
+                  ),
+                ),
+                Text(
+                  '/',
+                  style: const TextStyle(color: Colors.white24, fontSize: 11),
+                ),
+                Text(
+                  '${player['draws']}',
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 11,
+                  ),
+                ),
+                Text(
+                  '/',
+                  style: const TextStyle(color: Colors.white24, fontSize: 11),
+                ),
+                Text(
+                  '${player['losses']}',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                ),
               ],
             ),
           ),
@@ -687,7 +1091,10 @@ class _RankingScreenState extends State<RankingScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.headerBlue,
         iconTheme: const IconThemeData(color: AppColors.textWhite),
-        title: const Text('Ranking da Pelada', style: TextStyle(color: AppColors.textWhite)),
+        title: const Text(
+          'Ranking da Pelada',
+          style: TextStyle(color: AppColors.textWhite),
+        ),
         centerTitle: true,
         elevation: 0,
         actions: [
@@ -695,10 +1102,20 @@ class _RankingScreenState extends State<RankingScreen> {
             _isSharingScreenshot
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.share_rounded, color: AppColors.textWhite),
+                    icon: const Icon(
+                      Icons.share_rounded,
+                      color: AppColors.textWhite,
+                    ),
                     tooltip: 'Compartilhar ranking',
                     onPressed: _shareRanking,
                   ),
@@ -707,87 +1124,125 @@ class _RankingScreenState extends State<RankingScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : leaderboard.isEmpty
-              ? const Center(child: Text('Sem jogadores registrados.', style: TextStyle(color: Colors.white54)))
-              : Screenshot(
-                  controller: _screenshotController,
-                  child: Container(
-                    color: AppColors.deepBlue,
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // ── Cabeçalho do pódio com ordenação ──────
-                          Container(
-                            color: AppColors.headerBlue.withValues(alpha: 0.6),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            child: Row(
-                              children: [
-                                const Text('Ordenar por', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _sortColumn,
-                                      dropdownColor: AppColors.headerBlue,
-                                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                                      isDense: true,
-                                      items: _sortOptions.map((opt) {
-                                        return DropdownMenuItem<String>(
-                                          value: opt['value'],
-                                          child: Text(opt['label']!),
-                                        );
-                                      }).toList(),
-                                      onChanged: _onSortChanged,
-                                    ),
+          ? const Center(
+              child: Text(
+                'Sem jogadores registrados.',
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          : Screenshot(
+              controller: _screenshotController,
+              child: Container(
+                color: AppColors.deepBlue,
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── Cabeçalho do pódio com ordenação ──────
+                      Container(
+                        color: AppColors.headerBlue.withValues(alpha: 0.6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Ordenar por',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _sortColumn,
+                                  dropdownColor: AppColors.headerBlue,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
                                   ),
+                                  icon: const Icon(
+                                    Icons.arrow_drop_down,
+                                    color: Colors.white54,
+                                  ),
+                                  isDense: true,
+                                  items: _sortOptions.map((opt) {
+                                    return DropdownMenuItem<String>(
+                                      value: opt['value'],
+                                      child: Text(opt['label']!),
+                                    );
+                                  }).toList(),
+                                  onChanged: _onSortChanged,
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // ── Pódio Top 3 ───────────────────────────
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
-                            child: _buildPodium(leaderboard.take(3).toList()),
-                          ),
-
-                          const SizedBox(height: 20),
-                          const Divider(color: Colors.white12, height: 1, indent: 12, endIndent: 12),
-                          const SizedBox(height: 8),
-
-                          // ── 4º e 5º lugar ─────────────────────────
-                          if (leaderboard.length > 3)
-                            _buildTop4And5(
-                              leaderboard.sublist(3, leaderboard.length.clamp(3, 5)),
-                            ),
-
-                          // ── Botão "Ver todos" ──────────────────────
-                          if (leaderboard.length > 5) ...[
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 24),
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  side: const BorderSide(color: Colors.white24),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                icon: const Icon(Icons.format_list_numbered_rounded, size: 18),
-                                label: Text('Ver todos (${leaderboard.length} jogadores)', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                onPressed: _showFullRankingModal,
                               ),
                             ),
                           ],
-
-                          const SizedBox(height: 24),
-                        ],
+                        ),
                       ),
-                    ),
+
+                      // ── Pódio Top 3 ───────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+                        child: _buildPodium(leaderboard.take(3).toList()),
+                      ),
+
+                      const SizedBox(height: 20),
+                      const Divider(
+                        color: Colors.white12,
+                        height: 1,
+                        indent: 12,
+                        endIndent: 12,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // ── 4º e 5º lugar ─────────────────────────
+                      if (leaderboard.length > 3)
+                        _buildTop4And5(
+                          leaderboard.sublist(
+                            3,
+                            leaderboard.length.clamp(3, 5),
+                          ),
+                        ),
+
+                      // ── Botão "Ver todos" ──────────────────────
+                      if (leaderboard.length > 5) ...[
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Colors.white24),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(
+                              Icons.format_list_numbered_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'Ver todos (${leaderboard.length} jogadores)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onPressed: _showFullRankingModal,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+                    ],
                   ),
                 ),
+              ),
+            ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../constants/app_colors.dart';
 import 'tournament_dashboard_screen.dart';
 
@@ -336,7 +337,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                           final newSessionData = {
                             'id': isEditing
                                 ? session!['id']
-                                : 'session_${DateTime.now().millisecondsSinceEpoch}',
+                                : 'session_${nameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${const Uuid().v4().substring(0, 4)}',
                             'title': nameController.text.trim(),
                             'date': dateController.text
                                 .trim(), // Visually: 12/03/2026
