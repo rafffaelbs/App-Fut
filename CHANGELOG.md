@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.1.0] - 2026-05-01
+
+### Added
+
+#### Authentication & Security
+- **Firebase Authentication** — secure your data with a personal email/password login
+- Persistent session management to keep you logged in across app restarts
+
+#### Season Management
+- **Season Intervals** — define custom seasons (e.g. "Summer 2026") to organize match history
+- Filter all statistics and rankings by specific seasons, the current month, or all-time history
+
+#### Advanced Statistics & Visuals
+- **Interactive Podiums** — high-fidelity visual cards for the Top 3 players in Ratings, Goals, Assists, and G+A
+- **Evolution Charts** — line charts visualizing player performance trends and group technical quality over time
+- **Player Comparison** — head-to-head comparison tool to settle stats debates between any two players
+- **Achievement Badges** — automated badges (e.g., "King of Wins") and manual honorary badges for players
+
+#### Sharing & Export
+- **Ranking Snapshots** — export the statistics leaderboard as a high-quality image to share on WhatsApp or social media
+- Improved JSON backup stability
+
+#### Dynamic Rating System 2.0
+- Refined rating algorithm including bonuses for win streaks and defensive performance
+- Penalties for yellow/red cards and own goals integrated into the final "Nota"
+
+#### UI & UX
+- Full Material 3 design implementation with premium dark theme aesthetics
+- Expanded player icon library with more diverse avatar options
+- Smooth micro-animations and transitions between screens
 
 ---
 
