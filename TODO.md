@@ -14,9 +14,6 @@ TODO:
     Outro ponto que seria interessante adicionar é quanto maior a diferença de gols, maior o baque, ou seja, vamos implementar que quanto maior a diferença de gols maior a nota bônus para esse resultado, ou seja, para quem está perdendo sempre buscar pelo menos fazer um gol para diminuir a diferença
     Todos os jogadores estão começando com 8 de nota, talvez fosse uma boa diminuir essa nota e aumentar as pontuações, assim só quem tem 3 gols ou assistências chega a 10
 =======
-- Screenshot/Exportar imagem dos rankings completo (Em partes foi feito)
-- Atualmente a porcentagem de carrasco e fregues é calculada baseada no numero total de vitorias/derrotas, mas e se ao inves disso calcula-se com base no numero total de partidas jogada contra aquela pessoa. 
-- Adicionar novas imagens para o app 
 - Adicionar a tabela geral com filtros por mes (e temporada) na tela de rankings.
 - Talvez usar duas telas no ranking, uma com a tabela completa que pode ser filtrada, e outra com os 3 players que tambem pode ser filtrada
 - Pesquisar se tem alguma forma de exportar a tela inteira do ranking
