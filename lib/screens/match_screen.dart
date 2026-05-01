@@ -11,6 +11,7 @@ import '../utils/rating_calculator.dart';
 import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_pitch_player.dart';
 import '../widgets/match/match_player_tile.dart';
+import 'draft_screen.dart';
 
 class MatchScreen extends StatefulWidget {
   final String tournamentName;
@@ -411,20 +412,24 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     _saveMatchState();
   }
 
-  void _iniciarTimesDraft() {
+  void _iniciarTimesDraft() async {
     if (presentPlayers.length < 2) return;
+
+    final List<List<Map<String, dynamic>>>? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DraftScreen(
+          presentPlayers: List<Map<String, dynamic>>.from(presentPlayers),
+          playersPerTeam: widget.totalPlayers,
+        ),
+      ),
+    );
+
+    if (result == null || result.isEmpty) return;
+
     setState(() {
-      int needed = widget.totalPlayers * 2;
-      List<Map<String, dynamic>> pool = presentPlayers.take(needed).toList();
-      teamRed.clear(); 
-      teamWhite.clear();
-      for (var p in pool) {
-        if (teamRed.length < widget.totalPlayers) {
-          teamRed.add(p);
-        } else {
-          teamWhite.add(p);
-        }
-      }
+      teamRed   = result.isNotEmpty ? List<Map<String, dynamic>>.from(result[0]) : [];
+      teamWhite = result.length > 1  ? List<Map<String, dynamic>>.from(result[1]) : [];
     });
     _saveMatchState();
   }
@@ -847,7 +852,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     showModalBottomSheet(context: context, backgroundColor: AppColors.headerBlue, builder: (c) => Wrap(children: [
       ListTile(leading: const Icon(Icons.person_add, color: Colors.greenAccent), title: const Text('Adicionar', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _showMultiSelectDialog(); }), 
       if (!isDraftMode) ListTile(leading: const Icon(Icons.balance, color: Colors.orangeAccent), title: const Text('Sorteio Nivelado', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _sortearTeams(); }), 
-      if (isDraftMode) ListTile(leading: const Icon(Icons.sports_soccer, color: Colors.orangeAccent), title: const Text('Iniciar Draft (Beta)', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _iniciarTimesDraft(); }), 
+      if (isDraftMode) ListTile(leading: const Icon(Icons.sports_soccer, color: Colors.orangeAccent), title: const Text('Draft — Escolher Times', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _iniciarTimesDraft(); }), 
       ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Limpar Tudo', style: TextStyle(color: AppColors.textWhite)), onTap: () { Navigator.pop(c); _clearList(); })
     ]));
   }
@@ -978,10 +983,69 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         child: AlertDialog(
           backgroundColor: AppColors.headerBlue, title: Text(popupTitle, style: TextStyle(color: popupColor, fontSize: 22, fontWeight: FontWeight.bold)),
           content: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.emoji_events, color: Colors.amber, size: 60), const SizedBox(height: 16), Text("Placar Final: $scoreRed x $scoreWhite", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)), const SizedBox(height: 16), Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)), child: Text(popupMessage, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center))]),
-          actions: [TextButton(onPressed: () { Navigator.pop(ctx); _showManualExitDialog(); }, child: const Text("Alterar na Mão", style: TextStyle(color: Colors.white54, fontSize: 14))), TextButton(onPressed: () { Navigator.pop(ctx); _processMatchExit(suggestedLeavers); }, child: const Text("Confirmar >>", style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 16)))],
+          actions: [
+            TextButton(onPressed: () { Navigator.pop(ctx); _showManualExitDialog(); }, child: const Text("Alterar na Mão", style: TextStyle(color: Colors.white54, fontSize: 14))),
+            if (!isTie) TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                final winners = redWon ? List<Map<String, dynamic>>.from(teamRed)  : List<Map<String, dynamic>>.from(teamWhite);
+                final losers  = redWon ? List<Map<String, dynamic>>.from(teamWhite) : List<Map<String, dynamic>>.from(teamRed);
+                _splitWinner(winners, losers);
+              },
+              child: const Text("Dividir Vencedor", style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            TextButton(onPressed: () { Navigator.pop(ctx); _processMatchExit(suggestedLeavers); }, child: const Text("Confirmar >>", style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold, fontSize: 16))),
+          ],
         ),
       ),
     );
+  }
+
+  void _splitWinner(List<Map<String, dynamic>> winners, List<Map<String, dynamic>> losers) {
+    setState(() {
+      // Perdedores saem
+      for (var p in losers) {
+        int index = presentPlayers.indexWhere((e) => _pid(e) == _pid(p));
+        if (index != -1) { var player = presentPlayers.removeAt(index); presentPlayers.add(player); }
+      }
+
+      // Divide o time vencedor ao meio: metade fica no vermelho, metade vai para o branco
+      final List<Map<String, dynamic>> half1 = [];
+      final List<Map<String, dynamic>> half2 = [];
+      for (int i = 0; i < winners.length; i++) {
+        if (i < (winners.length / 2).ceil()) half1.add(winners[i]);
+        else half2.add(winners[i]);
+      }
+
+      // Calcula quantos jogadores faltam em cada time
+      int neededRed   = widget.totalPlayers - half1.length;
+      int neededWhite = widget.totalPlayers - half2.length;
+      int totalNeeded = neededRed + neededWhite;
+
+      // Pega jogadores de fora (fila de espera)
+      final Set<String> winnerIds = winners.map(_pid).toSet();
+      final List<Map<String, dynamic>> bench = presentPlayers.where((p) {
+        final id = _pid(p);
+        return !winnerIds.contains(id);
+      }).take(totalNeeded).toList();
+
+      teamRed   = List.from(half1);
+      teamWhite = List.from(half2);
+
+      // Distribui o banco de forma balanceada
+      for (var p in bench) {
+        if (teamRed.length < widget.totalPlayers) teamRed.add(p);
+        else if (teamWhite.length < widget.totalPlayers) teamWhite.add(p);
+      }
+
+      // Reseta sequências
+      redWinStreak = 0; whiteWinStreak = 0;
+      isMatchRunning = false; isOvertime = false; scoreRed = 0; scoreWhite = 0;
+      matchEvents.clear(); _secondsPlayedBeforePause = 0; _lastStartTime = null;
+
+      _saveMatchState();
+      _showLeaversPopup(losers, bench);
+    });
   }
 
   void _showManualExitDialog() {
@@ -992,11 +1056,42 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         child: AlertDialog(
           backgroundColor: AppColors.headerBlue, title: const Text("Intervenção Manual", style: TextStyle(color: Colors.white)), content: const Text("Quem deve sair de campo?", style: TextStyle(color: Colors.white70)),
           actions: [
-            TextButton(child: const Text("Vermelho", style: TextStyle(color: Colors.redAccent)), onPressed: () { Navigator.pop(ctx); _processMatchExit(List.from(teamRed)); }),
-            TextButton(child: const Text("Branco", style: TextStyle(color: Colors.white)), onPressed: () { Navigator.pop(ctx); _processMatchExit(List.from(teamWhite)); }),
-            TextButton(child: const Text("Ambos", style: TextStyle(color: Colors.orangeAccent)), onPressed: () { Navigator.pop(ctx); List<Map<String, dynamic>> both = []; both.addAll(teamRed); both.addAll(teamWhite); both.shuffle(Random()); _processMatchExit(both); }),
+            TextButton(child: const Text("Vermelho Sai", style: TextStyle(color: Colors.redAccent)), onPressed: () { Navigator.pop(ctx); _processMatchExit(List.from(teamRed)); }),
+            TextButton(child: const Text("Branco Sai", style: TextStyle(color: Colors.white)), onPressed: () { Navigator.pop(ctx); _processMatchExit(List.from(teamWhite)); }),
+            TextButton(child: const Text("Ambos Saem", style: TextStyle(color: Colors.orangeAccent)), onPressed: () { Navigator.pop(ctx); List<Map<String, dynamic>> both = []; both.addAll(teamRed); both.addAll(teamWhite); both.shuffle(Random()); _processMatchExit(both); }),
+            TextButton(
+              child: const Text("Dividir Vencedor", style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                bool redWon = scoreRed > scoreWhite;
+                bool whitWon = scoreWhite > scoreRed;
+                if (!redWon && !whitWon) {
+                  // Empate: pergunta quem é o "vencedor" a dividir
+                  _showChooseWinnerForSplitDialog();
+                } else {
+                  final winners = redWon ? List<Map<String, dynamic>>.from(teamRed)  : List<Map<String, dynamic>>.from(teamWhite);
+                  final losers  = redWon ? List<Map<String, dynamic>>.from(teamWhite) : List<Map<String, dynamic>>.from(teamRed);
+                  _splitWinner(winners, losers);
+                }
+              },
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showChooseWinnerForSplitDialog() {
+    showDialog(
+      context: context, barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text("Dividir qual time?", style: TextStyle(color: Colors.white)),
+        content: const Text("Empate: escolha o time que vai ser dividido.", style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(child: const Text("Vermelho", style: TextStyle(color: Colors.redAccent)), onPressed: () { Navigator.pop(ctx); _splitWinner(List.from(teamRed), List.from(teamWhite)); }),
+          TextButton(child: const Text("Branco", style: TextStyle(color: Colors.white)), onPressed: () { Navigator.pop(ctx); _splitWinner(List.from(teamWhite), List.from(teamRed)); }),
+        ],
       ),
     );
   }
