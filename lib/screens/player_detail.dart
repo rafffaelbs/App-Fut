@@ -681,6 +681,72 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // HELPERS VISUAIS
   // ─────────────────────────────────────────────────────────────
 
+  void _showRatingBreakdown() {
+    final double nota = (playerStats['nota'] ?? kRatingBase) as double;
+    
+    String fmt(double val) => val > 0 ? '+${val.toStringAsFixed(1)}' : val.toStringAsFixed(1);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text('Composição da Nota', style: TextStyle(color: Colors.white)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'A sua nota é a média do seu desempenho em todas as partidas jogadas. Cada partida começa com uma Nota Base e sofre ajustes com base nos seus eventos em campo:',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              _buildBreakdownRow('Nota Base', kRatingBase.toStringAsFixed(1), Colors.white),
+              _buildBreakdownRow('Gol Feito', fmt(kWeightGoal), AppColors.accentBlue),
+              _buildBreakdownRow('Assistência', fmt(kWeightAssist), AppColors.accentBlue),
+              _buildBreakdownRow('Vitória', fmt(kResultImpactWin), AppColors.accentBlue),
+              _buildBreakdownRow('Derrota', fmt(kResultImpactLoss), Colors.redAccent),
+              _buildBreakdownRow('Cartão Amarelo', fmt(kWeightYellowCard), Colors.yellow),
+              _buildBreakdownRow('Cartão Vermelho', fmt(kWeightRedCard), Colors.redAccent),
+              _buildBreakdownRow('Gol Contra', fmt(kWeightOwnGoal), Colors.redAccent),
+              const Divider(color: Colors.white24, height: 24),
+              const Text(
+                '* Nota Bayesiana: Penaliza ou bonifica levemente jogadores baseando-se no histórico.',
+                style: TextStyle(color: Colors.white54, fontSize: 11, fontStyle: FontStyle.italic),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  'Sua Média Atual: ${nota.toStringAsFixed(1)}',
+                  style: const TextStyle(color: AppColors.accentBlue, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendi', style: TextStyle(color: AppColors.accentBlue)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownRow(String label, String value, Color valueColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          Text(value, style: TextStyle(color: valueColor, fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   Color _getRatingColor(double rating) {
     if (rating >= 9.0) return Colors.purpleAccent;
     if (rating >= 8.0) return Colors.green[700]!;
@@ -1934,25 +2000,39 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                         ),
                                       ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: ratingColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: AppColors.headerBlue,
-                                    width: 2,
+                              GestureDetector(
+                                onTap: _showRatingBreakdown,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
-                                ),
-                                child: Text(
-                                  nota.toStringAsFixed(1),
-                                  style: const TextStyle(
-                                    color: AppColors.headerBlue,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
+                                  decoration: BoxDecoration(
+                                    color: ratingColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppColors.headerBlue,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        nota.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          color: AppColors.headerBlue,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.info_outline,
+                                        size: 12,
+                                        color: AppColors.headerBlue,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),

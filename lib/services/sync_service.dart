@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/player_identity.dart';
+import '../utils/site_data_generator.dart';
 
 class SyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -24,9 +25,12 @@ class SyncService {
       data[key] = prefs.get(key);
     }
 
+    final siteData = await SiteDataGenerator.generate(prefs);
+
     // Salvar o json completo no Firestore
     await _firestore.collection('sync_data').doc(syncCode).set({
       'data': data,
+      'site_data': siteData,
       'last_updated': FieldValue.serverTimestamp(),
     });
   }
@@ -122,6 +126,9 @@ class SyncService {
       data[key] = prefs.get(key);
     }
     
+    final siteData = await SiteDataGenerator.generate(prefs);
+    data['site_data'] = siteData;
+    
     // Converte para String JSON
     final jsonString = jsonEncode(data);
     
@@ -161,6 +168,8 @@ class SyncService {
         for (var entry in data.entries) {
           final key = entry.key;
           final value = entry.value;
+
+          if (key == 'site_data') continue; // Ignora o dado computado do site na restauração local
 
           if (value is String) {
             await prefs.setString(key, value);
