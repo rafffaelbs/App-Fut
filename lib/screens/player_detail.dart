@@ -684,8 +684,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   void _showRatingBreakdown() {
     final double nota = (playerStats['nota'] ?? kRatingBase) as double;
     
-    String fmt(double val) => val > 0 ? '+${val.toStringAsFixed(1)}' : val.toStringAsFixed(1);
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -701,14 +699,14 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              _buildBreakdownRow('Nota Base', kRatingBase.toStringAsFixed(1), Colors.white),
-              _buildBreakdownRow('Gol Feito', fmt(kWeightGoal), AppColors.accentBlue),
-              _buildBreakdownRow('Assistência', fmt(kWeightAssist), AppColors.accentBlue),
-              _buildBreakdownRow('Vitória', fmt(kResultImpactWin), AppColors.accentBlue),
-              _buildBreakdownRow('Derrota', fmt(kResultImpactLoss), Colors.redAccent),
-              _buildBreakdownRow('Cartão Amarelo', fmt(kWeightYellowCard), Colors.yellow),
-              _buildBreakdownRow('Cartão Vermelho', fmt(kWeightRedCard), Colors.redAccent),
-              _buildBreakdownRow('Gol Contra', fmt(kWeightOwnGoal), Colors.redAccent),
+              _buildBreakdownRow('Nota Base', '6.5', Colors.white),
+              _buildBreakdownRow('Gol Feito', '+0.9', AppColors.accentBlue),
+              _buildBreakdownRow('Assistência', '+0.8', AppColors.accentBlue),
+              _buildBreakdownRow('Vitória', '+1.5', AppColors.accentBlue),
+              _buildBreakdownRow('Derrota', '-1.5', Colors.redAccent),
+              _buildBreakdownRow('Cartão Amarelo', '-1.0', Colors.yellow),
+              _buildBreakdownRow('Cartão Vermelho', '-2.0', Colors.redAccent),
+              _buildBreakdownRow('Gol Contra', '-1.0', Colors.redAccent),
               const Divider(color: Colors.white24, height: 24),
               const Text(
                 '* Nota Bayesiana: Penaliza ou bonifica levemente jogadores baseando-se no histórico.',

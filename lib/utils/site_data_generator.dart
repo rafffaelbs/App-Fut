@@ -343,7 +343,7 @@ class SiteDataGenerator {
         String sessionDate = match['session_date'] ?? match['date'] ?? '';
         if (sessionDate.isNotEmpty) {
            DateTime dt = DateTime.parse(sessionDate);
-           String dtKey = "\${dt.year}-\${dt.month.toString().padLeft(2, '0')}-\${dt.day.toString().padLeft(2, '0')}";
+           String dtKey = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
            stats['session_chart_data'].putIfAbsent(dtKey, () => <double>[]);
            stats['session_chart_data'][dtKey].add(matchRating);
         }
