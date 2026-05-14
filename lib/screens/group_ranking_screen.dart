@@ -361,22 +361,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                 (globalStats[playerId]!['assists'] as int) + a;
 
             // No win/loss/draw since not in lineup
-            final double matchRating = calculateMatchRating(
-              status: 0, // Neutral - not in lineup
-              goals: g,
-              assists: a,
-              ownGoals: og,
-              teamGoals: 0,
-              conceded: 0,
-              yellow: yc,
-              red: rc,
-              teamWinStreak: 0,
-            );
-            (globalStats[playerId]!['ratings'] as List<double>).add(
-              matchRating,
-            );
-
-            sessionRatings[sessionLabel]!.add(matchRating);
+            // Do not calculate or add a matchRating here to preserve their current Nota
           }
         }
       }

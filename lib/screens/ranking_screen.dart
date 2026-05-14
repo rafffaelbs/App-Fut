@@ -66,6 +66,7 @@ class _RankingScreenState extends State<RankingScreen> {
     // Carrega ícones do banco de jogadores salvos e cria mapa de normalização (Nome -> ID Real)
     final Map<String, String?> iconMap = {};
     final Map<String, String> nameToIdMap = {};
+    final Map<String, String> idToNameMap = {};
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
@@ -75,7 +76,10 @@ class _RankingScreenState extends State<RankingScreen> {
         final String name = (p['name'] ?? '').toString();
         if (pid.isNotEmpty) {
           iconMap[pid] = p['icon'] as String?;
-          if (name.isNotEmpty) nameToIdMap[name] = pid;
+          if (name.isNotEmpty) {
+            nameToIdMap[name] = pid;
+            idToNameMap[pid] = name;
+          }
         }
       }
     }
@@ -93,12 +97,20 @@ class _RankingScreenState extends State<RankingScreen> {
           ? 1
           : (scoreRed == scoreWhite ? 0 : -1);
 
+      final Map<String, String> eventPlayerNames = {};
       final Map<String, Map<String, int>> matchPlayerEvents = {};
       if (match['events'] != null) {
         for (final ev in match['events']) {
           String pid = eventPlayerId(ev, 'player');
           String astId = eventPlayerId(ev, 'assist');
           final String type = ev['type'];
+          
+          if (pid.isNotEmpty && ev['player'] != null) {
+            eventPlayerNames[pid] = ev['player'].toString();
+          }
+          if (astId.isNotEmpty && ev['assist'] != null) {
+            eventPlayerNames[astId] = ev['assist'].toString();
+          }
 
           // Normalização de eventos (se o ID for o nome, tenta achar o ID real)
           if (nameToIdMap.containsKey(pid)) pid = nameToIdMap[pid]!;
@@ -208,6 +220,49 @@ class _RankingScreenState extends State<RankingScreen> {
       if (match['players']['white'] != null) {
         for (final p in match['players']['white'])
           processPlayer(p, whiteStatus, scoreWhite, scoreRed);
+      }
+      if (match['players']['gk_red'] != null) {
+        processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite);
+      }
+      if (match['players']['gk_white'] != null) {
+        processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed);
+      }
+
+      // Process players who have events but weren't in the official lineup
+      for (final playerId in matchPlayerEvents.keys) {
+        if (!processed.contains(playerId)) {
+          final events = matchPlayerEvents[playerId]!;
+          final String playerName = idToNameMap[playerId] ?? eventPlayerNames[playerId] ?? 'Desconhecido';
+
+          stats.putIfAbsent(
+            playerId,
+            () => {
+              'id': playerId,
+              'name': playerName,
+              'goals': 0,
+              'assists': 0,
+              'games': 0,
+              'wins': 0,
+              'draws': 0,
+              'losses': 0,
+              'ratings': <double>[],
+            },
+          );
+          if (playerName != 'Desconhecido') stats[playerId]!['name'] = playerName;
+
+          stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+
+          final int g = events['g'] ?? 0;
+          final int a = events['a'] ?? 0;
+          final int og = events['og'] ?? 0;
+          final int yc = events['yc'] ?? 0;
+          final int rc = events['rc'] ?? 0;
+
+          stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
+          stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
+
+          // Do not calculate or add a matchRating here to preserve their current Nota
+        }
       }
     }
 

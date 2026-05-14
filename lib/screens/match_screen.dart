@@ -1478,8 +1478,7 @@ class _MatchScreenState extends State<MatchScreen>
                       }
                       _showGoalkeeperSelectionDialog(
                         true,
-                        (selectedGk) =>
-                            _confirmEventDialog("goal", selectedGk, true),
+                        (selectedGk) => _handleGoal(selectedGk, true),
                       );
                     },
                     child: Container(
@@ -1527,8 +1526,7 @@ class _MatchScreenState extends State<MatchScreen>
                       }
                       _showGoalkeeperSelectionDialog(
                         false,
-                        (selectedGk) =>
-                            _confirmEventDialog("goal", selectedGk, false),
+                        (selectedGk) => _handleGoal(selectedGk, false),
                       );
                     },
                     child: Container(
