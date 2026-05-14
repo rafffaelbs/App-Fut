@@ -41,6 +41,11 @@ class _MatchScreenState extends State<MatchScreen>
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
 
+  Map<String, dynamic>? activeGkRed;
+  Map<String, dynamic>? activeGkWhite;
+  Map<String, dynamic>? firstGkRed;
+  Map<String, dynamic>? firstGkWhite;
+
   int scoreRed = 0;
   int scoreWhite = 0;
   int redWinStreak = 0;
@@ -130,6 +135,15 @@ class _MatchScreenState extends State<MatchScreen>
 
     await prefs.setInt('red_streak_$id', redWinStreak);
     await prefs.setInt('white_streak_$id', whiteWinStreak);
+
+    if (activeGkRed != null) await prefs.setString('active_gk_red_$id', jsonEncode(activeGkRed));
+    else await prefs.remove('active_gk_red_$id');
+    if (activeGkWhite != null) await prefs.setString('active_gk_white_$id', jsonEncode(activeGkWhite));
+    else await prefs.remove('active_gk_white_$id');
+    if (firstGkRed != null) await prefs.setString('first_gk_red_$id', jsonEncode(firstGkRed));
+    else await prefs.remove('first_gk_red_$id');
+    if (firstGkWhite != null) await prefs.setString('first_gk_white_$id', jsonEncode(firstGkWhite));
+    else await prefs.remove('first_gk_white_$id');
   }
 
   Future<void> _loadMatchState() async {
@@ -212,6 +226,11 @@ class _MatchScreenState extends State<MatchScreen>
 
       String? stamp = prefs.getString('start_timestamp_$id');
       _lastStartTime = stamp != null ? DateTime.parse(stamp) : null;
+
+      if (prefs.containsKey('active_gk_red_$id')) activeGkRed = Map<String, dynamic>.from(jsonDecode(prefs.getString('active_gk_red_$id')!));
+      if (prefs.containsKey('active_gk_white_$id')) activeGkWhite = Map<String, dynamic>.from(jsonDecode(prefs.getString('active_gk_white_$id')!));
+      if (prefs.containsKey('first_gk_red_$id')) firstGkRed = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_red_$id')!));
+      if (prefs.containsKey('first_gk_white_$id')) firstGkWhite = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_white_$id')!));
 
       if (isMatchRunning && _lastStartTime != null) {
         _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -776,6 +795,10 @@ class _MatchScreenState extends State<MatchScreen>
       isMatchRunning = false;
       isOvertime = false;
       matchEvents.clear();
+      activeGkRed = null;
+      activeGkWhite = null;
+      firstGkRed = null;
+      firstGkWhite = null;
     });
     _saveMatchState();
   }
@@ -1459,110 +1482,77 @@ class _MatchScreenState extends State<MatchScreen>
             ],
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12.0,
-              vertical: 16.0,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
             child: Row(
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (!isMatchRunning) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Inicie a partida primeiro!"),
-                          ),
-                        );
-                        return;
-                      }
-                      _showGoalkeeperSelectionDialog(
-                        true,
-                        (selectedGk) => _handleGoal(selectedGk, true),
-                      );
-                    },
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.black45,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.sports_handball,
-                            color: Colors.redAccent,
-                            size: 16,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            "Goleiro",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                _buildGkTile(true),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (!isMatchRunning) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Inicie a partida primeiro!"),
-                          ),
-                        );
-                        return;
-                      }
-                      _showGoalkeeperSelectionDialog(
-                        false,
-                        (selectedGk) => _handleGoal(selectedGk, false),
-                      );
-                    },
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white54),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.sports_handball,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            "Goleiro",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                _buildGkTile(false),
               ],
             ),
           ),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGkTile(bool isRed) {
+    final gk = isRed ? activeGkRed : activeGkWhite;
+    final teamColor = isRed ? Colors.redAccent : Colors.white70;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (!isMatchRunning) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Inicie a partida primeiro!")),
+            );
+            return;
+          }
+          if (gk == null) {
+            _showGoalkeeperSelectionDialog(isRed, (player) {
+              setState(() {
+                if (isRed) {
+                  activeGkRed = player;
+                  if (firstGkRed == null) firstGkRed = player;
+                } else {
+                  activeGkWhite = player;
+                  if (firstGkWhite == null) firstGkWhite = player;
+                }
+              });
+              _saveMatchState();
+            });
+          } else {
+            _showInGameOptions(gk, isRed, isGk: true);
+          }
+        },
+        child: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: isRed ? Colors.black45 : Colors.white12,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: teamColor.withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.sports_handball, color: teamColor, size: 16),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  gk != null ? gk['name'] : "Goleiro",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2169,6 +2159,13 @@ class _MatchScreenState extends State<MatchScreen>
     List<Map<String, dynamic>> teammates = isRedTeam
         ? List.from(teamRed)
         : List.from(teamWhite);
+    
+    // Inclui o goleiro do próprio time se ele não for o autor do gol
+    final currentGk = isRedTeam ? activeGkRed : activeGkWhite;
+    if (currentGk != null && !teammates.any((p) => _pid(p) == _pid(currentGk))) {
+      teammates.add(currentGk);
+    }
+
     teammates.removeWhere((p) => _pid(p) == _pid(player));
     showDialog(
       context: context,
@@ -2215,40 +2212,6 @@ class _MatchScreenState extends State<MatchScreen>
                 );
               },
             ),
-          ),
-          const Divider(color: Colors.white12),
-          SimpleDialogOption(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.sports_handball,
-                  color: AppColors.textWhite,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  "Goleiro",
-                  style: TextStyle(
-                    color: AppColors.textWhite,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
-                _confirmEventDialog(
-                  "goal",
-                  player,
-                  isRedTeam,
-                  assist: selectedGk['name'],
-                  assistId: _pid(selectedGk),
-                );
-              });
-            },
           ),
         ],
       ),
@@ -2298,7 +2261,7 @@ class _MatchScreenState extends State<MatchScreen>
       );
   }
 
-  void _showInGameOptions(Map<String, dynamic> player, bool isRedTeam) {
+  void _showInGameOptions(Map<String, dynamic> player, bool isRedTeam, {bool isGk = false}) {
     bool isLinePlayer =
         teamRed.any((p) => _pid(p) == _pid(player)) ||
         teamWhite.any((p) => _pid(p) == _pid(player));
@@ -2329,6 +2292,27 @@ class _MatchScreenState extends State<MatchScreen>
                 _handleGoal(player, isRedTeam);
               },
             ),
+            if (isGk)
+              ListTile(
+                leading: const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: Colors.orangeAccent,
+                ),
+                title: const Text(
+                  "Trocar Goleiro",
+                  style: TextStyle(color: AppColors.textWhite),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
+                    setState(() {
+                      if (isRedTeam) activeGkRed = selectedGk;
+                      else activeGkWhite = selectedGk;
+                    });
+                    _saveMatchState();
+                  });
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.error_outline, color: Colors.redAccent),
               title: const Text(
@@ -2391,8 +2375,21 @@ class _MatchScreenState extends State<MatchScreen>
       "scoreRed": scoreRed,
       "scoreWhite": scoreWhite,
       "events": List.from(matchEvents),
-      "players": {"red": List.from(teamRed), "white": List.from(teamWhite)},
+      "players": {
+        "red": List.from(teamRed),
+        "white": List.from(teamWhite),
+        "gk_red": firstGkRed,
+        "gk_white": firstGkWhite,
+      },
     };
+
+    setState(() {
+      activeGkRed = null;
+      activeGkWhite = null;
+      firstGkRed = null;
+      firstGkWhite = null;
+    });
+    _saveMatchState();
 
     final prefs = await SharedPreferences.getInstance();
     final String historyKey = 'match_history_${widget.tournamentId}';

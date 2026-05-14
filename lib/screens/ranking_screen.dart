@@ -26,6 +26,8 @@ class RankingScreen extends StatefulWidget {
 
 class _RankingScreenState extends State<RankingScreen> {
   List<Map<String, dynamic>> leaderboard = [];
+  List<Map<String, dynamic>> gkLeaderboard = [];
+  bool _showGkRanking = false;
   bool isLoading = true;
   bool _isSharingScreenshot = false;
 
@@ -86,6 +88,7 @@ class _RankingScreenState extends State<RankingScreen> {
 
     final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
     final Map<String, Map<String, dynamic>> stats = {};
+    final Map<String, Map<String, dynamic>> gkStats = {};
 
     for (final match in history) {
       final int scoreRed = match['scoreRed'] ?? 0;
@@ -152,6 +155,7 @@ class _RankingScreenState extends State<RankingScreen> {
         int status,
         int scored,
         int conceded,
+        {bool isGk = false}
       ) {
         if (playerObj == null) return;
         String playerId = playerIdFromObject(playerObj);
@@ -181,15 +185,6 @@ class _RankingScreenState extends State<RankingScreen> {
         );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
-        stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
-
-        if (status == 1)
-          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
-        else if (status == -1)
-          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else
-          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
-
         final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
         final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
         final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
@@ -199,18 +194,71 @@ class _RankingScreenState extends State<RankingScreen> {
         stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
-        final double matchRating = calculateMatchRating(
-          status: status,
-          goals: g,
-          assists: a,
-          ownGoals: og,
-          teamGoals: scored,
-          conceded: conceded,
-          yellow: yc,
-          red: rc,
-          teamWinStreak: 0,
-        );
-        (stats[playerId]!['ratings'] as List<double>).add(matchRating);
+        if (!isGk) {
+          stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+          if (status == 1)
+            stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+          else if (status == -1)
+            stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+          else
+            stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+
+          final double matchRating = calculateMatchRating(
+            status: status,
+            goals: g,
+            assists: a,
+            ownGoals: og,
+            teamGoals: scored,
+            conceded: conceded,
+            yellow: yc,
+            red: rc,
+            teamWinStreak: 0,
+          );
+          (stats[playerId]!['ratings'] as List<double>).add(matchRating);
+        } else {
+          gkStats.putIfAbsent(
+            playerId,
+            () => {
+              'id': playerId,
+              'name': playerName,
+              'gk_games': 0,
+              'gk_wins': 0,
+              'gk_draws': 0,
+              'gk_losses': 0,
+              'gk_conceded': 0,
+              'gk_clean_sheets': 0,
+              'gk_goals': 0,
+              'gk_assists': 0,
+              'gk_ratings': <double>[],
+            },
+          );
+          if (playerName.isNotEmpty) gkStats[playerId]!['name'] = playerName;
+
+          gkStats[playerId]!['gk_games'] = (gkStats[playerId]!['gk_games'] as int) + 1;
+          gkStats[playerId]!['gk_conceded'] = (gkStats[playerId]!['gk_conceded'] as int) + conceded;
+          if (conceded == 0) {
+            gkStats[playerId]!['gk_clean_sheets'] = (gkStats[playerId]!['gk_clean_sheets'] as int) + 1;
+          }
+          gkStats[playerId]!['gk_goals'] = (gkStats[playerId]!['gk_goals'] as int) + g;
+          gkStats[playerId]!['gk_assists'] = (gkStats[playerId]!['gk_assists'] as int) + a;
+          if (status == 1)
+            gkStats[playerId]!['gk_wins'] = (gkStats[playerId]!['gk_wins'] as int) + 1;
+          else if (status == -1)
+            gkStats[playerId]!['gk_losses'] = (gkStats[playerId]!['gk_losses'] as int) + 1;
+          else
+            gkStats[playerId]!['gk_draws'] = (gkStats[playerId]!['gk_draws'] as int) + 1;
+
+          final double gkRating = calculateGkMatchRating(
+            status: status,
+            goals: g,
+            assists: a,
+            conceded: conceded,
+            yellow: yc,
+            red: rc,
+            teamWinStreak: 0,
+          );
+          (gkStats[playerId]!['gk_ratings'] as List<double>).add(gkRating);
+        }
       }
 
       if (match['players']['red'] != null) {
@@ -222,10 +270,10 @@ class _RankingScreenState extends State<RankingScreen> {
           processPlayer(p, whiteStatus, scoreWhite, scoreRed);
       }
       if (match['players']['gk_red'] != null) {
-        processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite);
+        processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite, isGk: true);
       }
       if (match['players']['gk_white'] != null) {
-        processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed);
+        processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed, isGk: true);
       }
 
       // Process players who have events but weren't in the official lineup
@@ -294,9 +342,51 @@ class _RankingScreenState extends State<RankingScreen> {
     });
 
     _applySorting(sortedList);
+
+    final List<Map<String, dynamic>> sortedGkList = [];
+    gkStats.forEach((id, data) {
+      final int games = data['gk_games'] as int;
+      if (games > 0) {
+        sortedGkList.add({
+          'id': id,
+          'name': data['name'],
+          'icon': iconMap[id],
+          'games': games,
+          'conceded': data['gk_conceded'],
+          'clean_sheets': data['gk_clean_sheets'],
+          'goals': data['gk_goals'],
+          'assists': data['gk_assists'],
+          'wins': data['gk_wins'],
+          'draws': data['gk_draws'],
+          'losses': data['gk_losses'],
+          'nota': calculateFinalRating(
+            ratings: data['gk_ratings'] as List<double>,
+            useBayesian: false,
+          ),
+        });
+      }
+    });
+    _applyGkSorting(sortedGkList);
+
     setState(() {
       leaderboard = sortedList;
+      gkLeaderboard = sortedGkList;
       isLoading = false;
+    });
+  }
+
+  void _applyGkSorting(List<Map<String, dynamic>> list) {
+    list.sort((a, b) {
+      int cmp = (b['nota'] as num).compareTo(a['nota'] as num);
+      if (cmp == 0) {
+        cmp = (b['clean_sheets'] as num).compareTo(a['clean_sheets'] as num);
+        if (cmp == 0) {
+          final double aCpg = (a['conceded'] as int) / (a['games'] as int);
+          final double bCpg = (b['conceded'] as int) / (b['games'] as int);
+          cmp = aCpg.compareTo(bCpg);
+        }
+      }
+      return cmp;
     });
   }
 
@@ -1212,128 +1302,205 @@ class _RankingScreenState extends State<RankingScreen> {
                   ),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : leaderboard.isEmpty
-          ? const Center(
-              child: Text(
-                'Sem jogadores registrados.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            )
-          : Screenshot(
-              controller: _screenshotController,
-              child: Container(
-                color: AppColors.deepBlue,
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Cabeçalho do pódio com ordenação ──────
-                      Container(
-                        color: AppColors.headerBlue.withValues(alpha: 0.6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          children: [
-                            const Text(
-                              'Ordenar por',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _sortColumn,
-                                  dropdownColor: AppColors.headerBlue,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.arrow_drop_down,
-                                    color: Colors.white54,
-                                  ),
-                                  isDense: true,
-                                  items: _sortOptions.map((opt) {
-                                    return DropdownMenuItem<String>(
-                                      value: opt['value'],
-                                      child: Text(opt['label']!),
-                                    );
-                                  }).toList(),
-                                  onChanged: _onSortChanged,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // ── Pódio Top 3 ───────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
-                        child: _buildPodium(leaderboard.take(3).toList()),
-                      ),
-
-                      const SizedBox(height: 20),
-                      const Divider(
-                        color: Colors.white12,
-                        height: 1,
-                        indent: 12,
-                        endIndent: 12,
-                      ),
-                      const SizedBox(height: 8),
-
-                      // ── 4º ao 8º lugar ─────────────────────────
-                      if (leaderboard.length > 3)
-                        _buildTop4To8(
-                          leaderboard.sublist(
-                            3,
-                            leaderboard.length.clamp(3, 8),
+      body: Column(
+        children: [
+          // ── Linha / Goleiros toggle ────────────────────────────
+          Container(
+            color: AppColors.headerBlue,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: !_showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            width: 2,
                           ),
                         ),
-
-                      // ── Botão "Ver todos" ──────────────────────
-                      if (leaderboard.length > 8) ...[
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: const BorderSide(color: Colors.white24),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            icon: const Icon(
-                              Icons.format_list_numbered_rounded,
-                              size: 18,
-                            ),
-                            label: Text(
-                              'Ver todos (${leaderboard.length} jogadores)',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            onPressed: _showFullRankingModal,
-                          ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Linha',
+                        style: TextStyle(
+                          color: !_showGkRanking ? AppColors.textWhite : Colors.white54,
+                          fontWeight: FontWeight.bold,
                         ),
-                      ],
-
-                      const SizedBox(height: 24),
-                    ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Goleiros',
+                        style: TextStyle(
+                          color: _showGkRanking ? AppColors.textWhite : Colors.white54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _showGkRanking
+                    ? _buildGkRankingView()
+                    : _buildFieldRankingView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldRankingView() {
+    if (leaderboard.isEmpty) {
+      return const Center(
+        child: Text('Sem jogadores registrados.', style: TextStyle(color: Colors.white54)),
+      );
+    }
+    return Screenshot(
+      controller: _screenshotController,
+      child: Container(
+        color: AppColors.deepBlue,
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: AppColors.headerBlue.withValues(alpha: 0.6),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    const Text('Ordenar por', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sortColumn,
+                          dropdownColor: AppColors.headerBlue,
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                          isDense: true,
+                          items: _sortOptions.map((opt) => DropdownMenuItem<String>(
+                            value: opt['value'],
+                            child: Text(opt['label']!),
+                          )).toList(),
+                          onChanged: _onSortChanged,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+                child: _buildPodium(leaderboard.take(3).toList()),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Colors.white12, height: 1, indent: 12, endIndent: 12),
+              const SizedBox(height: 8),
+              if (leaderboard.length > 3)
+                _buildTop4To8(leaderboard.sublist(3, leaderboard.length.clamp(3, 8))),
+              if (leaderboard.length > 8) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.format_list_numbered_rounded, size: 18),
+                    label: Text('Ver todos (${leaderboard.length} jogadores)', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    onPressed: _showFullRankingModal,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGkRankingView() {
+    if (gkLeaderboard.isEmpty) {
+      return const Center(
+        child: Text('Sem goleiros registrados.', style: TextStyle(color: Colors.white54)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: gkLeaderboard.length,
+      itemBuilder: (context, index) {
+        final gk = gkLeaderboard[index];
+        final double nota = (gk['nota'] as num).toDouble();
+        return Card(
+          color: AppColors.headerBlue,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.deepBlue,
+                  backgroundImage: gk['icon'] != null ? AssetImage(gk['icon']) : null,
+                  child: gk['icon'] == null
+                      ? Text(gk['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                      : null,
+                ),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(color: AppColors.accentBlue, shape: BoxShape.circle),
+                  child: Text('${index + 1}', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            title: Text(gk['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Nota: ${nota.toStringAsFixed(1)} | Jgs: ${gk['games']}',
+                  style: const TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'CS: ${gk['clean_sheets']} | GS: ${gk['conceded']} | G: ${gk['goals']} | A: ${gk['assists']}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+            trailing: Text(
+              '${gk['wins']}V ${gk['draws']}E ${gk['losses']}D',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ),
+        );
+      },
     );
   }
 }

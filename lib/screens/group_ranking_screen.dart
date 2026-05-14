@@ -24,6 +24,8 @@ class GroupRankingScreen extends StatefulWidget {
 class _GroupRankingScreenState extends State<GroupRankingScreen>
     with RouteAware {
   List<Map<String, dynamic>> _globalLeaderboard = [];
+  List<Map<String, dynamic>> _globalGkLeaderboard = [];
+  bool _showGkRanking = false;
   bool _isLoading = true;
   bool _isSharing = false;
 
@@ -141,6 +143,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
   void _calculateGlobalRankings() async {
     final prefs = await SharedPreferences.getInstance();
     final Map<String, Map<String, dynamic>> globalStats = {};
+    final Map<String, Map<String, dynamic>> globalGkStats = {};
 
     // Dados para o gráfico
     final Map<String, List<double>> sessionRatings = {};
@@ -392,6 +395,41 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     });
 
     _globalLeaderboard = List.from(sortedList);
+
+    final List<Map<String, dynamic>> sortedGkList = [];
+    globalGkStats.forEach((id, data) {
+      final int games = data['gk_games'] as int;
+      if (games > 0) {
+        sortedGkList.add({
+          'id': id,
+          'name': data['name'],
+          'games': games,
+          'conceded': data['gk_conceded'],
+          'clean_sheets': data['gk_clean_sheets'],
+          'goals': data['gk_goals'],
+          'assists': data['gk_assists'],
+          'wins': data['gk_wins'],
+          'draws': data['gk_draws'],
+          'losses': data['gk_losses'],
+          'nota': calculateFinalRating(
+            ratings: data['gk_ratings'] as List<double>,
+          ),
+        });
+      }
+    });
+    sortedGkList.sort((a, b) {
+      int cmp = (b['nota'] as num).compareTo(a['nota'] as num);
+      if (cmp == 0) {
+        cmp = (b['clean_sheets'] as num).compareTo(a['clean_sheets'] as num);
+        if (cmp == 0) {
+          final double aCpg = (a['conceded'] as int) / (a['games'] as int);
+          final double bCpg = (b['conceded'] as int) / (b['games'] as int);
+          cmp = aCpg.compareTo(bCpg); // lower is better
+        }
+      }
+      return cmp;
+    });
+    _globalGkLeaderboard = sortedGkList;
 
     // Calcular Tops
     _topNota = List.from(_globalLeaderboard)
@@ -1161,6 +1199,87 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     );
   }
 
+  Widget _buildGlobalGkView() {
+    if (_globalGkLeaderboard.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: Text(
+            'Sem goleiros registrados nesse período.',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _globalGkLeaderboard.length,
+      itemBuilder: (context, index) {
+        final gk = _globalGkLeaderboard[index];
+        final double nota = (gk['nota'] as num).toDouble();
+        return Card(
+          color: AppColors.headerBlue,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.deepBlue,
+                  child: Text(
+                    gk['name'][0].toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppColors.accentBlue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            title: Text(
+              gk['name'],
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Nota: ${nota.toStringAsFixed(1)} | Jgs: ${gk['games']}',
+                  style: const TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'CS: ${gk['clean_sheets']} | GS: ${gk['conceded']} | G: ${gk['goals']} | A: ${gk['assists']}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+            trailing: Text(
+              '${gk['wins']}V ${gk['draws']}E ${gk['losses']}D',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1171,6 +1290,64 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           _buildFilterToggle(),
           _buildMonthSelector(),
           _buildSeasonSelector(),
+          // GK / Linha toggle
+          Container(
+            color: AppColors.headerBlue,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: !_showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        "Linha",
+                        style: TextStyle(
+                          color: !_showGkRanking ? AppColors.textWhite : Colors.white38,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        "Goleiros",
+                        style: TextStyle(
+                          color: _showGkRanking ? AppColors.textWhite : Colors.white38,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -1178,60 +1355,68 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                       color: AppColors.accentBlue,
                     ),
                   )
-                : Screenshot(
-                    controller: _screenshotController,
-                    child: Container(
-                      color: AppColors.deepBlue,
-                      child: SingleChildScrollView(
+                : _showGkRanking
+                    ? SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
-                        child: Column(
-                          children: [
-                            if (_globalLeaderboard.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(40),
-                                child: Text(
-                                  'Nenhum jogo registrado nesse período.',
-                                  style: TextStyle(color: Colors.white54),
-                                ),
-                              )
-                            else if (_activeTab == 0) ...[
-                              _buildTop3Card(
-                                title: 'Os Melhores',
-                                players: _topNota,
-                                metric: 'nota',
-                                sortColumn: 'nota',
-                                highlightColor: Colors.amber,
-                              ),
-                              _buildTop3Card(
-                                title: 'Part. Ofensivas (G+A)',
-                                players: _topGA,
-                                metric: 'ga',
-                                sortColumn: 'ga',
-                                highlightColor: AppColors.highlightGreen,
-                              ),
-                              _buildTop3Card(
-                                title: 'Artilheiros',
-                                players: _topGoals,
-                                metric: 'goals',
-                                sortColumn: 'goals',
-                                highlightColor: Colors.blueAccent,
-                              ),
-                              _buildTop3Card(
-                                title: 'Garçons (Assist.)',
-                                players: _topAssists,
-                                metric: 'assists',
-                                sortColumn: 'assists',
-                                highlightColor: Colors.deepPurpleAccent,
-                              ),
-                              _buildEvolutionChart(),
-                            ] else
-                              _buildFullTable(),
-                            const SizedBox(height: 30),
-                          ],
+                        child: Container(
+                          color: AppColors.deepBlue,
+                          child: _buildGlobalGkView(),
+                        ),
+                      )
+                    : Screenshot(
+                        controller: _screenshotController,
+                        child: Container(
+                          color: AppColors.deepBlue,
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children: [
+                                if (_globalLeaderboard.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child: Text(
+                                      'Nenhum jogo registrado nesse período.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                else if (_activeTab == 0) ...[
+                                  _buildTop3Card(
+                                    title: 'Os Melhores',
+                                    players: _topNota,
+                                    metric: 'nota',
+                                    sortColumn: 'nota',
+                                    highlightColor: Colors.amber,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Part. Ofensivas (G+A)',
+                                    players: _topGA,
+                                    metric: 'ga',
+                                    sortColumn: 'ga',
+                                    highlightColor: AppColors.highlightGreen,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Artilheiros',
+                                    players: _topGoals,
+                                    metric: 'goals',
+                                    sortColumn: 'goals',
+                                    highlightColor: Colors.blueAccent,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Garçons (Assist.)',
+                                    players: _topAssists,
+                                    metric: 'assists',
+                                    sortColumn: 'assists',
+                                    highlightColor: Colors.deepPurpleAccent,
+                                  ),
+                                  _buildEvolutionChart(),
+                                ] else
+                                  _buildFullTable(),
+                                const SizedBox(height: 30),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
           ),
         ],
       ),
