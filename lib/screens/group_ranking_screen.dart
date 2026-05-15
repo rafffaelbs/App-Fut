@@ -234,8 +234,9 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           dynamic playerObj,
           int status,
           int scored,
-          int conceded,
-        ) {
+          int conceded, {
+          bool isGk = false,
+        }) {
           if (playerObj == null) return;
           final String playerId = playerIdFromObject(playerObj);
           if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -243,61 +244,116 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
 
           final String playerName = (playerObj['name'] ?? '').toString();
 
-          globalStats.putIfAbsent(
-            playerId,
-            () => {
-              'id': playerId,
-              'name': playerName,
-              'goals': 0,
-              'assists': 0,
-              'games': 0,
-              'wins': 0,
-              'draws': 0,
-              'losses': 0,
-              'ratings': <double>[],
-            },
-          );
-          if (playerName.isNotEmpty)
-            globalStats[playerId]!['name'] = playerName;
-
-          globalStats[playerId]!['games'] =
-              (globalStats[playerId]!['games'] as int) + 1;
-
-          if (status == 1)
-            globalStats[playerId]!['wins'] =
-                (globalStats[playerId]!['wins'] as int) + 1;
-          else if (status == -1)
-            globalStats[playerId]!['losses'] =
-                (globalStats[playerId]!['losses'] as int) + 1;
-          else
-            globalStats[playerId]!['draws'] =
-                (globalStats[playerId]!['draws'] as int) + 1;
-
           final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
           final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
           final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
           final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
           final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-          globalStats[playerId]!['goals'] =
-              (globalStats[playerId]!['goals'] as int) + g;
-          globalStats[playerId]!['assists'] =
-              (globalStats[playerId]!['assists'] as int) + a;
+          if (!isGk) {
+            globalStats.putIfAbsent(
+              playerId,
+              () => {
+                'id': playerId,
+                'name': playerName,
+                'goals': 0,
+                'assists': 0,
+                'games': 0,
+                'wins': 0,
+                'draws': 0,
+                'losses': 0,
+                'ratings': <double>[],
+              },
+            );
+            if (playerName.isNotEmpty)
+              globalStats[playerId]!['name'] = playerName;
 
-          final double matchRating = calculateMatchRating(
-            status: status,
-            goals: g,
-            assists: a,
-            ownGoals: og,
-            teamGoals: scored,
-            conceded: conceded,
-            yellow: yc,
-            red: rc,
-            teamWinStreak: 0,
-          );
-          (globalStats[playerId]!['ratings'] as List<double>).add(matchRating);
+            globalStats[playerId]!['games'] =
+                (globalStats[playerId]!['games'] as int) + 1;
 
-          sessionRatings[sessionLabel]!.add(matchRating);
+            if (status == 1)
+              globalStats[playerId]!['wins'] =
+                  (globalStats[playerId]!['wins'] as int) + 1;
+            else if (status == -1)
+              globalStats[playerId]!['losses'] =
+                  (globalStats[playerId]!['losses'] as int) + 1;
+            else
+              globalStats[playerId]!['draws'] =
+                  (globalStats[playerId]!['draws'] as int) + 1;
+
+            globalStats[playerId]!['goals'] =
+                (globalStats[playerId]!['goals'] as int) + g;
+            globalStats[playerId]!['assists'] =
+                (globalStats[playerId]!['assists'] as int) + a;
+
+            final double matchRating = calculateMatchRating(
+              status: status,
+              goals: g,
+              assists: a,
+              ownGoals: og,
+              teamGoals: scored,
+              conceded: conceded,
+              yellow: yc,
+              red: rc,
+              teamWinStreak: 0,
+            );
+            (globalStats[playerId]!['ratings'] as List<double>).add(matchRating);
+            sessionRatings[sessionLabel]!.add(matchRating);
+          } else {
+            // GK-specific tracking
+            globalGkStats.putIfAbsent(
+              playerId,
+              () => {
+                'id': playerId,
+                'name': playerName,
+                'gk_games': 0,
+                'gk_wins': 0,
+                'gk_draws': 0,
+                'gk_losses': 0,
+                'gk_conceded': 0,
+                'gk_clean_sheets': 0,
+                'gk_goals': 0,
+                'gk_assists': 0,
+                'gk_ratings': <double>[],
+              },
+            );
+            if (playerName.isNotEmpty)
+              globalGkStats[playerId]!['name'] = playerName;
+
+            globalGkStats[playerId]!['gk_games'] =
+                (globalGkStats[playerId]!['gk_games'] as int) + 1;
+            globalGkStats[playerId]!['gk_conceded'] =
+                (globalGkStats[playerId]!['gk_conceded'] as int) + conceded;
+            if (conceded == 0) {
+              globalGkStats[playerId]!['gk_clean_sheets'] =
+                  (globalGkStats[playerId]!['gk_clean_sheets'] as int) + 1;
+            }
+            globalGkStats[playerId]!['gk_goals'] =
+                (globalGkStats[playerId]!['gk_goals'] as int) + g;
+            globalGkStats[playerId]!['gk_assists'] =
+                (globalGkStats[playerId]!['gk_assists'] as int) + a;
+
+            if (status == 1)
+              globalGkStats[playerId]!['gk_wins'] =
+                  (globalGkStats[playerId]!['gk_wins'] as int) + 1;
+            else if (status == -1)
+              globalGkStats[playerId]!['gk_losses'] =
+                  (globalGkStats[playerId]!['gk_losses'] as int) + 1;
+            else
+              globalGkStats[playerId]!['gk_draws'] =
+                  (globalGkStats[playerId]!['gk_draws'] as int) + 1;
+
+            final double gkRating = calculateGkMatchRating(
+              status: status,
+              goals: g,
+              assists: a,
+              conceded: conceded,
+              yellow: yc,
+              red: rc,
+              teamWinStreak: 0,
+            );
+            (globalGkStats[playerId]!['gk_ratings'] as List<double>).add(gkRating);
+          }
         }
 
         if (match['players']['red'] != null)
@@ -312,6 +368,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
             redStatus,
             scoreRed,
             scoreWhite,
+            isGk: true,
           );
         if (match['players']['gk_white'] != null)
           processPlayer(
@@ -319,6 +376,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
             whiteStatus,
             scoreWhite,
             scoreRed,
+            isGk: true,
           );
 
         // Build a map of playerId -> name from events for lookup
@@ -461,15 +519,22 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     _topGkNota = List.from(_globalGkLeaderboard)
       ..sort((a, b) => (b['nota'] as num).compareTo(a['nota'] as num));
     _topGkCleanSheets = List.from(_globalGkLeaderboard)
-      ..sort((a, b) => (b['clean_sheets'] as num).compareTo(a['clean_sheets'] as num));
+      ..sort(
+        (a, b) =>
+            (b['clean_sheets'] as num).compareTo(a['clean_sheets'] as num),
+      );
     _topGkConceded = List.from(_globalGkLeaderboard)
-      ..sort((a, b) => (a['conceded'] as num).compareTo(b['conceded'] as num)); // Menos vazados
+      ..sort(
+        (a, b) => (a['conceded'] as num).compareTo(b['conceded'] as num),
+      ); // Menos vazados
     _topGkGames = List.from(_globalGkLeaderboard)
       ..sort((a, b) => (b['games'] as num).compareTo(a['games'] as num));
 
     if (_topGkNota.length > 3) _topGkNota = _topGkNota.sublist(0, 3);
-    if (_topGkCleanSheets.length > 3) _topGkCleanSheets = _topGkCleanSheets.sublist(0, 3);
-    if (_topGkConceded.length > 3) _topGkConceded = _topGkConceded.sublist(0, 3);
+    if (_topGkCleanSheets.length > 3)
+      _topGkCleanSheets = _topGkCleanSheets.sublist(0, 3);
+    if (_topGkConceded.length > 3)
+      _topGkConceded = _topGkConceded.sublist(0, 3);
     if (_topGkGames.length > 3) _topGkGames = _topGkGames.sublist(0, 3);
 
     // Gráfico de Evolução Média
@@ -1345,7 +1410,11 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
             ),
             DataColumn(
               numeric: true,
-              label: _gkSortHeaderFull('CS', 'clean_sheets', AppColors.highlightGreen),
+              label: _gkSortHeaderFull(
+                'CS',
+                'clean_sheets',
+                AppColors.highlightGreen,
+              ),
             ),
             DataColumn(
               numeric: true,
@@ -1515,63 +1584,68 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           _buildMonthSelector(),
           _buildSeasonSelector(),
           // GK / Linha toggle
-          Container(
-            color: AppColors.headerBlue,
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => d = false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: !d ? AppColors.accentBlue : Colors.transparent,
-                            width: 2,
+          if (_activeTab == 1)
+            Container(
+              color: AppColors.headerBlue,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => d = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: !d
+                                  ? AppColors.accentBlue
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
                           ),
                         ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        "Linha",
-                        style: TextStyle(
-                          color: !d ? AppColors.textWhite : Colors.white38,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                        alignment: Alignment.center,
+                        child: Text(
+                          "Linha",
+                          style: TextStyle(
+                            color: !d ? AppColors.textWhite : Colors.white38,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => d = true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: d ? AppColors.accentBlue : Colors.transparent,
-                            width: 2,
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => d = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: d
+                                  ? AppColors.accentBlue
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
                           ),
                         ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        "Goleiros",
-                        style: TextStyle(
-                          color: d ? AppColors.textWhite : Colors.white38,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                        alignment: Alignment.center,
+                        child: Text(
+                          "Goleiros",
+                          style: TextStyle(
+                            color: d ? AppColors.textWhite : Colors.white38,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -1587,50 +1661,9 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                         physics: const BouncingScrollPhysics(),
                         child: Column(
                           children: [
-                            if (d) ...[ // Goleiros
-                              if (_globalGkLeaderboard.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.all(40),
-                                  child: Text(
-                                    'Sem goleiros registrados nesse período.',
-                                    style: TextStyle(color: Colors.white54),
-                                  ),
-                                )
-                              else if (_activeTab == 0) ...[
-                                _buildTop3Card(
-                                  title: 'Os Melhores',
-                                  players: _topGkNota,
-                                  metric: 'nota',
-                                  sortColumn: 'nota',
-                                  highlightColor: Colors.amber,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Paredões (Clean Sheets)',
-                                  players: _topGkCleanSheets,
-                                  metric: 'clean_sheets',
-                                  sortColumn: 'clean_sheets',
-                                  highlightColor: AppColors.highlightGreen,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Menos Vazados (GS)',
-                                  players: _topGkConceded,
-                                  metric: 'conceded',
-                                  sortColumn: 'conceded',
-                                  highlightColor: Colors.redAccent,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Mais Jogos',
-                                  players: _topGkGames,
-                                  metric: 'games',
-                                  sortColumn: 'games',
-                                  highlightColor: Colors.blueAccent,
-                                ),
-                                _buildEvolutionChart(),
-                              ] else
-                                _buildGkFullTable(),
-                              const SizedBox(height: 30),
-                            ] else ...[ // Linha
-                              if (_globalLeaderboard.isEmpty)
+                            if (_activeTab == 0) ...[
+                              // Destaques
+                              if (_globalLeaderboard.isEmpty && _globalGkLeaderboard.isEmpty)
                                 const Padding(
                                   padding: EdgeInsets.all(40),
                                   child: Text(
@@ -1638,40 +1671,79 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                                     style: TextStyle(color: Colors.white54),
                                   ),
                                 )
-                              else if (_activeTab == 0) ...[
-                                _buildTop3Card(
-                                  title: 'Os Melhores',
-                                  players: _topNota,
-                                  metric: 'nota',
-                                  sortColumn: 'nota',
-                                  highlightColor: Colors.amber,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Part. Ofensivas (G+A)',
-                                  players: _topGA,
-                                  metric: 'ga',
-                                  sortColumn: 'ga',
-                                  highlightColor: AppColors.highlightGreen,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Artilheiros',
-                                  players: _topGoals,
-                                  metric: 'goals',
-                                  sortColumn: 'goals',
-                                  highlightColor: Colors.blueAccent,
-                                ),
-                                _buildTop3Card(
-                                  title: 'Garçons (Assist.)',
-                                  players: _topAssists,
-                                  metric: 'assists',
-                                  sortColumn: 'assists',
-                                  highlightColor: Colors.deepPurpleAccent,
-                                ),
+                              else ...[
+                                if (_globalLeaderboard.isNotEmpty) ...[
+                                  _buildTop3Card(
+                                    title: 'Os Melhores',
+                                    players: _topNota,
+                                    metric: 'nota',
+                                    sortColumn: 'nota',
+                                    highlightColor: Colors.amber,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Part. Ofensivas (G+A)',
+                                    players: _topGA,
+                                    metric: 'ga',
+                                    sortColumn: 'ga',
+                                    highlightColor: AppColors.highlightGreen,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Artilheiros',
+                                    players: _topGoals,
+                                    metric: 'goals',
+                                    sortColumn: 'goals',
+                                    highlightColor: Colors.blueAccent,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Garçons',
+                                    players: _topAssists,
+                                    metric: 'assists',
+                                    sortColumn: 'assists',
+                                    highlightColor: Colors.deepPurpleAccent,
+                                  ),
+                                ],
+                                if (_globalGkLeaderboard.isNotEmpty) ...[
+                                  _buildTop3Card(
+                                    title: 'Melhores Goleiros',
+                                    players: _topGkNota,
+                                    metric: 'nota',
+                                    sortColumn: 'nota',
+                                    highlightColor: Colors.amber,
+                                  ),
+                                ],
                                 _buildEvolutionChart(),
-                              ] else
-                                _buildFullTable(),
+                              ],
                               const SizedBox(height: 30),
-                            ]
+                            ] else ...[
+                              // Ranking Geral
+                              if (d) ...[
+                                // Goleiros
+                                if (_globalGkLeaderboard.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child: Text(
+                                      'Sem goleiros registrados nesse período.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                else
+                                  _buildGkFullTable(),
+                                const SizedBox(height: 30),
+                              ] else ...[
+                                // Linha
+                                if (_globalLeaderboard.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child: Text(
+                                      'Nenhum jogo registrado nesse período.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                else
+                                  _buildFullTable(),
+                                const SizedBox(height: 30),
+                              ],
+                            ],
                           ],
                         ),
                       ),
@@ -1717,5 +1789,4 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
       setState(() => _isSharing = false);
     }
   }
-
 }
