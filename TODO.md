@@ -15,5 +15,8 @@ TODO:
     Todos os jogadores estão começando com 8 de nota, talvez fosse uma boa diminuir essa nota e aumentar as pontuações, assim só quem tem 3 gols ou assistências chega a 10
 =======
 - Pesquisar se tem alguma forma de exportar a tela inteira do ranking
-- Puxar os dados direto do historico 
+- Melhorar tabela do goleiro
+- Verificar porque ranking geral nao esta sendo atualizado com dados do goleiro
+- Mostrar top 3 goleiros e remover tab linha/goleiro
+ 
 >>>>>>> 61275ed (feat: add login screen)

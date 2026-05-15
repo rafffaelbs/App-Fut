@@ -119,7 +119,7 @@ class _RankingScreenState extends State<RankingScreen> {
           String pid = eventPlayerId(ev, 'player');
           String astId = eventPlayerId(ev, 'assist');
           final String type = ev['type'];
-          
+
           if (pid.isNotEmpty && ev['player'] != null) {
             eventPlayerNames[pid] = ev['player'].toString();
           }
@@ -166,9 +166,9 @@ class _RankingScreenState extends State<RankingScreen> {
         dynamic playerObj,
         int status,
         int scored,
-        int conceded,
-        {bool isGk = false}
-      ) {
+        int conceded, {
+        bool isGk = false,
+      }) {
         if (playerObj == null) return;
         String playerId = playerIdFromObject(playerObj);
         final String playerName = (playerObj['name'] ?? '').toString();
@@ -211,7 +211,8 @@ class _RankingScreenState extends State<RankingScreen> {
           if (status == 1)
             stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
           else if (status == -1)
-            stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
+            stats[playerId]!['losses'] =
+                (stats[playerId]!['losses'] as int) + 1;
           else
             stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
 
@@ -246,19 +247,27 @@ class _RankingScreenState extends State<RankingScreen> {
           );
           if (playerName.isNotEmpty) gkStats[playerId]!['name'] = playerName;
 
-          gkStats[playerId]!['gk_games'] = (gkStats[playerId]!['gk_games'] as int) + 1;
-          gkStats[playerId]!['gk_conceded'] = (gkStats[playerId]!['gk_conceded'] as int) + conceded;
+          gkStats[playerId]!['gk_games'] =
+              (gkStats[playerId]!['gk_games'] as int) + 1;
+          gkStats[playerId]!['gk_conceded'] =
+              (gkStats[playerId]!['gk_conceded'] as int) + conceded;
           if (conceded == 0) {
-            gkStats[playerId]!['gk_clean_sheets'] = (gkStats[playerId]!['gk_clean_sheets'] as int) + 1;
+            gkStats[playerId]!['gk_clean_sheets'] =
+                (gkStats[playerId]!['gk_clean_sheets'] as int) + 1;
           }
-          gkStats[playerId]!['gk_goals'] = (gkStats[playerId]!['gk_goals'] as int) + g;
-          gkStats[playerId]!['gk_assists'] = (gkStats[playerId]!['gk_assists'] as int) + a;
+          gkStats[playerId]!['gk_goals'] =
+              (gkStats[playerId]!['gk_goals'] as int) + g;
+          gkStats[playerId]!['gk_assists'] =
+              (gkStats[playerId]!['gk_assists'] as int) + a;
           if (status == 1)
-            gkStats[playerId]!['gk_wins'] = (gkStats[playerId]!['gk_wins'] as int) + 1;
+            gkStats[playerId]!['gk_wins'] =
+                (gkStats[playerId]!['gk_wins'] as int) + 1;
           else if (status == -1)
-            gkStats[playerId]!['gk_losses'] = (gkStats[playerId]!['gk_losses'] as int) + 1;
+            gkStats[playerId]!['gk_losses'] =
+                (gkStats[playerId]!['gk_losses'] as int) + 1;
           else
-            gkStats[playerId]!['gk_draws'] = (gkStats[playerId]!['gk_draws'] as int) + 1;
+            gkStats[playerId]!['gk_draws'] =
+                (gkStats[playerId]!['gk_draws'] as int) + 1;
 
           final double gkRating = calculateGkMatchRating(
             status: status,
@@ -282,17 +291,32 @@ class _RankingScreenState extends State<RankingScreen> {
           processPlayer(p, whiteStatus, scoreWhite, scoreRed);
       }
       if (match['players']['gk_red'] != null) {
-        processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite, isGk: true);
+        processPlayer(
+          match['players']['gk_red'],
+          redStatus,
+          scoreRed,
+          scoreWhite,
+          isGk: true,
+        );
       }
       if (match['players']['gk_white'] != null) {
-        processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed, isGk: true);
+        processPlayer(
+          match['players']['gk_white'],
+          whiteStatus,
+          scoreWhite,
+          scoreRed,
+          isGk: true,
+        );
       }
 
       // Process players who have events but weren't in the official lineup
       for (final playerId in matchPlayerEvents.keys) {
         if (!processed.contains(playerId)) {
           final events = matchPlayerEvents[playerId]!;
-          final String playerName = idToNameMap[playerId] ?? eventPlayerNames[playerId] ?? 'Desconhecido';
+          final String playerName =
+              idToNameMap[playerId] ??
+              eventPlayerNames[playerId] ??
+              'Desconhecido';
 
           stats.putIfAbsent(
             playerId,
@@ -308,7 +332,8 @@ class _RankingScreenState extends State<RankingScreen> {
               'ratings': <double>[],
             },
           );
-          if (playerName != 'Desconhecido') stats[playerId]!['name'] = playerName;
+          if (playerName != 'Desconhecido')
+            stats[playerId]!['name'] = playerName;
 
           stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
 
@@ -319,7 +344,8 @@ class _RankingScreenState extends State<RankingScreen> {
           final int rc = events['rc'] ?? 0;
 
           stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
-          stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
+          stats[playerId]!['assists'] =
+              (stats[playerId]!['assists'] as int) + a;
 
           // Do not calculate or add a matchRating here to preserve their current Nota
         }
@@ -418,7 +444,7 @@ class _RankingScreenState extends State<RankingScreen> {
         cmp = (a['nota'] as num).compareTo(b['nota'] as num);
       if (cmp == 0 && _gkSortColumn != 'clean_sheets')
         cmp = (a['clean_sheets'] as num).compareTo(b['clean_sheets'] as num);
-      
+
       return _gkSortDescending ? -cmp : cmp;
     });
   }
@@ -955,7 +981,9 @@ class _RankingScreenState extends State<RankingScreen> {
                 return Container(
                   decoration: const BoxDecoration(
                     color: AppColors.deepBlue,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -971,7 +999,10 @@ class _RankingScreenState extends State<RankingScreen> {
                       ),
                       // Header
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -985,28 +1016,68 @@ class _RankingScreenState extends State<RankingScreen> {
                             ),
                             IconButton(
                               onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close, color: Colors.white54),
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white54,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       // Table Header
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.headerBlue.withValues(alpha: 0.5),
-                          border: const Border(bottom: BorderSide(color: Colors.white10)),
+                          border: const Border(
+                            bottom: BorderSide(color: Colors.white10),
+                          ),
                         ),
                         child: Row(
                           children: [
-                            const SizedBox(width: 30, child: Text('Pos', style: TextStyle(color: Colors.white54, fontSize: 10))),
+                            const SizedBox(
+                              width: 30,
+                              child: Text(
+                                'Pos',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
                             const SizedBox(width: 32), // Espaço avatar
-                            const Expanded(child: Text('Jogador', style: TextStyle(color: Colors.white54, fontSize: 10))),
-                            _gkSortHeader('Nota', 'nota', Colors.greenAccent, sort),
+                            const Expanded(
+                              child: Text(
+                                'Jogador',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            _gkSortHeader(
+                              'Nota',
+                              'nota',
+                              Colors.greenAccent,
+                              sort,
+                            ),
                             const SizedBox(width: 15),
-                            _gkSortHeader('CS', 'clean_sheets', Colors.blueAccent, sort),
+                            _gkSortHeader(
+                              'CS',
+                              'clean_sheets',
+                              Colors.blueAccent,
+                              sort,
+                            ),
                             const SizedBox(width: 15),
-                            _gkSortHeader('GS', 'conceded', Colors.redAccent, sort),
+                            _gkSortHeader(
+                              'GS',
+                              'conceded',
+                              Colors.redAccent,
+                              sort,
+                            ),
                             const SizedBox(width: 15),
                             _gkSortHeader('Jgs', 'games', Colors.white54, sort),
                           ],
@@ -1018,7 +1089,8 @@ class _RankingScreenState extends State<RankingScreen> {
                           controller: scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: gkLeaderboard.length,
-                          separatorBuilder: (c, i) => const Divider(color: Colors.white10, height: 1),
+                          separatorBuilder: (c, i) =>
+                              const Divider(color: Colors.white10, height: 1),
                           itemBuilder: (c, i) {
                             final player = gkLeaderboard[i];
                             return ListTile(
@@ -1031,8 +1103,12 @@ class _RankingScreenState extends State<RankingScreen> {
                                     child: Text(
                                       '${i + 1}',
                                       style: TextStyle(
-                                        color: i < 3 ? AppColors.accentBlue : Colors.white38,
-                                        fontWeight: i < 3 ? FontWeight.bold : FontWeight.normal,
+                                        color: i < 3
+                                            ? AppColors.accentBlue
+                                            : Colors.white38,
+                                        fontWeight: i < 3
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -1055,7 +1131,8 @@ class _RankingScreenState extends State<RankingScreen> {
                                   SizedBox(
                                     width: 35,
                                     child: Text(
-                                      (player['nota'] as double).toStringAsFixed(1),
+                                      (player['nota'] as double)
+                                          .toStringAsFixed(1),
                                       style: const TextStyle(
                                         color: Colors.greenAccent,
                                         fontWeight: FontWeight.bold,
@@ -1070,7 +1147,10 @@ class _RankingScreenState extends State<RankingScreen> {
                                     width: 25,
                                     child: Text(
                                       '${player['clean_sheets']}',
-                                      style: const TextStyle(color: Colors.blueAccent, fontSize: 11),
+                                      style: const TextStyle(
+                                        color: Colors.blueAccent,
+                                        fontSize: 11,
+                                      ),
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
@@ -1080,7 +1160,10 @@ class _RankingScreenState extends State<RankingScreen> {
                                     width: 25,
                                     child: Text(
                                       '${player['conceded']}',
-                                      style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 11,
+                                      ),
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
@@ -1090,7 +1173,10 @@ class _RankingScreenState extends State<RankingScreen> {
                                     width: 25,
                                     child: Text(
                                       '${player['games']}',
-                                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
@@ -1111,7 +1197,12 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  Widget _gkSortHeader(String label, String column, Color color, Function(String) onSort) {
+  Widget _gkSortHeader(
+    String label,
+    String column,
+    Color color,
+    Function(String) onSort,
+  ) {
     final bool active = _gkSortColumn == column;
     return GestureDetector(
       onTap: () => onSort(column),
@@ -1129,7 +1220,9 @@ class _RankingScreenState extends State<RankingScreen> {
           const SizedBox(width: 2),
           Icon(
             active
-                ? (_gkSortDescending ? Icons.arrow_drop_down : Icons.arrow_drop_up)
+                ? (_gkSortDescending
+                      ? Icons.arrow_drop_down
+                      : Icons.arrow_drop_up)
                 : Icons.unfold_more,
             size: 14,
             color: active ? Colors.white : color.withValues(alpha: 0.5),
@@ -1411,6 +1504,12 @@ class _RankingScreenState extends State<RankingScreen> {
     final int games = player['games'] as int;
     final int goals = player['goals'] as int;
     final int assists = player['assists'] as int;
+    
+    final int wins = player['wins'] as int;
+    final int draws = player['draws'] as int;
+    final int losses = player['losses'] as int;
+
+    final String medal = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -1453,58 +1552,98 @@ class _RankingScreenState extends State<RankingScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('⚽', style: TextStyle(fontSize: 10)),
+              Text('⚽', style: TextStyle(fontSize: position == 1 ? 11 : 10)),
               Text(
                 '$goals',
                 style: TextStyle(
                   color: Colors.greenAccent,
-                  fontSize: 10,
+                  fontSize: position == 1 ? 12 : 10,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.handshake, color: Colors.lightBlueAccent, size: 10),
+              Icon(
+                Icons.handshake,
+                color: Colors.lightBlueAccent,
+                size: position == 1 ? 12 : 10,
+              ),
               Text(
                 '$assists',
                 style: TextStyle(
                   color: Colors.lightBlueAccent,
-                  fontSize: 10,
+                  fontSize: position == 1 ? 12 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'CS $cleanSheets | GS $conceded',
+                style: TextStyle(
+                  color: accentColor.withValues(alpha: 0.85),
+                  fontSize: position == 1 ? 11 : 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '$wins',
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$draws',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$losses',
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            '$cleanSheets/$conceded',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
           Text(
             '$games jogos',
-            style: const TextStyle(color: Colors.white24, fontSize: 9),
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Container(
             height: barHeight,
-            margin: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [accentColor.withValues(alpha: 0.6), accentColor.withValues(alpha: 0.1)],
+              color: accentColor.withValues(alpha: 0.2),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(6),
+                topRight: Radius.circular(6),
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-              border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.5),
+                width: 1.5,
+              ),
             ),
             child: Center(
-              child: Text(
-                position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉'),
-                style: const TextStyle(fontSize: 16),
-              ),
+              child: Text(medal, style: const TextStyle(fontSize: 22)),
             ),
           ),
         ],
@@ -1524,7 +1663,7 @@ class _RankingScreenState extends State<RankingScreen> {
         final int goals = player['goals'] as int;
         final int assists = player['assists'] as int;
         final int ga = goals + assists;
-        
+
         final int cleanSheets = isGk ? (player['clean_sheets'] ?? 0) : 0;
         final int conceded = isGk ? (player['conceded'] ?? 0) : 0;
 
@@ -1590,18 +1729,34 @@ class _RankingScreenState extends State<RankingScreen> {
                       Text('⚽', style: TextStyle(fontSize: 10)),
                       Text(
                         '$goals',
-                        style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(Icons.handshake, color: Colors.lightBlueAccent, size: 10),
+                      Icon(
+                        Icons.handshake,
+                        color: Colors.lightBlueAccent,
+                        size: 10,
+                      ),
                       Text(
                         '$assists',
-                        style: TextStyle(color: Colors.lightBlueAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.lightBlueAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '$cleanSheets/$conceded',
-                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   )
@@ -1733,7 +1888,9 @@ class _RankingScreenState extends State<RankingScreen> {
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: !_showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            color: !_showGkRanking
+                                ? AppColors.accentBlue
+                                : Colors.transparent,
                             width: 2,
                           ),
                         ),
@@ -1742,7 +1899,9 @@ class _RankingScreenState extends State<RankingScreen> {
                       child: Text(
                         'Linha',
                         style: TextStyle(
-                          color: !_showGkRanking ? AppColors.textWhite : Colors.white54,
+                          color: !_showGkRanking
+                              ? AppColors.textWhite
+                              : Colors.white54,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1757,7 +1916,9 @@ class _RankingScreenState extends State<RankingScreen> {
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: _showGkRanking ? AppColors.accentBlue : Colors.transparent,
+                            color: _showGkRanking
+                                ? AppColors.accentBlue
+                                : Colors.transparent,
                             width: 2,
                           ),
                         ),
@@ -1766,7 +1927,9 @@ class _RankingScreenState extends State<RankingScreen> {
                       child: Text(
                         'Goleiros',
                         style: TextStyle(
-                          color: _showGkRanking ? AppColors.textWhite : Colors.white54,
+                          color: _showGkRanking
+                              ? AppColors.textWhite
+                              : Colors.white54,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1780,8 +1943,8 @@ class _RankingScreenState extends State<RankingScreen> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _showGkRanking
-                    ? _buildGkRankingView()
-                    : _buildFieldRankingView(),
+                ? _buildGkRankingView()
+                : _buildFieldRankingView(),
           ),
         ],
       ),
@@ -1791,7 +1954,10 @@ class _RankingScreenState extends State<RankingScreen> {
   Widget _buildFieldRankingView() {
     if (leaderboard.isEmpty) {
       return const Center(
-        child: Text('Sem jogadores registrados.', style: TextStyle(color: Colors.white54)),
+        child: Text(
+          'Sem jogadores registrados.',
+          style: TextStyle(color: Colors.white54),
+        ),
       );
     }
     return Screenshot(
@@ -1805,23 +1971,39 @@ class _RankingScreenState extends State<RankingScreen> {
             children: [
               Container(
                 color: AppColors.headerBlue.withValues(alpha: 0.6),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
-                    const Text('Ordenar por', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    const Text(
+                      'Ordenar por',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _sortColumn,
                           dropdownColor: AppColors.headerBlue,
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white54,
+                          ),
                           isDense: true,
-                          items: _sortOptions.map((opt) => DropdownMenuItem<String>(
-                            value: opt['value'],
-                            child: Text(opt['label']!),
-                          )).toList(),
+                          items: _sortOptions
+                              .map(
+                                (opt) => DropdownMenuItem<String>(
+                                  value: opt['value'],
+                                  child: Text(opt['label']!),
+                                ),
+                              )
+                              .toList(),
                           onChanged: _onSortChanged,
                         ),
                       ),
@@ -1834,10 +2016,17 @@ class _RankingScreenState extends State<RankingScreen> {
                 child: _buildPodium(leaderboard.take(3).toList()),
               ),
               const SizedBox(height: 20),
-              const Divider(color: Colors.white12, height: 1, indent: 12, endIndent: 12),
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+              ),
               const SizedBox(height: 8),
               if (leaderboard.length > 3)
-                _buildTop4To8(leaderboard.sublist(3, leaderboard.length.clamp(3, 8))),
+                _buildTop4To8(
+                  leaderboard.sublist(3, leaderboard.length.clamp(3, 8)),
+                ),
               if (leaderboard.length > 8) ...[
                 const SizedBox(height: 12),
                 Padding(
@@ -1846,11 +2035,19 @@ class _RankingScreenState extends State<RankingScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white70,
                       side: const BorderSide(color: Colors.white24),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    icon: const Icon(Icons.format_list_numbered_rounded, size: 18),
-                    label: Text('Ver todos (${leaderboard.length} jogadores)', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    icon: const Icon(
+                      Icons.format_list_numbered_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Ver todos (${leaderboard.length} jogadores)',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     onPressed: _showFullRankingModal,
                   ),
                 ),
@@ -1866,11 +2063,13 @@ class _RankingScreenState extends State<RankingScreen> {
   Widget _buildGkRankingView() {
     if (gkLeaderboard.isEmpty) {
       return const Center(
-        child: Text('Sem goleiros registrados.', style: TextStyle(color: Colors.white54)),
+        child: Text(
+          'Sem goleiros registrados.',
+          style: TextStyle(color: Colors.white54),
+        ),
       );
     }
 
-    final top3 = gkLeaderboard.take(3).toList();
     final top4to8 = gkLeaderboard.skip(3).take(5).toList();
 
     return Screenshot(
@@ -1882,75 +2081,87 @@ class _RankingScreenState extends State<RankingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Sorting dropdown
               Container(
                 color: AppColors.headerBlue.withValues(alpha: 0.6),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
-                    const Text('Ordenar por', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    const Text(
+                      'Ordenar por',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _gkSortColumn,
                           dropdownColor: AppColors.headerBlue,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white54,
+                          ),
                           isDense: true,
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                          items: _gkSortOptions.map((opt) {
-                            return DropdownMenuItem<String>(
-                              value: opt['value'],
-                              child: Text(opt['label']!),
-                            );
-                          }).toList(),
+                          items: _gkSortOptions
+                              .map(
+                                (opt) => DropdownMenuItem<String>(
+                                  value: opt['value'],
+                                  child: Text(opt['label']!),
+                                ),
+                              )
+                              .toList(),
                           onChanged: _onGkSortChanged,
                         ),
                       ),
                     ),
-                    Icon(
-                      _gkSortDescending ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                      size: 14,
-                      color: AppColors.accentBlue,
-                    ),
                   ],
                 ),
               ),
-              // Podium
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [AppColors.headerBlue.withValues(alpha: 0.4), Colors.transparent],
-                  ),
-                ),
-                child: _buildGkPodium(top3),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+                child: _buildGkPodium(gkLeaderboard.take(3).toList()),
               ),
-              const Divider(color: Colors.white10, height: 1),
-              // List 4 to 8
-              if (gkLeaderboard.length > 3)
+              const SizedBox(height: 20),
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+              ),
+              const SizedBox(height: 8),
+              if (gkLeaderboard.length > 3) _buildTop4To8(top4to8, isGk: true),
+              if (gkLeaderboard.length > 8) ...[
+                const SizedBox(height: 12),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  child: _buildTop4To8(top4to8, isGk: true),
-                ),
-              // "Ver todos" button
-              if (gkLeaderboard.length > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ElevatedButton(
-                    onPressed: _showFullGkRankingModal,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.headerBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text('Ver Ranking Completo (Goleiros)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    icon: const Icon(
+                      Icons.format_list_numbered_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Ver todos (${gkLeaderboard.length} goleiros)',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: _showFullGkRankingModal,
                   ),
                 ),
-              const SizedBox(height: 32),
+              ],
+              const SizedBox(height: 24),
             ],
           ),
         ),
