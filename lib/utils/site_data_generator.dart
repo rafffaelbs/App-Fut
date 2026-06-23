@@ -229,8 +229,13 @@ class SiteDataGenerator {
       final int scoreRed = match['scoreRed'] ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
       
-      final List<dynamic> redPlayers = [...(match['players']?['red'] ?? []), match['players']?['gk_red']].where((p) => p != null).toList();
-      final List<dynamic> whitePlayers = [...(match['players']?['white'] ?? []), match['players']?['gk_white']].where((p) => p != null).toList();
+      final List<dynamic> redField = List<dynamic>.from(match['players']?['red'] ?? []);
+      final dynamic gkRed = match['players']?['gk_red'];
+      final List<dynamic> redPlayers = [...redField, gkRed].where((p) => p != null).toList();
+      
+      final List<dynamic> whiteField = List<dynamic>.from(match['players']?['white'] ?? []);
+      final dynamic gkWhite = match['players']?['gk_white'];
+      final List<dynamic> whitePlayers = [...whiteField, gkWhite].where((p) => p != null).toList();
       
       final int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
       final int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
@@ -267,7 +272,7 @@ class SiteDataGenerator {
 
       Set<String> processedThisMatch = {};
 
-      void processPlayer(dynamic pObj, int status, int scored, int conceded, List<dynamic> teammates, List<dynamic> opponents) {
+      void processPlayer(dynamic pObj, int status, int scored, int conceded, List<dynamic> teammates, List<dynamic> opponents, {bool isGk = false}) {
         String pId = playerIdFromObject(pObj);
         if (pId.isEmpty || processedThisMatch.contains(pId)) return;
         processedThisMatch.add(pId);
@@ -282,6 +287,7 @@ class SiteDataGenerator {
           'biggest_win_margin': 0, 'biggest_win_score': '-',
           'biggest_loss_margin': 0, 'biggest_loss_score': '-',
           'current_unbeaten': 0, 'max_unbeaten': 0,
+          'gk_stats': {'games': 0, 'wins': 0, 'goals_conceded': 0, 'clean_sheets': 0},
           'ratings': <double>[],
           'session_chart_data': <String, List<double>>{}, // date -> ratings
         });
@@ -317,6 +323,14 @@ class SiteDataGenerator {
           }
         } else {
           stats['current_unbeaten'] = 0;
+        }
+
+        if (isGk) {
+          var gkStats = stats['gk_stats'] as Map<String, dynamic>;
+          gkStats['games'] = (gkStats['games'] as int) + 1;
+          if (status == 1) gkStats['wins'] = (gkStats['wins'] as int) + 1;
+          gkStats['goals_conceded'] = (gkStats['goals_conceded'] as int) + conceded;
+          if (conceded == 0) gkStats['clean_sheets'] = (gkStats['clean_sheets'] as int) + 1;
         }
 
         int g = matchPlayerEvents[pId]?['g'] ?? 0;
@@ -367,8 +381,11 @@ class SiteDataGenerator {
         }
       }
 
-      for (var p in redPlayers) processPlayer(p, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers);
-      for (var p in whitePlayers) processPlayer(p, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers);
+      for (var p in redField) if (p != null) processPlayer(p, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: false);
+      if (gkRed != null) processPlayer(gkRed, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: true);
+
+      for (var p in whiteField) if (p != null) processPlayer(p, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: false);
+      if (gkWhite != null) processPlayer(gkWhite, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: true);
     }
 
     // Helper para achar maior num mapa de contagem

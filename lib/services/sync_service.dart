@@ -195,7 +195,7 @@ class SyncService {
     }
   }
 
-  Future<void> _pushNormalizedDataToFirebase(
+Future<void> _pushNormalizedDataToFirebase(
     String syncCode,
     SharedPreferences prefs,
   ) async {
@@ -204,10 +204,16 @@ class SyncService {
     for (final key in keys) {
       data[key] = prefs.get(key);
     }
+    
+    // 1. Generate the site_data again with the normalized UUIDs
+    final siteData = await SiteDataGenerator.generate(prefs);
+
+    // 2. Use merge: true so we don't accidentally overwrite the whole document
     await _firestore.collection('sync_data').doc(syncCode).set({
       'data': data,
+      'site_data': siteData, // 3. Include site_data in the upload
       'last_updated': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   Future<void> _normalizeUuidData(SharedPreferences prefs) async {
