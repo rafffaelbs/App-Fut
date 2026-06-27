@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/services/sync_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncScreen extends StatefulWidget {
   const SyncScreen({Key? key}) : super(key: key);
@@ -15,6 +16,7 @@ class _SyncScreenState extends State<SyncScreen> {
 
   String? _mySyncCode;
   bool _isLoading = false;
+  List<String> _syncHistory = [];
 
   @override
   void initState() {
@@ -24,8 +26,11 @@ class _SyncScreenState extends State<SyncScreen> {
 
   Future<void> _loadMyCode() async {
     final code = await _syncService.getOrCreateSyncCode();
+    final prefs = await SharedPreferences.getInstance();
+    final history = prefs.getStringList('sync_history') ?? [];
     setState(() {
       _mySyncCode = code;
+      _syncHistory = history.reversed.toList();
     });
   }
 
@@ -271,6 +276,58 @@ class _SyncScreenState extends State<SyncScreen> {
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 32),
+
+                  // Histórico de Sincronização em Background
+                  if (_syncHistory.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.headerBlue,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            "HISTÓRICO AUTOMÁTICO",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ..._syncHistory.take(5).map((entry) {
+                            final parts = entry.split('|');
+                            if (parts.length < 2) return const SizedBox();
+                            final date = DateTime.tryParse(parts[0]);
+                            final success = parts[1] == 'true';
+                            final errorMsg = parts.length > 2 ? parts[2] : null;
+                            final dateString = date != null ? "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}" : "Indisponível";
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                success ? Icons.check_circle : Icons.error,
+                                color: success ? Colors.green : Colors.redAccent,
+                              ),
+                              title: Text(
+                                success ? "Sucesso" : "Falha",
+                                style: TextStyle(color: success ? Colors.green : Colors.redAccent),
+                              ),
+                              subtitle: errorMsg != null ? Text(errorMsg, style: const TextStyle(color: Colors.redAccent, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis) : null,
+                              trailing: Text(
+                                dateString,
+                                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

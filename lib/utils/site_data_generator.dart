@@ -188,9 +188,60 @@ class SiteDataGenerator {
       });
     }
 
+    Map<String, dynamic> liveData = {'active_session': false};
+    for (final session in sessions) {
+      if (session['status'] == 'Em Andamento') {
+        final String tId = session['id'];
+        final int playerCount = session['jogadores'] ?? 5;
+        
+        List<dynamic> teamRed = [];
+        List<dynamic> teamWhite = [];
+        List<dynamic> presentPlayers = [];
+        
+        if (prefs.containsKey('team_red_$tId')) {
+          teamRed = jsonDecode(prefs.getString('team_red_$tId')!);
+        }
+        if (prefs.containsKey('team_white_$tId')) {
+          teamWhite = jsonDecode(prefs.getString('team_white_$tId')!);
+        }
+        if (prefs.containsKey('present_players_$tId')) {
+          presentPlayers = jsonDecode(prefs.getString('present_players_$tId')!);
+        }
+
+        Set<String> activeIds = {};
+        for (var p in teamRed) activeIds.add(playerIdFromObject(p));
+        for (var p in teamWhite) activeIds.add(playerIdFromObject(p));
+
+        List<String> waitingIds = [];
+        for (var p in presentPlayers) {
+          final id = playerIdFromObject(p);
+          if (!activeIds.contains(id)) waitingIds.add(id);
+        }
+
+        List<Map<String, dynamic>> queues = [];
+        for (int i = 0; i < waitingIds.length; i += playerCount) {
+          int end = (i + playerCount < waitingIds.length) ? i + playerCount : waitingIds.length;
+          queues.add({'players': waitingIds.sublist(i, end)});
+        }
+
+        liveData = {
+          'active_session': true,
+          'mode_format': playerCount <= 5 ? 'futsal' : 'society',
+          'player_count_per_team': playerCount,
+          'active_teams': {
+            'red': teamRed.map((p) => playerIdFromObject(p)).toList(),
+            'white': teamWhite.map((p) => playerIdFromObject(p)).toList(),
+          },
+          'queues': queues,
+        };
+        break;
+      }
+    }
+
     return {
       'players': sitePlayers.values.toList(),
       'sessions': siteSessions,
+      'live_session': liveData,
       'rating_rules': {
         'base': kRatingBase,
         'goal': kWeightGoal,

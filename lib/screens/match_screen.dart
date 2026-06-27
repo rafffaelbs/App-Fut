@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../services/sync_service.dart';
 
 import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_pitch_player.dart';
@@ -48,6 +49,7 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
   bool isOvertime = false;
   bool isDraftMode = false;
   int winLimit = 3;
+  String streakAction = 'split';
   Timer? _matchTimer;
 
   int _secondsPlayedBeforePause = 0;
@@ -145,6 +147,9 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
           }
           if (currentSession.containsKey('draft_mode')) {
             isDraftMode = currentSession['draft_mode'];
+          }
+          if (currentSession.containsKey('streak_action')) {
+            streakAction = currentSession['streak_action'];
           }
         }
       }
@@ -958,6 +963,8 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
     bool isTie = scoreRed == scoreWhite; bool redWon = scoreRed > scoreWhite;
     List<Map<String, dynamic>> suggestedLeavers = []; String popupTitle = ""; String popupMessage = ""; Color popupColor = AppColors.textWhite;
 
+    bool thresholdMet = false;
+
     if (isTie) {
       redWinStreak = 0; whiteWinStreak = 0;
       suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random());
@@ -966,13 +973,41 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
       _playVictorySound();
       if (redWon) {
         redWinStreak++; whiteWinStreak = 0;
-        if (winLimit > 0 && redWinStreak >= winLimit) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); redWinStreak = 0; popupTitle = "🔥 VERMELHO INVICTO!"; popupMessage = "Vermelho ganhou $winLimit seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.redAccent; }
+        if (winLimit > 0 && redWinStreak >= winLimit) { 
+            thresholdMet = true;
+            suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); 
+            popupTitle = "🔥 VERMELHO INVICTO!"; popupMessage = "Vermelho ganhou $winLimit seguidas!\nAutomação acionada."; popupColor = Colors.redAccent; 
+        }
         else { suggestedLeavers.addAll(teamWhite); popupTitle = "Vitória do VERMELHO!"; popupMessage = winLimit > 0 ? "Sugestão: Branco sai.\n(Sequência do Vermelho: $redWinStreak/$winLimit)" : "Sugestão: Branco sai.\n(Vitórias seguidas: $redWinStreak)"; popupColor = Colors.redAccent; }
       } else {
         whiteWinStreak++; redWinStreak = 0;
-        if (winLimit > 0 && whiteWinStreak >= winLimit) { suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); whiteWinStreak = 0; popupTitle = "🔥 BRANCO INVICTO!"; popupMessage = "Branco ganhou $winLimit seguidas!\nSugestão: TODOS saem da quadra."; popupColor = Colors.white; }
+        if (winLimit > 0 && whiteWinStreak >= winLimit) { 
+            thresholdMet = true;
+            suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); 
+            popupTitle = "🔥 BRANCO INVICTO!"; popupMessage = "Branco ganhou $winLimit seguidas!\nAutomação acionada."; popupColor = Colors.white; 
+        }
         else { suggestedLeavers.addAll(teamRed); popupTitle = "Vitória do BRANCO!"; popupMessage = winLimit > 0 ? "Sugestão: Vermelho sai.\n(Sequência do Branco: $whiteWinStreak/$winLimit)" : "Sugestão: Vermelho sai.\n(Vitórias seguidas: $whiteWinStreak)"; popupColor = Colors.white; }
       }
+    }
+
+    _triggerBackgroundSync();
+
+    if (thresholdMet) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("$popupTitle Aplicando regra: ${streakAction == 'dual_exit' ? 'Ambos Saem' : 'Dividir Vencedor'}"),
+          backgroundColor: popupColor,
+          duration: const Duration(seconds: 3),
+        ));
+      }
+      if (streakAction == 'dual_exit') {
+        _processMatchExit(suggestedLeavers); // Ambos saem
+      } else {
+        final winners = redWon ? List<Map<String, dynamic>>.from(teamRed)  : List<Map<String, dynamic>>.from(teamWhite);
+        final losers  = redWon ? List<Map<String, dynamic>>.from(teamWhite) : List<Map<String, dynamic>>.from(teamRed);
+        _splitWinner(winners, losers);
+      }
+      return;
     }
 
     if (!mounted) return;
@@ -1188,5 +1223,33 @@ class _MatchScreenState extends State<MatchScreen> with SingleTickerProviderStat
         ),
       ),
     );
+  }
+
+  void _triggerBackgroundSync() async {
+    // Fire and forget
+    try {
+      final syncService = SyncService();
+      final String code = await syncService.getOrCreateSyncCode();
+      syncService.exportDataToFirebase(code).then((_) async {
+        _recordSyncHistory(true);
+      }).catchError((e) {
+        _recordSyncHistory(false, e.toString());
+      });
+    } catch (e) {
+      _recordSyncHistory(false, e.toString());
+    }
+  }
+
+  void _recordSyncHistory(bool success, [String? error]) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> history = prefs.getStringList('sync_history') ?? [];
+    final now = DateTime.now().toIso8601String();
+    String entry = "$now|$success";
+    if (error != null) {
+      entry += "|${error.replaceAll('|', ' ')}";
+    }
+    history.add(entry);
+    if (history.length > 50) history.removeAt(0);
+    await prefs.setStringList('sync_history', history);
   }
 }

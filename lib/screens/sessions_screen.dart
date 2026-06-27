@@ -74,6 +74,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           : '3',
     );
     bool isDraftMode = isEditing ? (session!['draft_mode'] ?? false) : false;
+    String streakAction = isEditing ? (session!['streak_action'] ?? 'split') : 'split';
 
     // --- NEW: DATE LOGIC ---
     DateTime selectedDate = isEditing && session!['timestamp'] != null
@@ -271,6 +272,51 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+
+                  // Ação ao Atingir Limite
+                  if (!isInfiniteLimit) ...[
+                    const Text("Ação ao Atingir Limite", style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setModalState(() => streakAction = 'split'),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: streakAction == 'split' ? AppColors.accentBlue : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text("Dividir Vencedor", style: TextStyle(color: streakAction == 'split' ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setModalState(() => streakAction = 'dual_exit'),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: streakAction == 'dual_exit' ? AppColors.accentBlue : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text("Ambos Saem", style: TextStyle(color: streakAction == 'dual_exit' ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   
                   // Modo Draft Toggle
                   const Text("Modo de Formação de Times", style: TextStyle(color: Colors.white54, fontSize: 14)),
@@ -350,6 +396,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                                 int.tryParse(playersController.text) ?? 5,
                             'duration': int.tryParse(timeController.text) ?? 8,
                             'win_limit': isInfiniteLimit ? 0 : (int.tryParse(winLimitController.text) ?? 3),
+                            'streak_action': streakAction,
                             'draft_mode': isDraftMode,
                           };
 
