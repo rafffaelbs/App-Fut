@@ -32,11 +32,17 @@ class SiteDataGenerator {
 
     if (groupId == null) return {};
 
-    // 2. Carregar sessões
+    // 2. Carregar sessões e seasons config
     List<dynamic> sessions = [];
     final String sessionsKey = 'sessions_$groupId';
     if (prefs.containsKey(sessionsKey)) {
       sessions = jsonDecode(prefs.getString(sessionsKey)!);
+    }
+    
+    List<dynamic> seasonsConfig = [];
+    final String seasonsConfigKey = 'seasons_$groupId';
+    if (prefs.containsKey(seasonsConfigKey)) {
+      seasonsConfig = jsonDecode(prefs.getString(seasonsConfigKey)!);
     }
 
     // 3. Carregar Histórico de todas as partidas
@@ -218,10 +224,10 @@ class SiteDataGenerator {
           if (!activeIds.contains(id)) waitingIds.add(id);
         }
 
-        List<Map<String, dynamic>> queues = [];
+        List<List<String>> queues = [];
         for (int i = 0; i < waitingIds.length; i += playerCount) {
           int end = (i + playerCount < waitingIds.length) ? i + playerCount : waitingIds.length;
-          queues.add({'players': waitingIds.sublist(i, end)});
+          queues.add(waitingIds.sublist(i, end));
         }
 
         liveData = {
@@ -241,7 +247,8 @@ class SiteDataGenerator {
     return {
       'players': sitePlayers.values.toList(),
       'sessions': siteSessions,
-      'live_session': liveData,
+      'seasons_config': seasonsConfig,
+      'live_session': jsonEncode(liveData),
       'rating_rules': {
         'base': kRatingBase,
         'goal': kWeightGoal,
