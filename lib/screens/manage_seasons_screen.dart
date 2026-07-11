@@ -48,6 +48,8 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: season?['name']);
     DateTime? startDate = season != null ? DateTime.tryParse(season['startDate'] ?? '') : null;
     DateTime? endDate = season != null ? DateTime.tryParse(season['endDate'] ?? '') : null;
+    bool isPreSeason = season?['isPreSeason'] == true;
+    String? parentSeasonId = season?['parentSeasonId'];
 
     showDialog(
       context: context,
@@ -107,6 +109,45 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      title: const Text('É Pré-temporada?', style: TextStyle(color: Colors.white)),
+                      value: isPreSeason,
+                      activeColor: AppColors.accentBlue,
+                      checkColor: Colors.white,
+                      onChanged: (val) {
+                        setStateDialog(() {
+                          isPreSeason = val ?? false;
+                          if (!isPreSeason) parentSeasonId = null;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    if (isPreSeason) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: parentSeasonId,
+                        dropdownColor: AppColors.headerBlue,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Temporada Principal (Pai)',
+                          labelStyle: TextStyle(color: Colors.white54),
+                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                        ),
+                        items: _seasons
+                            .where((s) => s['isPreSeason'] != true && s['id'] != season?['id'])
+                            .map((s) => DropdownMenuItem<String>(
+                                  value: s['id'],
+                                  child: Text(s['name']),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            parentSeasonId = val;
+                          });
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -130,11 +171,15 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                           'name': nameCtrl.text.trim(),
                           'startDate': startDate!.toIso8601String(),
                           'endDate': endDate!.toIso8601String(),
+                          'isPreSeason': isPreSeason,
+                          'parentSeasonId': isPreSeason ? parentSeasonId : null,
                         });
                       } else {
                         season['name'] = nameCtrl.text.trim();
                         season['startDate'] = startDate!.toIso8601String();
                         season['endDate'] = endDate!.toIso8601String();
+                        season['isPreSeason'] = isPreSeason;
+                        season['parentSeasonId'] = isPreSeason ? parentSeasonId : null;
                       }
                       // Ordena temporadas da mais recente para a mais antiga (baseado no endDate)
                       _seasons.sort((a, b) => DateTime.parse(b['endDate']).compareTo(DateTime.parse(a['endDate'])));
@@ -184,7 +229,22 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                     return Card(
                       color: AppColors.headerBlue,
                       child: ListTile(
-                        title: Text(s['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        title: Row(
+                          children: [
+                            Text(s['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            if (s['isPreSeason'] == true) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orangeAccent,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text('Pré', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ]
+                          ],
+                        ),
                         subtitle: Text(
                           '${start.day.toString().padLeft(2, '0')}/${start.month.toString().padLeft(2, '0')}/${start.year} - ${end.day.toString().padLeft(2, '0')}/${end.month.toString().padLeft(2, '0')}/${end.year}',
                           style: const TextStyle(color: Colors.white54),

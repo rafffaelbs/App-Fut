@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 const double kRatingBase = 6.5;
 
 /// Impacto do Resultado
-/// Aumentado para empurrar quem vence acima de 7.5 sem fazer nada especial.
+/// Alto impacto para recompensar quem ajuda defensivamente/taticamente nas vitórias.
 const double kResultImpactWin  =  1.5;
 const double kResultImpactLoss = -1.5;
 
@@ -27,8 +27,8 @@ const double kWeightGoal       =  0.9;
 const double kWeightAssist     =  0.8;
 const double kWeightOwnGoal    = -1.0;
 
-/// Impacto de Defesa (Penaliza a zaga que tomou gol)
-const double kWeightConceded   = -0.3;
+/// Impacto de Defesa (Penaliza a zaga que tomou gol - balanceado para formato '3 gols sai')
+const double kWeightConceded   = -0.2;
 
 /// Impacto Disciplinar
 const double kWeightYellowCard = -1.0;
@@ -76,15 +76,39 @@ double calculateMatchRating({
   required int yellow,
   required int red,
   required int teamWinStreak,
+  double? teamAvgRating,
+  double? opponentAvgRating,
 }) {
-  final double resultImpact =
+  double resultImpact =
       status == 1 ? kResultImpactWin : (status == -1 ? kResultImpactLoss : 0.0);
+
+  // Elo-Lite Asymmetric Pressure generalizada
+  double positiveMultiplier = 1.0;
+  double negativeMultiplier = 1.0;
+
+  if (teamAvgRating != null && opponentAvgRating != null) {
+    final double diff = teamAvgRating - opponentAvgRating;
+    final double factor = (diff.abs() * 0.5).clamp(0.0, 2.0);
+    
+    if (diff < 0) {
+      // Underdog (Time mais fraco)
+      positiveMultiplier = 1.0 + factor; // Ganha mais por ações boas
+      negativeMultiplier = 1.0 / (1.0 + factor); // Perde menos por ações ruins
+    } else if (diff > 0) {
+      // Favorito (Time mais forte)
+      positiveMultiplier = 1.0 / (1.0 + factor); // Ganha menos por ações boas
+      negativeMultiplier = 1.0 + factor; // Perde mais por ações ruins
+    }
+  }
+
+  if (resultImpact > 0) resultImpact *= positiveMultiplier;
+  else if (resultImpact < 0) resultImpact *= negativeMultiplier;
 
   // Bônus de sequência (só aplica se ganhou a partida atual)
   double streakBonus = 0.0;
   if (status == 1) {
-    if (teamWinStreak == 2)      streakBonus = kStreakBonus2Wins;
-    else if (teamWinStreak >= 3) streakBonus = kStreakBonus3PlusWins;
+    if (teamWinStreak == 2)      streakBonus = kStreakBonus2Wins * positiveMultiplier;
+    else if (teamWinStreak >= 3) streakBonus = kStreakBonus3PlusWins * positiveMultiplier;
   }
 
   // Bônus Dinâmicos
@@ -92,22 +116,32 @@ double calculateMatchRating({
   final double playmakerBonus  = assists >= 3 ? kBonusPlaymaker  : 0.0;
   final double teamGoalBonus   = teamGoals > 0 ? kBonusTeamGoal  : 0.0;
 
-  final double attackImpact =
+  double attackImpact =
       (goals   * kWeightGoal)   +
       (assists * kWeightAssist) +
       (ownGoals * kWeightOwnGoal) +
       hatTrickBonus +
       playmakerBonus +
       teamGoalBonus;
+      
+  // Aplica multiplicador: gols a favor escalam com a dificuldade
+  if (attackImpact > 0) attackImpact *= positiveMultiplier;
+  else if (attackImpact < 0) attackImpact *= negativeMultiplier;
 
-  final double defenseImpact    = conceded * kWeightConceded;
-  final double disciplineImpact = (yellow * kWeightYellowCard) + (red * kWeightRedCard);
+  double defenseImpact = conceded * kWeightConceded;
+  defenseImpact *= negativeMultiplier;
+
+  double disciplineImpact = (yellow * kWeightYellowCard) + (red * kWeightRedCard);
+  disciplineImpact *= negativeMultiplier;
 
   // Impacto da diferença de gols: bônus para quem ganhou, baque para quem perdeu
-  final int    goalDiff = (teamGoals - conceded).abs();
+  final int goalDiff = (teamGoals - conceded).abs();
   double goalDiffImpact = 0.0;
-  if (status == 1)       goalDiffImpact =  goalDiff * kGoalDiffImpact;
-  else if (status == -1) goalDiffImpact = -goalDiff * kGoalDiffImpact;
+  if (status == 1) {
+      goalDiffImpact = (goalDiff * kGoalDiffImpact) * positiveMultiplier;
+  } else if (status == -1) {
+      goalDiffImpact = (-goalDiff * kGoalDiffImpact) * negativeMultiplier;
+  }
 
   double raw = kRatingBase +
       resultImpact +
@@ -119,45 +153,45 @@ double calculateMatchRating({
 
   // Clean sheet: apenas vitória ou empate (não punir quem perdeu mas não tomou gols)
   if (conceded == 0 && status >= 0) {
-    raw += kBonusCleanSheet;
+    raw += (kBonusCleanSheet * positiveMultiplier);
   }
 
   return raw.clamp(kMinRating, kMaxRating);
 }
 
-/// Calcula a Média Final.
-/// [useBayesian] = true  → ranking global (com prior bayesiano e bônus de volume).
-/// [useBayesian] = false → ranking de pelada (média aritmética simples).
+/// Calcula a Média Final usando Exponential Moving Average (EMA).
+/// [useEMA] = true  -> ranking global (EMA com maior peso para jogos recentes).
+/// [useEMA] = false -> ranking de pelada (média aritmética simples).
 double calculateFinalRating({
   required List<double> ratings,
-  bool useBayesian = true,
+  bool useEMA = true,
 }) {
   final int games = ratings.length;
   if (games == 0) return kRatingBase;
 
-  if (!useBayesian) {
+  if (!useEMA) {
     // Média aritmética simples — usada no ranking da pelada (session ranking)
     final double sum = ratings.fold(0.0, (acc, r) => acc + r);
     return (sum / games).clamp(kMinRating, kMaxRating);
   }
 
-  // Média ponderada com peso 2× para as 3 últimas partidas
-  double weightedSum  = 0.0;
-  double totalWeight  = 0.0;
+  // Média móvel exponencial (EMA)
+  // Alpha de 0.25 captura perfeitamente a "fase atual" (fase boa ou fase ruim)
+  // Os últimos 4 jogos representarão cerca de 70% da nota do jogador.
+  double ema = kRatingBase;
+  const double alpha = 0.25;
 
   for (int i = 0; i < games; i++) {
-    final double weight = (i >= games - 3) ? 2.0 : 1.0;
-    weightedSum += ratings[i] * weight;
-    totalWeight += weight;
+    if (i == 0) {
+      // O primeiro jogo da temporada baseia-se mais na própria nota inicial (âncora)
+      // Como a temporada tem 100+ jogos, podemos segurar a volatilidade inicial sem problemas.
+      ema = (ratings[i] * 0.5) + (kRatingBase * 0.5);
+    } else {
+      ema = (ratings[i] * alpha) + (ema * (1 - alpha));
+    }
   }
 
-  final double bayesianRating =
-      ((kBayesianPriorGames * kBayesianPriorRating) + weightedSum) /
-      (kBayesianPriorGames + totalWeight);
-
-  final double volumeBonus = (games ~/ kVolumeBonusEveryN) * kVolumeBonusPerN;
-
-  return (bayesianRating + volumeBonus).clamp(kMinRating, kMaxRating);
+  return ema.clamp(kMinRating, kMaxRating);
 }
 
 // --------------- Funções Visuais (Cores e Labels) ----------------------------

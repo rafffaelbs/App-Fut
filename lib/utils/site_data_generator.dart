@@ -80,8 +80,15 @@ class SiteDataGenerator {
     }
 
     // 5. Calcular estatísticas globais e avançadas para cada jogador
+    // Sort allHistory chronologically to ensure EMA and Elo calculations are correct
+    allHistory.sort((a, b) {
+      String dateA = (a as Map)['session_date'] ?? a['date'] ?? '';
+      String dateB = (b as Map)['session_date'] ?? b['date'] ?? '';
+      return dateA.compareTo(dateB);
+    });
+
     Map<String, Map<String, dynamic>> sitePlayers = {};
-    _calculateGlobalAndAdvancedStats(allHistory, sitePlayers, playersMap);
+    _calculateGlobalAndAdvancedStats(allHistory, sitePlayers, playersMap, seasonsConfig);
 
     // 6. Resumo das Sessões (Dias de pelada)
     List<Map<String, dynamic>> siteSessions = [];
@@ -265,7 +272,8 @@ class SiteDataGenerator {
   static void _calculateGlobalAndAdvancedStats(
     List<dynamic> allHistory, 
     Map<String, Map<String, dynamic>> sitePlayers,
-    Map<String, Map<String, dynamic>> playersMap
+    Map<String, Map<String, dynamic>> playersMap,
+    List<dynamic> seasonsConfig
   ) {
     // Aqui fazemos uma varredura parecida com a do player_detail.dart
     // Mas para TODOS os jogadores de uma vez para otimização
@@ -281,9 +289,45 @@ class SiteDataGenerator {
     Map<String, Map<String, int>> lossesAgainst = {};
     Map<String, Map<String, int>> drawsAgainst = {};
     
+    // Helpers for Temporada Logic
+    String getSeasonInfo(String dateStr, {required bool returnParentId}) {
+      if (dateStr.isEmpty) return 'unknown';
+      try {
+        DateTime dt = DateTime.parse(dateStr);
+        for (var season in seasonsConfig) {
+          if (season['startDate'] == null || season['endDate'] == null) continue;
+          DateTime start = DateTime.parse(season['startDate']);
+          DateTime end = DateTime.parse(season['endDate']).add(const Duration(days: 1));
+          if (dt.isAfter(start.subtract(const Duration(seconds: 1))) && dt.isBefore(end)) {
+            if (returnParentId) {
+              return (season['isPreSeason'] == true && season['parentSeasonId'] != null)
+                  ? season['parentSeasonId']
+                  : season['id'];
+            } else {
+              return season['isPreSeason'] == true ? 'pre' : 'main';
+            }
+          }
+        }
+      } catch (_) {}
+      return 'unknown';
+    }
+
+    String currentTemporada = '';
+    Map<String, double> currentEmaRatings = {};
+
     for (final match in allHistory) {
       if (match is! Map) continue;
       
+      String sessionDate = match['session_date'] ?? match['date'] ?? '';
+      String tId = getSeasonInfo(sessionDate, returnParentId: true);
+      String seasonType = getSeasonInfo(sessionDate, returnParentId: false); // 'main' or 'pre'
+      String rawSeasonId = getSeasonInfo(sessionDate, returnParentId: false); // We can just use tId and seasonType
+      
+      if (tId != currentTemporada) {
+        currentTemporada = tId;
+        currentEmaRatings.clear();
+      }
+
       final int scoreRed = match['scoreRed'] ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
       
@@ -295,6 +339,27 @@ class SiteDataGenerator {
       final dynamic gkWhite = match['players']?['gk_white'];
       final List<dynamic> whitePlayers = [...whiteField, gkWhite].where((p) => p != null).toList();
       
+      // Calculate Team Averages for Elo-lite
+      double redSum = 0; int redCount = 0;
+      for (var p in redPlayers) {
+        String pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          redSum += currentEmaRatings[pid] ?? kRatingBase;
+          redCount++;
+        }
+      }
+      double redAvg = redCount > 0 ? redSum / redCount : kRatingBase;
+
+      double whiteSum = 0; int whiteCount = 0;
+      for (var p in whitePlayers) {
+        String pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          whiteSum += currentEmaRatings[pid] ?? kRatingBase;
+          whiteCount++;
+        }
+      }
+      double whiteAvg = whiteCount > 0 ? whiteSum / whiteCount : kRatingBase;
+
       final int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
       final int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
 
@@ -330,7 +395,7 @@ class SiteDataGenerator {
 
       Set<String> processedThisMatch = {};
 
-      void processPlayer(dynamic pObj, int status, int scored, int conceded, List<dynamic> teammates, List<dynamic> opponents, {bool isGk = false}) {
+      void processPlayer(dynamic pObj, int status, int scored, int conceded, List<dynamic> teammates, List<dynamic> opponents, {bool isGk = false, required double teamAvg, required double oppAvg}) {
         String pId = playerIdFromObject(pObj);
         if (pId.isEmpty || processedThisMatch.contains(pId)) return;
         processedThisMatch.add(pId);
@@ -348,6 +413,7 @@ class SiteDataGenerator {
           'gk_stats': {'games': 0, 'wins': 0, 'goals_conceded': 0, 'clean_sheets': 0},
           'ratings': <double>[],
           'session_chart_data': <String, List<double>>{}, // date -> ratings
+          'season_stats': <String, dynamic>{}, // tId -> stats
         });
 
         var stats = sitePlayers[pId]!;
@@ -407,9 +473,41 @@ class SiteDataGenerator {
 
         double matchRating = calculateMatchRating(
           status: status, goals: g, assists: a, ownGoals: og, 
-          teamGoals: scored, conceded: conceded, yellow: yc, red: rc, teamWinStreak: 0
+          teamGoals: scored, conceded: conceded, yellow: yc, red: rc, teamWinStreak: 0,
+          teamAvgRating: teamAvg, opponentAvgRating: oppAvg
         );
         (stats['ratings'] as List<double>).add(matchRating);
+        
+        // Update EMA for current Temporada
+        double currentEma = currentEmaRatings[pId] ?? kRatingBase;
+        if (!currentEmaRatings.containsKey(pId)) {
+          currentEmaRatings[pId] = (matchRating * 0.5) + (kRatingBase * 0.5);
+        } else {
+          currentEmaRatings[pId] = (matchRating * 0.35) + (currentEma * 0.65);
+        }
+        // Save current EMA as active rating for the frontend
+        stats['active_temporada_rating'] = currentEmaRatings[pId];
+
+        // Season Specific Stats (Temporada)
+        if (tId != 'unknown') {
+          stats['season_stats'].putIfAbsent(tId, () => {
+             'temporada_id': tId,
+             'games': 0, 'wins': 0, 'goals': 0, 'assists': 0,
+             'main_season_games': 0, 'main_season_wins': 0, 'main_season_goals': 0, 'main_season_assists': 0,
+          });
+          var sStats = stats['season_stats'][tId];
+          sStats['games'] += 1;
+          sStats['goals'] += g;
+          sStats['assists'] += a;
+          if (status == 1) sStats['wins'] += 1;
+
+          if (seasonType == 'main') {
+            sStats['main_season_games'] += 1;
+            sStats['main_season_goals'] += g;
+            sStats['main_season_assists'] += a;
+            if (status == 1) sStats['main_season_wins'] += 1;
+          }
+        }
         
         // Chart Data group by session/date
         String sessionDate = match['session_date'] ?? match['date'] ?? '';
@@ -439,11 +537,11 @@ class SiteDataGenerator {
         }
       }
 
-      for (var p in redField) if (p != null) processPlayer(p, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: false);
-      if (gkRed != null) processPlayer(gkRed, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: true);
+      for (var p in redField) if (p != null) processPlayer(p, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: false, teamAvg: redAvg, oppAvg: whiteAvg);
+      if (gkRed != null) processPlayer(gkRed, redStatus, scoreRed, scoreWhite, redPlayers, whitePlayers, isGk: true, teamAvg: redAvg, oppAvg: whiteAvg);
 
-      for (var p in whiteField) if (p != null) processPlayer(p, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: false);
-      if (gkWhite != null) processPlayer(gkWhite, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: true);
+      for (var p in whiteField) if (p != null) processPlayer(p, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: false, teamAvg: whiteAvg, oppAvg: redAvg);
+      if (gkWhite != null) processPlayer(gkWhite, whiteStatus, scoreWhite, scoreRed, whitePlayers, redPlayers, isGk: true, teamAvg: whiteAvg, oppAvg: redAvg);
     }
 
     // Helper para achar maior num mapa de contagem

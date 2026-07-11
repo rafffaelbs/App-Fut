@@ -30,6 +30,68 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
       allHistory.addAll(history);
     }
   }
+
+  // Lógica para filtrar APENAS a temporada atual
+  final String seasonsConfigKey = 'seasons_$groupId';
+  if (prefs.containsKey(seasonsConfigKey)) {
+    final List<dynamic> seasonsConfig = jsonDecode(prefs.getString(seasonsConfigKey)!);
+    final now = DateTime.now();
+    String? currentTemporadaId;
+    
+    for (var season in seasonsConfig) {
+      if (season['startDate'] == null || season['endDate'] == null) continue;
+      try {
+        DateTime start = DateTime.parse(season['startDate']);
+        DateTime end = DateTime.parse(season['endDate']).add(const Duration(days: 1));
+        if (now.isAfter(start.subtract(const Duration(seconds: 1))) && now.isBefore(end)) {
+          currentTemporadaId = (season['isPreSeason'] == true && season['parentSeasonId'] != null)
+              ? season['parentSeasonId']
+              : season['id'];
+          break;
+        }
+      } catch (_) {}
+    }
+
+    if (currentTemporadaId == null && seasonsConfig.isNotEmpty) {
+      currentTemporadaId = seasonsConfig[0]['id'];
+    }
+
+    if (currentTemporadaId != null) {
+      // Retorna apenas partidas cuja data caia na Temporada Atual (Main ou Pre)
+      final filtered = allHistory.where((match) {
+        String sessionDate = match['session_date'] ?? match['date'] ?? '';
+        if (sessionDate.isEmpty) return false;
+        try {
+          DateTime dt = DateTime.parse(sessionDate);
+          for (var season in seasonsConfig) {
+            if (season['startDate'] == null || season['endDate'] == null) continue;
+            DateTime start = DateTime.parse(season['startDate']);
+            DateTime end = DateTime.parse(season['endDate']).add(const Duration(days: 1));
+            if (dt.isAfter(start.subtract(const Duration(seconds: 1))) && dt.isBefore(end)) {
+              String sId = (season['isPreSeason'] == true && season['parentSeasonId'] != null)
+                  ? season['parentSeasonId']
+                  : season['id'];
+              return sId == currentTemporadaId;
+            }
+          }
+        } catch (_) {}
+        return false;
+      }).toList();
+
+      filtered.sort((a, b) {
+        String dateA = (a as Map)['session_date'] ?? a['date'] ?? '';
+        String dateB = (b as Map)['session_date'] ?? b['date'] ?? '';
+        return dateA.compareTo(dateB);
+      });
+      return filtered;
+    }
+  }
+
+  allHistory.sort((a, b) {
+    String dateA = (a as Map)['session_date'] ?? a['date'] ?? '';
+    String dateB = (b as Map)['session_date'] ?? b['date'] ?? '';
+    return dateA.compareTo(dateB);
+  });
   return allHistory;
 }
 
@@ -69,8 +131,37 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
     }
 
     final Set<String> processed = {};
+    
+    // Calcula médias dos times baseadas nas notas até o momento
+    final List<dynamic> redField = List<dynamic>.from(match['players']?['red'] ?? []);
+    final dynamic gkRed = match['players']?['gk_red'];
+    final List<dynamic> redPlayers = [...redField, gkRed].where((p) => p != null).toList();
+    
+    final List<dynamic> whiteField = List<dynamic>.from(match['players']?['white'] ?? []);
+    final dynamic gkWhite = match['players']?['gk_white'];
+    final List<dynamic> whitePlayers = [...whiteField, gkWhite].where((p) => p != null).toList();
+    
+    double redSum = 0; int redCount = 0;
+    for (var p in redPlayers) {
+      String pid = playerIdFromObject(p);
+      if (pid.isNotEmpty && globalStats.containsKey(pid)) {
+        redSum += calculateFinalRating(ratings: globalStats[pid]!['ratings'] as List<double>);
+        redCount++;
+      }
+    }
+    double redAvg = redCount > 0 ? redSum / redCount : kRatingBase;
 
-    void processPlayer(dynamic playerObj, int status, int scored, int conceded) {
+    double whiteSum = 0; int whiteCount = 0;
+    for (var p in whitePlayers) {
+      String pid = playerIdFromObject(p);
+      if (pid.isNotEmpty && globalStats.containsKey(pid)) {
+        whiteSum += calculateFinalRating(ratings: globalStats[pid]!['ratings'] as List<double>);
+        whiteCount++;
+      }
+    }
+    double whiteAvg = whiteCount > 0 ? whiteSum / whiteCount : kRatingBase;
+
+    void processPlayer(dynamic playerObj, int status, int scored, int conceded, double teamAvg, double oppAvg) {
       if (playerObj == null) return;
       final String playerId = playerIdFromObject(playerObj);
       if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -104,20 +195,20 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
       final double matchRating = calculateMatchRating(
         status: status, goals: g, assists: a,
         ownGoals: og, teamGoals: scored, conceded: conceded, yellow: yc, red: rc,
-        teamWinStreak: 0,
+        teamWinStreak: 0, teamAvgRating: teamAvg, opponentAvgRating: oppAvg
       );
       (playerStats['ratings'] as List<double>).add(matchRating);
     }
 
     if (match['players'] != null && match['players'] is Map) {
       if (match['players']['red'] != null) {
-        for (final p in match['players']['red']) processPlayer(p, redStatus, scoreRed, scoreWhite);
+        for (final p in match['players']['red']) processPlayer(p, redStatus, scoreRed, scoreWhite, redAvg, whiteAvg);
       }
       if (match['players']['white'] != null) {
-        for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreWhite, scoreRed);
+        for (final p in match['players']['white']) processPlayer(p, whiteStatus, scoreWhite, scoreRed, whiteAvg, redAvg);
       }
-      if (match['players']['gk_red'] != null) processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite);
-      if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed);
+      if (match['players']['gk_red'] != null) processPlayer(match['players']['gk_red'], redStatus, scoreRed, scoreWhite, redAvg, whiteAvg);
+      if (match['players']['gk_white'] != null) processPlayer(match['players']['gk_white'], whiteStatus, scoreWhite, scoreRed, whiteAvg, redAvg);
     }
   }
 

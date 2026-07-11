@@ -229,10 +229,9 @@ class _RankingScreenState extends State<RankingScreen> {
           'wins': data['wins'],
           'draws': data['draws'],
           'losses': data['losses'],
-          // Ranking da pelada usa média simples (useBayesian: false)
+          // Ranking da pelada usa média simples
           'nota': calculateFinalRating(
             ratings: data['ratings'] as List<double>,
-            useBayesian: false,
           ),
         });
       }
