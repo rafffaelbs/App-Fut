@@ -13,8 +13,8 @@ import 'package:flutter/material.dart';
 const double kRatingBase = 6.0;
 
 /// Impacto do Resultado
-/// Reduzido para evitar que a vitória por si só dê notas absurdas.
-const double kResultImpactWin  =  0.5;
+/// Aumentado para 0.8 para valorizar a vitória e gerar mais notas altas (9 e 10).
+const double kResultImpactWin  =  0.8;
 const double kResultImpactLoss = -0.5;
 
 /// Bônus de Sequência de Vitórias (Win Streak)
@@ -22,8 +22,8 @@ const double kStreakBonus2Wins     = 0.2;
 const double kStreakBonus3PlusWins = 0.4;
 
 /// Impactos Individuais
-const double kWeightGoal       =  0.8;
-const double kWeightAssist     =  0.6;
+const double kWeightGoal       =  1.0;
+const double kWeightAssist     =  0.8;
 const double kWeightOwnGoal    = -1.0;
 
 /// Impacto de Defesa
@@ -36,7 +36,7 @@ const double kWeightRedCard    = -1.5;
 /// Bônus Dinâmicos
 const double kBonusHatTrick    = 0.75;  // 3 gols
 const double kBonusPlaymaker   = 0.85;  // 3 assistências
-const double kBonusTeamGoal    = 0.0;   // Removido para evitar inflação passiva
+const double kBonusTeamGoal    = 0.1;   // Removido para evitar inflação passiva
 const double kBonusCleanSheet  = 0.2;   // Bônus menor para clean sheet geral
 
 /// Impacto da diferença de gols (por gol de diferença)
@@ -50,9 +50,10 @@ const double kMaxRating = 10.0;
 const int    kBayesianPriorGames  = 2;
 const double kBayesianPriorRating = kRatingBase;
 
-/// Bônus de Constância: +0.1 a cada 10 partidas.
-const double kVolumeBonusPerN   = 0.1;
-const int    kVolumeBonusEveryN = 10;
+/// Bônus de Constância: +0.15 a cada 5 partidas.
+/// Isso acelera os jogadores assíduos rumo à nota 9 e 10.
+const double kVolumeBonusPerN   = 0.15;
+const int    kVolumeBonusEveryN = 5;
 
 /// Mínimo para figurar no ranking Geral.
 const int kMinGamesForGlobalRanking = 5;
@@ -229,8 +230,9 @@ double calculateFinalRating({
   }
 
   // Ranking Global (Média Bayesiana + Constância)
-  // Âncora inicial para forçar o crescimento gradual (30 a 60 jogos para estabilizar a nota real)
-  const int priorGames = 15; 
+  // Âncora inicial ultra leve. 
+  // Reduzido para apenas 3 jogos para liberar as notas altas (9 e 10) rapidamente para quem jogar muito bem.
+  const int priorGames = 3; 
   final double bayesianAvg = (sum + (priorGames * kRatingBase)) / (games + priorGames);
 
   // Pequeno bônus de constância (volume de jogo)

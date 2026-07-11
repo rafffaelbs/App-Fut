@@ -488,16 +488,8 @@ class SiteDataGenerator {
         }
         
         if (!isGk) {
-          // Update EMA for current Temporada (Linha)
-          double matchRating = (stats['ratings'] as List<double>).last;
-          double currentEma = currentEmaRatings[pId] ?? kRatingBase;
-          if (!currentEmaRatings.containsKey(pId)) {
-            currentEmaRatings[pId] = (matchRating * 0.5) + (kRatingBase * 0.5);
-          } else {
-            currentEmaRatings[pId] = (matchRating * 0.35) + (currentEma * 0.65);
-          }
-          // Save current EMA as active rating for the frontend
-          stats['active_temporada_rating'] = currentEmaRatings[pId];
+          // Atualiza a nota ativa (Bayesiana) a cada jogo para manter o histórico correto
+          stats['active_temporada_rating'] = calculateFinalRating(ratings: stats['ratings'] as List<double>);
         }
 
         // Season Specific Stats (Temporada)
