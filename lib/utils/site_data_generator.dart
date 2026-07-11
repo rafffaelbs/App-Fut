@@ -410,83 +410,95 @@ class SiteDataGenerator {
           'biggest_win_margin': 0, 'biggest_win_score': '-',
           'biggest_loss_margin': 0, 'biggest_loss_score': '-',
           'current_unbeaten': 0, 'max_unbeaten': 0,
-          'gk_stats': {'games': 0, 'wins': 0, 'goals_conceded': 0, 'clean_sheets': 0},
+          'gk_stats': {'games': 0, 'wins': 0, 'draws': 0, 'losses': 0, 'goals_conceded': 0, 'clean_sheets': 0, 'ratings': <double>[]},
           'ratings': <double>[],
           'session_chart_data': <String, List<double>>{}, // date -> ratings
           'season_stats': <String, dynamic>{}, // tId -> stats
         });
 
         var stats = sitePlayers[pId]!;
-        stats['games'] = (stats['games'] as int) + 1;
-        stats['total_team_goals'] = (stats['total_team_goals'] as int) + scored;
-
-        if (status == 1) {
-          stats['wins'] = (stats['wins'] as int) + 1;
-          int margin = scored - conceded;
-          if (margin > (stats['biggest_win_margin'] as int)) {
-            stats['biggest_win_margin'] = margin;
-            stats['biggest_win_score'] = "$scored x $conceded";
-          }
-        } else if (status == -1) {
-          stats['losses'] = (stats['losses'] as int) + 1;
-          int margin = conceded - scored;
-          if (margin > (stats['biggest_loss_margin'] as int)) {
-            stats['biggest_loss_margin'] = margin;
-            stats['biggest_loss_score'] = "$conceded x $scored";
-          }
-        } else {
-          stats['draws'] = (stats['draws'] as int) + 1;
-        }
-
-        if (conceded == 0) stats['clean_sheets'] = (stats['clean_sheets'] as int) + 1;
-
-        if (status >= 0) {
-          stats['current_unbeaten'] = (stats['current_unbeaten'] as int) + 1;
-          if ((stats['current_unbeaten'] as int) > (stats['max_unbeaten'] as int)) {
-            stats['max_unbeaten'] = stats['current_unbeaten'];
-          }
-        } else {
-          stats['current_unbeaten'] = 0;
-        }
-
-        if (isGk) {
-          var gkStats = stats['gk_stats'] as Map<String, dynamic>;
-          gkStats['games'] = (gkStats['games'] as int) + 1;
-          if (status == 1) gkStats['wins'] = (gkStats['wins'] as int) + 1;
-          gkStats['goals_conceded'] = (gkStats['goals_conceded'] as int) + conceded;
-          if (conceded == 0) gkStats['clean_sheets'] = (gkStats['clean_sheets'] as int) + 1;
-        }
-
         int g = matchPlayerEvents[pId]?['g'] ?? 0;
         int a = matchPlayerEvents[pId]?['a'] ?? 0;
         int og = matchPlayerEvents[pId]?['og'] ?? 0;
         int yc = matchPlayerEvents[pId]?['yc'] ?? 0;
         int rc = matchPlayerEvents[pId]?['rc'] ?? 0;
 
-        stats['goals'] = (stats['goals'] as int) + g;
-        stats['assists'] = (stats['assists'] as int) + a;
-        stats['own_goals'] = (stats['own_goals'] as int) + og;
-        stats['yellow'] = (stats['yellow'] as int) + yc;
-        stats['red'] = (stats['red'] as int) + rc;
+        if (!isGk) {
+          stats['games'] = (stats['games'] as int) + 1;
+          stats['total_team_goals'] = (stats['total_team_goals'] as int) + scored;
 
-        if (g >= 3) stats['hat_tricks'] = (stats['hat_tricks'] as int) + 1;
+          if (status == 1) {
+            stats['wins'] = (stats['wins'] as int) + 1;
+            int margin = scored - conceded;
+            if (margin > (stats['biggest_win_margin'] as int)) {
+              stats['biggest_win_margin'] = margin;
+              stats['biggest_win_score'] = "$scored x $conceded";
+            }
+          } else if (status == -1) {
+            stats['losses'] = (stats['losses'] as int) + 1;
+            int margin = conceded - scored;
+            if (margin > (stats['biggest_loss_margin'] as int)) {
+              stats['biggest_loss_margin'] = margin;
+              stats['biggest_loss_score'] = "$conceded x $scored";
+            }
+          } else {
+            stats['draws'] = (stats['draws'] as int) + 1;
+          }
 
-        double matchRating = calculateMatchRating(
-          status: status, goals: g, assists: a, ownGoals: og, 
-          teamGoals: scored, conceded: conceded, yellow: yc, red: rc, teamWinStreak: 0,
-          teamAvgRating: teamAvg, opponentAvgRating: oppAvg
-        );
-        (stats['ratings'] as List<double>).add(matchRating);
-        
-        // Update EMA for current Temporada
-        double currentEma = currentEmaRatings[pId] ?? kRatingBase;
-        if (!currentEmaRatings.containsKey(pId)) {
-          currentEmaRatings[pId] = (matchRating * 0.5) + (kRatingBase * 0.5);
+          if (conceded == 0) stats['clean_sheets'] = (stats['clean_sheets'] as int) + 1;
+
+          if (status >= 0) {
+            stats['current_unbeaten'] = (stats['current_unbeaten'] as int) + 1;
+            if ((stats['current_unbeaten'] as int) > (stats['max_unbeaten'] as int)) {
+              stats['max_unbeaten'] = stats['current_unbeaten'];
+            }
+          } else {
+            stats['current_unbeaten'] = 0;
+          }
+
+          stats['goals'] = (stats['goals'] as int) + g;
+          stats['assists'] = (stats['assists'] as int) + a;
+          stats['own_goals'] = (stats['own_goals'] as int) + og;
+          stats['yellow'] = (stats['yellow'] as int) + yc;
+          stats['red'] = (stats['red'] as int) + rc;
+
+          if (g >= 3) stats['hat_tricks'] = (stats['hat_tricks'] as int) + 1;
+
+          double matchRating = calculateMatchRating(
+            status: status, goals: g, assists: a, ownGoals: og, 
+            teamGoals: scored, conceded: conceded, yellow: yc, red: rc, teamWinStreak: 0,
+            teamAvgRating: teamAvg, opponentAvgRating: oppAvg
+          );
+          (stats['ratings'] as List<double>).add(matchRating);
         } else {
-          currentEmaRatings[pId] = (matchRating * 0.35) + (currentEma * 0.65);
+          var gkStats = stats['gk_stats'] as Map<String, dynamic>;
+          gkStats['games'] = (gkStats['games'] as int) + 1;
+          if (status == 1) gkStats['wins'] = (gkStats['wins'] as int) + 1;
+          else if (status == -1) gkStats['losses'] = (gkStats['losses'] as int) + 1;
+          else gkStats['draws'] = (gkStats['draws'] as int) + 1;
+          
+          gkStats['goals_conceded'] = (gkStats['goals_conceded'] as int) + conceded;
+          if (conceded == 0) gkStats['clean_sheets'] = (gkStats['clean_sheets'] as int) + 1;
+          
+          double gkRating = calculateGkMatchRating(
+            status: status, goals: g, assists: a, conceded: conceded, 
+            yellow: yc, red: rc, teamWinStreak: 0, teamAvgRating: teamAvg, opponentAvgRating: oppAvg
+          );
+          (gkStats['ratings'] as List<double>).add(gkRating);
         }
-        // Save current EMA as active rating for the frontend
-        stats['active_temporada_rating'] = currentEmaRatings[pId];
+        
+        if (!isGk) {
+          // Update EMA for current Temporada (Linha)
+          double matchRating = (stats['ratings'] as List<double>).last;
+          double currentEma = currentEmaRatings[pId] ?? kRatingBase;
+          if (!currentEmaRatings.containsKey(pId)) {
+            currentEmaRatings[pId] = (matchRating * 0.5) + (kRatingBase * 0.5);
+          } else {
+            currentEmaRatings[pId] = (matchRating * 0.35) + (currentEma * 0.65);
+          }
+          // Save current EMA as active rating for the frontend
+          stats['active_temporada_rating'] = currentEmaRatings[pId];
+        }
 
         // Season Specific Stats (Temporada)
         if (tId != 'unknown') {
@@ -496,25 +508,28 @@ class SiteDataGenerator {
              'main_season_games': 0, 'main_season_wins': 0, 'main_season_goals': 0, 'main_season_assists': 0,
           });
           var sStats = stats['season_stats'][tId];
-          sStats['games'] += 1;
-          sStats['goals'] += g;
-          sStats['assists'] += a;
-          if (status == 1) sStats['wins'] += 1;
+          if (!isGk) {
+            sStats['games'] += 1;
+            sStats['goals'] += g;
+            sStats['assists'] += a;
+            if (status == 1) sStats['wins'] += 1;
 
-          if (seasonType == 'main') {
-            sStats['main_season_games'] += 1;
-            sStats['main_season_goals'] += g;
-            sStats['main_season_assists'] += a;
-            if (status == 1) sStats['main_season_wins'] += 1;
+            if (seasonType == 'main') {
+              sStats['main_season_games'] += 1;
+              sStats['main_season_goals'] += g;
+              sStats['main_season_assists'] += a;
+              if (status == 1) sStats['main_season_wins'] += 1;
+            }
           }
         }
         
         // Chart Data group by session/date
         String sessionDate = match['session_date'] ?? match['date'] ?? '';
-        if (sessionDate.isNotEmpty) {
+        if (sessionDate.isNotEmpty && !isGk) {
            DateTime dt = DateTime.parse(sessionDate);
            String dtKey = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
            stats['session_chart_data'].putIfAbsent(dtKey, () => <double>[]);
+           double matchRating = (stats['ratings'] as List<double>).last;
            stats['session_chart_data'][dtKey].add(matchRating);
         }
 
@@ -578,6 +593,7 @@ class SiteDataGenerator {
     // Finalizar cálculos para cada jogador
     sitePlayers.forEach((id, stats) {
       stats['nota'] = calculateFinalRating(ratings: stats['ratings'] as List<double>);
+      stats['gk_stats']['nota'] = calculateFinalRating(ratings: stats['gk_stats']['ratings'] as List<double>);
       stats['ga'] = (stats['goals'] as int) + (stats['assists'] as int);
       
       // Construir Advanced Stats para exportar no JSON

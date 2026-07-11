@@ -373,6 +373,7 @@ class _RankingScreenState extends State<RankingScreen> {
           // Ranking da pelada usa média simples
           'nota': calculateFinalRating(
             ratings: data['ratings'] as List<double>,
+            useEMA: false,
           ),
         });
       }
@@ -398,7 +399,7 @@ class _RankingScreenState extends State<RankingScreen> {
           'losses': data['gk_losses'],
           'nota': calculateFinalRating(
             ratings: data['gk_ratings'] as List<double>,
-            useBayesian: false,
+            useEMA: false,
           ),
         });
       }

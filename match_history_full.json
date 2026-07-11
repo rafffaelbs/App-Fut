@@ -1,0 +1,2387 @@
+[
+  {
+    "match_id": "1783784841181",
+    "date": "2026-07-11T12:47:21.181917",
+    "match_duration": "05:37",
+    "scoreRed": 3,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Vermelho",
+        "time": "00:52"
+      },
+      {
+        "type": "goal",
+        "playerId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "player": "Enzo",
+        "assistId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "assist": "Kaique",
+        "team": "Branco",
+        "time": "04:30"
+      },
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "05:15"
+      },
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "assist": "Basiado",
+        "team": "Vermelho",
+        "time": "05:35"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783784322066",
+    "date": "2026-07-11T12:38:42.066709",
+    "match_duration": "07:14",
+    "scoreRed": 3,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Vermelho",
+        "time": "01:18"
+      },
+      {
+        "type": "goal",
+        "playerId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "player": "Paulo",
+        "assistId": "771aa51d-7aff-470e-8208-273da4e7145a",
+        "assist": "Igor",
+        "team": "Branco",
+        "time": "03:55"
+      },
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "assist": "Carlos Rocha",
+        "team": "Vermelho",
+        "time": "05:58"
+      },
+      {
+        "type": "goal",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Vermelho",
+        "time": "07:12"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": {
+        "name": "Carlos Rocha",
+        "rating": 6.126164487920149,
+        "icon": "assets/players_icons/ibra.png",
+        "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "totalGames": 0
+      },
+      "gk_white": {
+        "name": "Kaique",
+        "rating": 7.366310129036158,
+        "icon": "assets/players_icons/kroos.png",
+        "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "totalGames": 0
+      }
+    }
+  },
+  {
+    "match_id": "1783783719722",
+    "date": "2026-07-11T12:28:39.722912",
+    "match_duration": "08:15",
+    "scoreRed": 2,
+    "scoreWhite": 2,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "03:09"
+      },
+      {
+        "type": "goal",
+        "playerId": "771aa51d-7aff-470e-8208-273da4e7145a",
+        "player": "Igor",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Branco",
+        "time": "03:47"
+      },
+      {
+        "type": "goal",
+        "playerId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "player": "Enzo",
+        "assistId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "assist": "Carlos Rocha",
+        "team": "Vermelho",
+        "time": "05:22"
+      },
+      {
+        "type": "goal",
+        "playerId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "player": "Carlos Rocha",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "05:48"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "João Pedro",
+          "rating": 5.7341125810317495,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783783140569",
+    "date": "2026-07-11T12:19:00.569168",
+    "match_duration": "07:23",
+    "scoreRed": 3,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "yellow_card",
+        "playerId": "434c8680-98ae-4be9-b28e-6c626721cc44",
+        "player": "Matheus Marques",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "00:05"
+      },
+      {
+        "type": "yellow_card",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "00:07"
+      },
+      {
+        "type": "goal",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Branco",
+        "time": "02:55"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "assist": "Carlos Rocha",
+        "team": "Vermelho",
+        "time": "04:09"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "assist": "Enzo",
+        "team": "Vermelho",
+        "time": "05:43"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "07:21"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783782511883",
+    "date": "2026-07-11T12:08:31.883399",
+    "match_duration": "08:05",
+    "scoreRed": 0,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "434c8680-98ae-4be9-b28e-6c626721cc44",
+        "player": "Matheus Marques",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "01:00"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "João Pedro",
+          "rating": 5.7341125810317495,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "gk_red": {
+        "name": "Kaique",
+        "rating": 7.366310129036158,
+        "icon": "assets/players_icons/kroos.png",
+        "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "totalGames": 0
+      },
+      "gk_white": {
+        "name": "Enzo",
+        "rating": 7.4553596995227105,
+        "icon": "assets/players_icons/vini.png",
+        "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "totalGames": 0
+      }
+    }
+  },
+  {
+    "match_id": "1783781882298",
+    "date": "2026-07-11T11:58:02.298196",
+    "match_duration": "09:30",
+    "scoreRed": 2,
+    "scoreWhite": 2,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Vermelho",
+        "time": "01:39"
+      },
+      {
+        "type": "goal",
+        "playerId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "player": "Enzo",
+        "assistId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "assist": "Paulo",
+        "team": "Branco",
+        "time": "04:43"
+      },
+      {
+        "type": "goal",
+        "playerId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "player": "Carlos Rocha",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "06:16"
+      },
+      {
+        "type": "goal",
+        "playerId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "player": "Paulo",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "07:37"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783781176861",
+    "date": "2026-07-11T11:46:16.861444",
+    "match_duration": "03:28",
+    "scoreRed": 3,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "01:41"
+      },
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "02:20"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Vermelho",
+        "time": "03:25"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783780864276",
+    "date": "2026-07-11T11:41:04.276870",
+    "match_duration": "08:23",
+    "scoreRed": 2,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "yellow_card",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "00:07"
+      },
+      {
+        "type": "yellow_card",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "01:57"
+      },
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "assist": "Kaique",
+        "team": "Vermelho",
+        "time": "06:28"
+      },
+      {
+        "type": "red_card",
+        "playerId": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+        "player": "João Pedro",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "08:13"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "08:22"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "João Pedro",
+          "rating": 5.7341125810317495,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783780270295",
+    "date": "2026-07-11T11:31:10.295812",
+    "match_duration": "04:34",
+    "scoreRed": 3,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "01:35"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "02:29"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Vermelho",
+        "time": "04:32"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783779831149",
+    "date": "2026-07-11T11:23:51.149478",
+    "match_duration": "06:32",
+    "scoreRed": 0,
+    "scoreWhite": 3,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "02:58"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "04:32"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "06:23"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "João Pedro",
+          "rating": 5.7341125810317495,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783779366264",
+    "date": "2026-07-11T11:16:06.264750",
+    "match_duration": "06:16",
+    "scoreRed": 0,
+    "scoreWhite": 3,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "player": "Rafael El Craque",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Branco",
+        "time": "01:45"
+      },
+      {
+        "type": "goal",
+        "playerId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "player": "Kesley",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "04:07"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "assist": "Kevin",
+        "team": "Branco",
+        "time": "06:13"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783778926100",
+    "date": "2026-07-11T11:08:46.100998",
+    "match_duration": "05:48",
+    "scoreRed": 0,
+    "scoreWhite": 3,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Branco",
+        "time": "02:52"
+      },
+      {
+        "type": "goal",
+        "playerId": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+        "player": "Kevin",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "03:55"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Branco",
+        "time": "05:45"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "João Pedro",
+          "rating": 5.7341125810317495,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783778429973",
+    "date": "2026-07-11T11:00:29.973145",
+    "match_duration": "08:48",
+    "scoreRed": 1,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "06:11"
+      },
+      {
+        "type": "goal",
+        "playerId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "player": "Paulo",
+        "assistId": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+        "assist": "Danilo",
+        "team": "Vermelho",
+        "time": "07:11"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Enzo",
+          "rating": 7.4553596995227105,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 7.166718814591977,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5422723045391695,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783777616763",
+    "date": "2026-07-11T10:46:56.763591",
+    "match_duration": "08:10",
+    "scoreRed": 3,
+    "scoreWhite": 2,
+    "events": [
+      {
+        "type": "yellow_card",
+        "playerId": "434c8680-98ae-4be9-b28e-6c626721cc44",
+        "player": "Matheus Marques",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "01:08"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "01:17"
+      },
+      {
+        "type": "goal",
+        "playerId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "player": "Paulo",
+        "assistId": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+        "assist": "Danilo",
+        "team": "Vermelho",
+        "time": "04:52"
+      },
+      {
+        "type": "goal",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "assist": "Kaique",
+        "team": "Branco",
+        "time": "05:47"
+      },
+      {
+        "type": "own_goal",
+        "playerId": "434c8680-98ae-4be9-b28e-6c626721cc44",
+        "player": "Matheus Marques",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "07:14"
+      },
+      {
+        "type": "goal",
+        "playerId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "player": "Paulo",
+        "assistId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "assist": "Carlos Rocha",
+        "team": "Vermelho",
+        "time": "08:08"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kesley",
+          "rating": 5.782734237445682,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.126164487920149,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 5.825055555169982,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Danilo",
+          "rating": 5.811931825719878,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Matheus Marques",
+          "rating": 5.705266399155766,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 7.450056880267083,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "name": "Kaique",
+          "rating": 7.366310129036158,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.617685172401022,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783776939413",
+    "date": "2026-07-11T10:35:39.413460",
+    "match_duration": "08:34",
+    "scoreRed": 1,
+    "scoreWhite": 1,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Branco",
+        "time": "03:46"
+      },
+      {
+        "type": "own_goal",
+        "playerId": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+        "player": "João Pedro",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "06:52"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Igor",
+          "rating": 6.5,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.5,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        }
+      ],
+      "white": [
+        {
+          "name": "João Pedro",
+          "rating": 6.5,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        },
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 6.5,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783776289401",
+    "date": "2026-07-11T10:24:49.401941",
+    "match_duration": "08:41",
+    "scoreRed": 3,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "yellow_card",
+        "playerId": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+        "player": "Danilo",
+        "assistId": null,
+        "assist": null,
+        "team": "Branco",
+        "time": "00:16"
+      },
+      {
+        "type": "goal",
+        "playerId": "771aa51d-7aff-470e-8208-273da4e7145a",
+        "player": "Igor",
+        "assistId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "assist": "Enzo",
+        "team": "Vermelho",
+        "time": "05:20"
+      },
+      {
+        "type": "goal",
+        "playerId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "player": "Basiado",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "08:00"
+      },
+      {
+        "type": "goal",
+        "playerId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "player": "Enzo",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "08:25"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Igor",
+          "rating": 6.5,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.5,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        }
+      ],
+      "white": [
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.5,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Danilo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 6.5,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783775696312",
+    "date": "2026-07-11T10:14:56.312760",
+    "match_duration": "08:15",
+    "scoreRed": 0,
+    "scoreWhite": 2,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+        "player": "Danilo",
+        "assistId": "49267b53-8136-4666-94c7-3e5c8d17f180",
+        "assist": "Rafael El Craque",
+        "team": "Branco",
+        "time": "01:28"
+      },
+      {
+        "type": "goal",
+        "playerId": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+        "player": "Carlos Rocha",
+        "assistId": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+        "assist": "Paulo",
+        "team": "Branco",
+        "time": "06:40"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 6.5,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Kesley",
+          "rating": 6.5,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.5,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        },
+        {
+          "name": "Danilo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 6.5,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783775130960",
+    "date": "2026-07-11T10:05:30.960542",
+    "match_duration": "08:13",
+    "scoreRed": 1,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+        "assist": "Kesley",
+        "team": "Vermelho",
+        "time": "04:40"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 6.5,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Kesley",
+          "rating": 6.5,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        }
+      ],
+      "white": [
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.5,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "João Pedro",
+          "rating": 6.5,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783774546797",
+    "date": "2026-07-11T09:55:46.797514",
+    "match_duration": "02:01",
+    "scoreRed": 3,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": null,
+        "assist": null,
+        "team": "Vermelho",
+        "time": "01:25"
+      },
+      {
+        "type": "goal",
+        "playerId": "5393c77e-adbf-45d1-b536-53a409b041d9",
+        "player": "Enzo",
+        "assistId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "assist": "Kaique",
+        "team": "Vermelho",
+        "time": "01:52"
+      },
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "01:59"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Danilo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/raphinha.webp",
+          "id": "ae757ed3-1462-4950-ba2d-12f18a41bfa2",
+          "totalGames": 0
+        },
+        {
+          "name": "Paulo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 6.5,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783774340182",
+    "date": "2026-07-11T09:52:20.182880",
+    "match_duration": "08:08",
+    "scoreRed": 1,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+        "assist": "Basiado",
+        "team": "Vermelho",
+        "time": "04:55"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Kesley",
+          "rating": 6.5,
+          "icon": "assets/players_icons/bruyne.png",
+          "id": "82b99b86-7c2b-4492-b37a-b0a692f1728b",
+          "totalGames": 0
+        },
+        {
+          "id": "32a2e420-09c1-4a48-a148-eff5e255aa19",
+          "name": "Kevin",
+          "rating": 6.5,
+          "totalGames": 0,
+          "icon": "assets/players_icons/gabigol.png"
+        },
+        {
+          "name": "João Pedro",
+          "rating": 6.5,
+          "icon": "assets/players_icons/yamal.png",
+          "id": "669f3ed2-8b76-47e9-bbcd-e4e51b0e3b2a",
+          "totalGames": 0
+        },
+        {
+          "name": "Carlos Rocha",
+          "rating": 6.5,
+          "icon": "assets/players_icons/ibra.png",
+          "id": "222d2489-ef6a-4c3b-8a2d-9fbb083f3513",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  },
+  {
+    "match_id": "1783773790442",
+    "date": "2026-07-11T09:43:10.442427",
+    "match_duration": "08:22",
+    "scoreRed": 2,
+    "scoreWhite": 0,
+    "events": [
+      {
+        "type": "goal",
+        "playerId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "player": "Kaique",
+        "assistId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "assist": "Lucas Takano",
+        "team": "Vermelho",
+        "time": "00:34"
+      },
+      {
+        "type": "goal",
+        "playerId": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+        "player": "Lucas Takano",
+        "assistId": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+        "assist": "Kaique",
+        "team": "Vermelho",
+        "time": "03:55"
+      }
+    ],
+    "players": {
+      "red": [
+        {
+          "name": "Kaique",
+          "rating": 6.5,
+          "icon": "assets/players_icons/kroos.png",
+          "id": "150b5c2c-f503-423e-8a3b-52e806d6b8df",
+          "totalGames": 0
+        },
+        {
+          "name": "Lucas Takano",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vanpersie.png",
+          "id": "b9a66a69-73ec-4d38-bbf9-9fe32bd14682",
+          "totalGames": 0
+        },
+        {
+          "name": "Enzo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/vini.png",
+          "id": "5393c77e-adbf-45d1-b536-53a409b041d9",
+          "totalGames": 0
+        },
+        {
+          "name": "Basiado",
+          "rating": 6.5,
+          "icon": "assets/players_icons/messi.png",
+          "id": "a1a79e4c-3099-4188-9dbd-a290873c0830",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Janeiro"
+            }
+          ]
+        }
+      ],
+      "white": [
+        {
+          "name": "Paulo",
+          "rating": 6.5,
+          "icon": "assets/players_icons/adriano.png",
+          "id": "84f01fd0-a04f-467e-b4f2-45d7fb85cc09",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Fevereiro"
+            }
+          ]
+        },
+        {
+          "name": "Rafael El Craque",
+          "rating": 6.5,
+          "icon": "assets/players_icons/mouse_hunter.png",
+          "id": "49267b53-8136-4666-94c7-3e5c8d17f180",
+          "totalGames": 0,
+          "manual_badges": [
+            {
+              "icon": "assets/badges/craque_do_mes.png",
+              "title": "Craque de Abril"
+            }
+          ]
+        },
+        {
+          "name": "Matheus Marques",
+          "rating": 6.5,
+          "icon": "assets/players_icons/puma.png",
+          "id": "434c8680-98ae-4be9-b28e-6c626721cc44",
+          "totalGames": 0
+        },
+        {
+          "name": "Igor",
+          "rating": 6.5,
+          "icon": "assets/players_icons/love.png",
+          "id": "771aa51d-7aff-470e-8208-273da4e7145a",
+          "totalGames": 0
+        }
+      ],
+      "gk_red": null,
+      "gk_white": null
+    }
+  }
+]
