@@ -26,6 +26,8 @@ class RankingScreen extends StatefulWidget {
 
 class _RankingScreenState extends State<RankingScreen> {
   List<Map<String, dynamic>> leaderboard = [];
+  List<Map<String, dynamic>> gkLeaderboard = [];
+  bool _showGkRanking = false;
   bool isLoading = true;
   bool _isSharingScreenshot = false;
 
@@ -42,6 +44,18 @@ class _RankingScreenState extends State<RankingScreen> {
     {'value': 'assists', 'label': 'Assistências'},
     {'value': 'wins', 'label': 'Vitórias'},
     {'value': 'games', 'label': 'Jogos'},
+  ];
+
+  String _gkSortColumn = 'nota';
+  bool _gkSortDescending = true;
+
+  static const List<Map<String, String>> _gkSortOptions = [
+    {'value': 'nota', 'label': 'Nota'},
+    {'value': 'games', 'label': 'Jogos'},
+    {'value': 'clean_sheets', 'label': 'Clean Sheets'},
+    {'value': 'conceded', 'label': 'Gols Sofridos'},
+    {'value': 'goals', 'label': 'Gols'},
+    {'value': 'assists', 'label': 'Assistências'},
   ];
 
   @override
@@ -66,6 +80,7 @@ class _RankingScreenState extends State<RankingScreen> {
     // Carrega ícones do banco de jogadores salvos e cria mapa de normalização (Nome -> ID Real)
     final Map<String, String?> iconMap = {};
     final Map<String, String> nameToIdMap = {};
+    final Map<String, String> idToNameMap = {};
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
@@ -75,13 +90,17 @@ class _RankingScreenState extends State<RankingScreen> {
         final String name = (p['name'] ?? '').toString();
         if (pid.isNotEmpty) {
           iconMap[pid] = p['icon'] as String?;
-          if (name.isNotEmpty) nameToIdMap[name] = pid;
+          if (name.isNotEmpty) {
+            nameToIdMap[name] = pid;
+            idToNameMap[pid] = name;
+          }
         }
       }
     }
 
     final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
     final Map<String, Map<String, dynamic>> stats = {};
+    final Map<String, Map<String, dynamic>> gkStats = {};
 
     for (final match in history) {
       final int scoreRed = match['scoreRed'] ?? 0;
@@ -93,12 +112,20 @@ class _RankingScreenState extends State<RankingScreen> {
           ? 1
           : (scoreRed == scoreWhite ? 0 : -1);
 
+      final Map<String, String> eventPlayerNames = {};
       final Map<String, Map<String, int>> matchPlayerEvents = {};
       if (match['events'] != null) {
         for (final ev in match['events']) {
           String pid = eventPlayerId(ev, 'player');
           String astId = eventPlayerId(ev, 'assist');
           final String type = ev['type'];
+
+          if (pid.isNotEmpty && ev['player'] != null) {
+            eventPlayerNames[pid] = ev['player'].toString();
+          }
+          if (astId.isNotEmpty && ev['assist'] != null) {
+            eventPlayerNames[astId] = ev['assist'].toString();
+          }
 
           // Normalização de eventos (se o ID for o nome, tenta achar o ID real)
           if (nameToIdMap.containsKey(pid)) pid = nameToIdMap[pid]!;
@@ -139,8 +166,9 @@ class _RankingScreenState extends State<RankingScreen> {
         dynamic playerObj,
         int status,
         int scored,
-        int conceded,
-      ) {
+        int conceded, {
+        bool isGk = false,
+      }) {
         if (playerObj == null) return;
         String playerId = playerIdFromObject(playerObj);
         final String playerName = (playerObj['name'] ?? '').toString();
@@ -169,15 +197,6 @@ class _RankingScreenState extends State<RankingScreen> {
         );
         if (playerName.isNotEmpty) stats[playerId]!['name'] = playerName;
 
-        stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
-
-        if (status == 1)
-          stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
-        else if (status == -1)
-          stats[playerId]!['losses'] = (stats[playerId]!['losses'] as int) + 1;
-        else
-          stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
-
         final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
         final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
         final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
@@ -187,18 +206,80 @@ class _RankingScreenState extends State<RankingScreen> {
         stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
         stats[playerId]!['assists'] = (stats[playerId]!['assists'] as int) + a;
 
-        final double matchRating = calculateMatchRating(
-          status: status,
-          goals: g,
-          assists: a,
-          ownGoals: og,
-          teamGoals: scored,
-          conceded: conceded,
-          yellow: yc,
-          red: rc,
-          teamWinStreak: 0,
-        );
-        (stats[playerId]!['ratings'] as List<double>).add(matchRating);
+        if (!isGk) {
+          stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+          if (status == 1)
+            stats[playerId]!['wins'] = (stats[playerId]!['wins'] as int) + 1;
+          else if (status == -1)
+            stats[playerId]!['losses'] =
+                (stats[playerId]!['losses'] as int) + 1;
+          else
+            stats[playerId]!['draws'] = (stats[playerId]!['draws'] as int) + 1;
+
+          final double matchRating = calculateMatchRating(
+            status: status,
+            goals: g,
+            assists: a,
+            ownGoals: og,
+            teamGoals: scored,
+            conceded: conceded,
+            yellow: yc,
+            red: rc,
+            teamWinStreak: 0,
+          );
+          (stats[playerId]!['ratings'] as List<double>).add(matchRating);
+        } else {
+          gkStats.putIfAbsent(
+            playerId,
+            () => {
+              'id': playerId,
+              'name': playerName,
+              'gk_games': 0,
+              'gk_wins': 0,
+              'gk_draws': 0,
+              'gk_losses': 0,
+              'gk_conceded': 0,
+              'gk_clean_sheets': 0,
+              'gk_goals': 0,
+              'gk_assists': 0,
+              'gk_ratings': <double>[],
+            },
+          );
+          if (playerName.isNotEmpty) gkStats[playerId]!['name'] = playerName;
+
+          gkStats[playerId]!['gk_games'] =
+              (gkStats[playerId]!['gk_games'] as int) + 1;
+          gkStats[playerId]!['gk_conceded'] =
+              (gkStats[playerId]!['gk_conceded'] as int) + conceded;
+          if (conceded == 0) {
+            gkStats[playerId]!['gk_clean_sheets'] =
+                (gkStats[playerId]!['gk_clean_sheets'] as int) + 1;
+          }
+          gkStats[playerId]!['gk_goals'] =
+              (gkStats[playerId]!['gk_goals'] as int) + g;
+          gkStats[playerId]!['gk_assists'] =
+              (gkStats[playerId]!['gk_assists'] as int) + a;
+          if (status == 1)
+            gkStats[playerId]!['gk_wins'] =
+                (gkStats[playerId]!['gk_wins'] as int) + 1;
+          else if (status == -1)
+            gkStats[playerId]!['gk_losses'] =
+                (gkStats[playerId]!['gk_losses'] as int) + 1;
+          else
+            gkStats[playerId]!['gk_draws'] =
+                (gkStats[playerId]!['gk_draws'] as int) + 1;
+
+          final double gkRating = calculateGkMatchRating(
+            status: status,
+            goals: g,
+            assists: a,
+            conceded: conceded,
+            yellow: yc,
+            red: rc,
+            teamWinStreak: 0,
+          );
+          (gkStats[playerId]!['gk_ratings'] as List<double>).add(gkRating);
+        }
       }
 
       if (match['players']['red'] != null) {
@@ -208,6 +289,66 @@ class _RankingScreenState extends State<RankingScreen> {
       if (match['players']['white'] != null) {
         for (final p in match['players']['white'])
           processPlayer(p, whiteStatus, scoreWhite, scoreRed);
+      }
+      if (match['players']['gk_red'] != null) {
+        processPlayer(
+          match['players']['gk_red'],
+          redStatus,
+          scoreRed,
+          scoreWhite,
+          isGk: true,
+        );
+      }
+      if (match['players']['gk_white'] != null) {
+        processPlayer(
+          match['players']['gk_white'],
+          whiteStatus,
+          scoreWhite,
+          scoreRed,
+          isGk: true,
+        );
+      }
+
+      // Process players who have events but weren't in the official lineup
+      for (final playerId in matchPlayerEvents.keys) {
+        if (!processed.contains(playerId)) {
+          final events = matchPlayerEvents[playerId]!;
+          final String playerName =
+              idToNameMap[playerId] ??
+              eventPlayerNames[playerId] ??
+              'Desconhecido';
+
+          stats.putIfAbsent(
+            playerId,
+            () => {
+              'id': playerId,
+              'name': playerName,
+              'goals': 0,
+              'assists': 0,
+              'games': 0,
+              'wins': 0,
+              'draws': 0,
+              'losses': 0,
+              'ratings': <double>[],
+            },
+          );
+          if (playerName != 'Desconhecido')
+            stats[playerId]!['name'] = playerName;
+
+          stats[playerId]!['games'] = (stats[playerId]!['games'] as int) + 1;
+
+          final int g = events['g'] ?? 0;
+          final int a = events['a'] ?? 0;
+          final int og = events['og'] ?? 0;
+          final int yc = events['yc'] ?? 0;
+          final int rc = events['rc'] ?? 0;
+
+          stats[playerId]!['goals'] = (stats[playerId]!['goals'] as int) + g;
+          stats[playerId]!['assists'] =
+              (stats[playerId]!['assists'] as int) + a;
+
+          // Do not calculate or add a matchRating here to preserve their current Nota
+        }
       }
     }
 
@@ -238,9 +379,85 @@ class _RankingScreenState extends State<RankingScreen> {
     });
 
     _applySorting(sortedList);
+
+    final List<Map<String, dynamic>> sortedGkList = [];
+    gkStats.forEach((id, data) {
+      final int games = data['gk_games'] as int;
+      if (games > 0) {
+        sortedGkList.add({
+          'id': id,
+          'name': data['name'],
+          'icon': iconMap[id],
+          'games': games,
+          'conceded': data['gk_conceded'],
+          'clean_sheets': data['gk_clean_sheets'],
+          'goals': data['gk_goals'],
+          'assists': data['gk_assists'],
+          'wins': data['gk_wins'],
+          'draws': data['gk_draws'],
+          'losses': data['gk_losses'],
+          'nota': calculateFinalRating(
+            ratings: data['gk_ratings'] as List<double>,
+            useBayesian: false,
+          ),
+        });
+      }
+    });
+    _applyGkSorting(sortedGkList);
+
     setState(() {
       leaderboard = sortedList;
+      gkLeaderboard = sortedGkList;
       isLoading = false;
+    });
+  }
+
+  void _applyGkSorting(List<Map<String, dynamic>> list) {
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (_gkSortColumn) {
+        case 'nota':
+          cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+          break;
+        case 'games':
+          cmp = (a['games'] as num).compareTo(b['games'] as num);
+          break;
+        case 'clean_sheets':
+          cmp = (a['clean_sheets'] as num).compareTo(b['clean_sheets'] as num);
+          break;
+        case 'conceded':
+          // Menos gols sofridos é melhor
+          cmp = (b['conceded'] as num).compareTo(a['conceded'] as num);
+          break;
+        case 'goals':
+          cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+          break;
+        case 'assists':
+          cmp = (a['assists'] as num).compareTo(b['assists'] as num);
+          break;
+        default:
+          cmp = (a[_gkSortColumn] as num).compareTo(b[_gkSortColumn] as num);
+      }
+
+      if (cmp == 0 && _gkSortColumn != 'nota')
+        cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+      if (cmp == 0 && _gkSortColumn != 'clean_sheets')
+        cmp = (a['clean_sheets'] as num).compareTo(b['clean_sheets'] as num);
+
+      return _gkSortDescending ? -cmp : cmp;
+    });
+  }
+
+  void _onGkSortChanged(String? newValue) {
+    if (newValue == null) return;
+    setState(() {
+      if (_gkSortColumn == newValue) {
+        _gkSortDescending = !_gkSortDescending;
+      } else {
+        _gkSortColumn = newValue;
+        _gkSortDescending = true;
+      }
+      _applyGkSorting(gkLeaderboard);
     });
   }
 
@@ -734,6 +951,286 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
+  void _showFullGkRankingModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return StatefulBuilder(
+              builder: (ctx, setModalState) {
+                void sort(String column) {
+                  setModalState(() {
+                    if (_gkSortColumn == column) {
+                      _gkSortDescending = !_gkSortDescending;
+                    } else {
+                      _gkSortColumn = column;
+                      _gkSortDescending = true;
+                    }
+                    _applyGkSorting(gkLeaderboard);
+                  });
+                  setState(() {});
+                }
+
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.deepBlue,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Handle
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Ranking Completo (Goleiros)',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Table Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.headerBlue.withValues(alpha: 0.5),
+                          border: const Border(
+                            bottom: BorderSide(color: Colors.white10),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 30,
+                              child: Text(
+                                'Pos',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 32), // Espaço avatar
+                            const Expanded(
+                              child: Text(
+                                'Jogador',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            _gkSortHeader(
+                              'Nota',
+                              'nota',
+                              Colors.greenAccent,
+                              sort,
+                            ),
+                            const SizedBox(width: 15),
+                            _gkSortHeader(
+                              'CS',
+                              'clean_sheets',
+                              Colors.blueAccent,
+                              sort,
+                            ),
+                            const SizedBox(width: 15),
+                            _gkSortHeader(
+                              'GS',
+                              'conceded',
+                              Colors.redAccent,
+                              sort,
+                            ),
+                            const SizedBox(width: 15),
+                            _gkSortHeader('Jgs', 'games', Colors.white54, sort),
+                          ],
+                        ),
+                      ),
+                      // List
+                      Expanded(
+                        child: ListView.separated(
+                          controller: scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: gkLeaderboard.length,
+                          separatorBuilder: (c, i) =>
+                              const Divider(color: Colors.white10, height: 1),
+                          itemBuilder: (c, i) {
+                            final player = gkLeaderboard[i];
+                            return ListTile(
+                              dense: true,
+                              leading: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: TextStyle(
+                                        color: i < 3
+                                            ? AppColors.accentBlue
+                                            : Colors.white38,
+                                        fontWeight: i < 3
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  _playerAvatar(player, radius: 14),
+                                ],
+                              ),
+                              title: Text(
+                                player['name'],
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Nota
+                                  SizedBox(
+                                    width: 35,
+                                    child: Text(
+                                      (player['nota'] as double)
+                                          .toStringAsFixed(1),
+                                      style: const TextStyle(
+                                        color: Colors.greenAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  // CS
+                                  SizedBox(
+                                    width: 25,
+                                    child: Text(
+                                      '${player['clean_sheets']}',
+                                      style: const TextStyle(
+                                        color: Colors.blueAccent,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  // GS
+                                  SizedBox(
+                                    width: 25,
+                                    child: Text(
+                                      '${player['conceded']}',
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  // Jogos
+                                  SizedBox(
+                                    width: 25,
+                                    child: Text(
+                                      '${player['games']}',
+                                      style: const TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _gkSortHeader(
+    String label,
+    String column,
+    Color color,
+    Function(String) onSort,
+  ) {
+    final bool active = _gkSortColumn == column;
+    return GestureDetector(
+      onTap: () => onSort(column),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            active
+                ? (_gkSortDescending
+                      ? Icons.arrow_drop_down
+                      : Icons.arrow_drop_up)
+                : Icons.unfold_more,
+            size: 14,
+            color: active ? Colors.white : color.withValues(alpha: 0.5),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────
   // WIDGETS AUXILIARES
   // ─────────────────────────────────────────────────────────────
@@ -976,9 +1473,186 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
+  Widget _buildGkPodium(List<Map<String, dynamic>> list) {
+    if (list.isEmpty) return const SizedBox.shrink();
+    final p1 = list.length > 0 ? list[0] : null;
+    final p2 = list.length > 1 ? list[1] : null;
+    final p3 = list.length > 2 ? list[2] : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(child: _gkPodiumSlot(p2, 2, 80, Colors.grey[300]!)),
+        Expanded(child: _gkPodiumSlot(p1, 1, 110, Colors.amber)),
+        Expanded(child: _gkPodiumSlot(p3, 3, 60, Colors.brown[300]!)),
+      ],
+    );
+  }
+
+  Widget _gkPodiumSlot(
+    Map<String, dynamic>? player,
+    int position,
+    double barHeight,
+    Color accentColor,
+  ) {
+    if (player == null) return const SizedBox.shrink();
+
+    final double nota = player['nota'] as double;
+    final int cleanSheets = player['clean_sheets'] as int;
+    final int conceded = player['conceded'] as int;
+    final int games = player['games'] as int;
+    final int goals = player['goals'] as int;
+    final int assists = player['assists'] as int;
+    
+    final int wins = player['wins'] as int;
+    final int draws = player['draws'] as int;
+    final int losses = player['losses'] as int;
+
+    final String medal = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlayerDetailScreen(
+            groupId: widget.groupId,
+            tournamentId: widget.tournamentId,
+            playerId: player['id'].toString(),
+            initialPlayerName: player['name'],
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _playerAvatar(player, radius: position == 1 ? 28 : 22),
+          const SizedBox(height: 4),
+          Text(
+            player['name'],
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: position == 1 ? 13 : 11,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            nota.toStringAsFixed(1),
+            style: TextStyle(
+              color: accentColor,
+              fontWeight: FontWeight.bold,
+              fontSize: position == 1 ? 16 : 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('⚽', style: TextStyle(fontSize: position == 1 ? 11 : 10)),
+              Text(
+                '$goals',
+                style: TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: position == 1 ? 12 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.handshake,
+                color: Colors.lightBlueAccent,
+                size: position == 1 ? 12 : 10,
+              ),
+              Text(
+                '$assists',
+                style: TextStyle(
+                  color: Colors.lightBlueAccent,
+                  fontSize: position == 1 ? 12 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'CS $cleanSheets | GS $conceded',
+                style: TextStyle(
+                  color: accentColor.withValues(alpha: 0.85),
+                  fontSize: position == 1 ? 11 : 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '$wins',
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$draws',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '/',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              Text(
+                '$losses',
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            '$games jogos',
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: barHeight,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.2),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(6),
+                topRight: Radius.circular(6),
+              ),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.5),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(medal, style: const TextStyle(fontSize: 22)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── 4º ao 8º lugar ─────────────────────────
 
-  Widget _buildTop4To8(List<Map<String, dynamic>> items) {
+  Widget _buildTop4To8(List<Map<String, dynamic>> items, {bool isGk = false}) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Column(
       children: List.generate(items.length, (i) {
@@ -988,6 +1662,10 @@ class _RankingScreenState extends State<RankingScreen> {
         final int goals = player['goals'] as int;
         final int assists = player['assists'] as int;
         final int ga = goals + assists;
+
+        final int cleanSheets = isGk ? (player['clean_sheets'] ?? 0) : 0;
+        final int conceded = isGk ? (player['conceded'] ?? 0) : 0;
+
         return GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -1043,42 +1721,80 @@ class _RankingScreenState extends State<RankingScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Gols + Assists + GA
-                Row(
-                  children: [
-                    const Text('⚽', style: TextStyle(fontSize: 11)),
-                    Text(
-                      '$goals',
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                // Stats
+                if (isGk)
+                  Row(
+                    children: [
+                      Text('⚽', style: TextStyle(fontSize: 10)),
+                      Text(
+                        '$goals',
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.handshake,
-                      color: Colors.lightBlueAccent,
-                      size: 12,
-                    ),
-                    Text(
-                      '$assists',
-                      style: const TextStyle(
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.handshake,
                         color: Colors.lightBlueAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        size: 10,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '($ga)',
-                      style: const TextStyle(
-                        color: AppColors.highlightGreen,
-                        fontSize: 11,
+                      Text(
+                        '$assists',
+                        style: TextStyle(
+                          color: Colors.lightBlueAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$cleanSheets/$conceded',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      const Text('⚽', style: TextStyle(fontSize: 11)),
+                      Text(
+                        '$goals',
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.handshake,
+                        color: Colors.lightBlueAccent,
+                        size: 12,
+                      ),
+                      Text(
+                        '$assists',
+                        style: const TextStyle(
+                          color: Colors.lightBlueAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '($ga)',
+                        style: const TextStyle(
+                          color: AppColors.highlightGreen,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(width: 8),
                 // V/E/D
                 Text(
@@ -1156,128 +1872,740 @@ class _RankingScreenState extends State<RankingScreen> {
                   ),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : leaderboard.isEmpty
-          ? const Center(
-              child: Text(
-                'Sem jogadores registrados.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            )
-          : Screenshot(
-              controller: _screenshotController,
-              child: Container(
-                color: AppColors.deepBlue,
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Cabeçalho do pódio com ordenação ──────
-                      Container(
-                        color: AppColors.headerBlue.withValues(alpha: 0.6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+      body: Column(
+        children: [
+          // ── Linha / Goleiros toggle ────────────────────────────
+          Container(
+            color: AppColors.headerBlue,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: !_showGkRanking
+                                ? AppColors.accentBlue
+                                : Colors.transparent,
+                            width: 2,
+                          ),
                         ),
-                        child: Row(
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Linha',
+                        style: TextStyle(
+                          color: !_showGkRanking
+                              ? AppColors.textWhite
+                              : Colors.white54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _showGkRanking = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _showGkRanking
+                                ? AppColors.accentBlue
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Goleiros',
+                        style: TextStyle(
+                          color: _showGkRanking
+                              ? AppColors.textWhite
+                              : Colors.white54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _showGkRanking
+                ? _buildGkRankingView()
+                : _buildFieldRankingView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldRankingView() {
+    if (leaderboard.isEmpty) {
+      return const Center(
+        child: Text(
+          'Sem jogadores registrados.',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+    return Screenshot(
+      controller: _screenshotController,
+      child: Container(
+        color: AppColors.deepBlue,
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: AppColors.headerBlue.withValues(alpha: 0.6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Ordenar por',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sortColumn,
+                          dropdownColor: AppColors.headerBlue,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white54,
+                          ),
+                          isDense: true,
+                          items: _sortOptions
+                              .map(
+                                (opt) => DropdownMenuItem<String>(
+                                  value: opt['value'],
+                                  child: Text(opt['label']!),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _onSortChanged,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'Como a nota é calculada',
+                      child: InkWell(
+                        onTap: _showFieldRatingInfoDialog,
+                        borderRadius: BorderRadius.circular(20),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            color: Colors.white38,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+                child: _buildPodium(leaderboard.take(3).toList()),
+              ),
+              const SizedBox(height: 20),
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+              ),
+              const SizedBox(height: 8),
+              if (leaderboard.length > 3)
+                _buildTop4To8(
+                  leaderboard.sublist(3, leaderboard.length.clamp(3, 8)),
+                ),
+              if (leaderboard.length > 8) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(
+                      Icons.format_list_numbered_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Ver todos (${leaderboard.length} jogadores)',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: _showFullRankingModal,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFieldRatingInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.deepBlue,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: const BoxDecoration(
+                  color: AppColors.headerBlue,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.calculate_rounded, color: Colors.amber, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Como a Nota é Calculada',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          Text(
+                            'Fórmula do Jogador de Linha',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, color: Colors.white38, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _infoSection(
+                        '📊 Nota Base',
+                        'Toda partida começa com nota base de 6.5.',
+                        Colors.white70,
+                      ),
+                      const SizedBox(height: 14),
+                      _infoSection(
+                        '🏆 Resultado',
+                        'Vitória: +1.5\nEmpate: 0\nDerrota: −1.5',
+                        Colors.greenAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      _infoSection(
+                        '⚽ Gols e Assistências',
+                        'Gol marcado: +0.9\nAssistência: +0.8\nGol Contra: −1.0\nHat-trick (3+ gols): +0.5 bônus\nPlaymaker (3+ assists): +0.5 bônus',
+                        AppColors.highlightGreen,
+                      ),
+                      const SizedBox(height: 14),
+                      _infoSection(
+                        '🛡️ Defesa',
+                        'Bônus se o time marcou pelo menos 1 gol: +0.3\nCada gol sofrido pelo time: −0.3\nBônus de Clean Sheet (vitória/empate): +0.5',
+                        Colors.blueAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      _infoSection(
+                        '📊 Diferença de Gols',
+                        'Cada gol de diferença: +0.1 (vitória) ou −0.1 (derrota)',
+                        Colors.purpleAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      _infoSection(
+                        '🟨 Disciplina',
+                        'Cartão Amarelo: −1.0\nCartão Vermelho: −2.0',
+                        Colors.orangeAccent,
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.headerBlue,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Ordenar por',
+                              '💡 Exemplo',
                               style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _sortColumn,
-                                  dropdownColor: AppColors.headerBlue,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.arrow_drop_down,
-                                    color: Colors.white54,
-                                  ),
-                                  isDense: true,
-                                  items: _sortOptions.map((opt) {
-                                    return DropdownMenuItem<String>(
-                                      value: opt['value'],
-                                      child: Text(opt['label']!),
-                                    );
-                                  }).toList(),
-                                  onChanged: _onSortChanged,
-                                ),
-                              ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Jogador venceu, fez 1 gol, time marcou 2 e sofreu 1:',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
                             ),
+                            const SizedBox(height: 4),
+                            _exampleRow('Base', '6.5'),
+                            _exampleRow('Vitória', '+1.5'),
+                            _exampleRow('1 Gol', '+0.9'),
+                            _exampleRow('Bônus Time Marcou', '+0.3'),
+                            _exampleRow('1 Gol Sofrido', '−0.3'),
+                            _exampleRow('Diferença (2−1=1)', '+0.1'),
+                            const Divider(color: Colors.white12, height: 16),
+                            _exampleRow('Nota Final', '9.0', highlight: true),
                           ],
                         ),
                       ),
-
-                      // ── Pódio Top 3 ───────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
-                        child: _buildPodium(leaderboard.take(3).toList()),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '* A nota final é limitada entre 0.0 e 10.0.',
+                        style: TextStyle(color: Colors.white24, fontSize: 10),
                       ),
-
-                      const SizedBox(height: 20),
-                      const Divider(
-                        color: Colors.white12,
-                        height: 1,
-                        indent: 12,
-                        endIndent: 12,
-                      ),
-                      const SizedBox(height: 8),
-
-                      // ── 4º ao 8º lugar ─────────────────────────
-                      if (leaderboard.length > 3)
-                        _buildTop4To8(
-                          leaderboard.sublist(
-                            3,
-                            leaderboard.length.clamp(3, 8),
-                          ),
-                        ),
-
-                      // ── Botão "Ver todos" ──────────────────────
-                      if (leaderboard.length > 8) ...[
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: const BorderSide(color: Colors.white24),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            icon: const Icon(
-                              Icons.format_list_numbered_rounded,
-                              size: 18,
-                            ),
-                            label: Text(
-                              'Ver todos (${leaderboard.length} jogadores)',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            onPressed: _showFullRankingModal,
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGkRatingInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.deepBlue,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: const BoxDecoration(
+                  color: AppColors.headerBlue,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.calculate_rounded, color: Colors.amber, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Como a Nota é Calculada',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          Text(
+                            'Fórmula do Goleiro',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, color: Colors.white38, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Base
+                      _infoSection(
+                        '📊 Nota Base',
+                        'Toda partida começa com nota base de 6.5.',
+                        Colors.white70,
+                      ),
+                      const SizedBox(height: 14),
+                      // Result
+                      _infoSection(
+                        '🏆 Resultado',
+                        'Vitória: +1.5\nEmpate: 0\nDerrota: −1.5',
+                        Colors.greenAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      // Clean Sheet
+                      _infoSection(
+                        '🧤 Clean Sheet (Sem Tomar Gol)',
+                        'Ganhou ou empatou sem tomar gol: +1.5\n(Bônus maior que o de jogadores de linha)',
+                        Colors.cyanAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      // Gols Sofridos
+                      _infoSection(
+                        '🥅 Gols Sofridos',
+                        'Cada gol sofrido: −0.5\n(Penalidade maior que jogadores de linha: −0.3)',
+                        Colors.redAccent,
+                      ),
+                      const SizedBox(height: 14),
+                      // Gols / Assists
+                      _infoSection(
+                        '⚽ Gols e Assistências',
+                        'Gol marcado: +0.9\nAssistência: +0.8',
+                        AppColors.highlightGreen,
+                      ),
+                      const SizedBox(height: 14),
+                      // Disciplina
+                      _infoSection(
+                        '🟨 Disciplina',
+                        'Cartão Amarelo: −1.0\nCartão Vermelho: −2.0',
+                        Colors.orangeAccent,
+                      ),
+                      const SizedBox(height: 20),
+                      // Example
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.headerBlue,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '💡 Exemplo',
+                              style: TextStyle(
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Goleiro ganhou, tomou 1 gol:',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            _exampleRow('Base', '6.5'),
+                            _exampleRow('Vitória', '+1.5'),
+                            _exampleRow('1 Gol Sofrido', '−0.5'),
+                            const Divider(color: Colors.white12, height: 16),
+                            _exampleRow('Nota Final', '7.5', highlight: true),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.cyanAccent.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '🌟 Clean Sheet (sem tomar gol, vitória):',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            _exampleRow('Base', '6.5'),
+                            _exampleRow('Vitória', '+1.5'),
+                            _exampleRow('Clean Sheet', '+1.5'),
+                            const Divider(color: Colors.white12, height: 16),
+                            _exampleRow('Nota Final', '9.5', highlight: true),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '* A nota final é limitada entre 0.0 e 10.0.',
+                        style: TextStyle(color: Colors.white24, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoSection(String title, String body, Color color) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 3,
+          height: 44,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                body,
+                style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _exampleRow(String label, String value, {bool highlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: highlight ? Colors.white : Colors.white54,
+              fontSize: 12,
+              fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
             ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: highlight ? Colors.amber : Colors.white70,
+              fontSize: 12,
+              fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildGkRankingView() {
+    if (gkLeaderboard.isEmpty) {
+      return const Center(
+        child: Text(
+          'Sem goleiros registrados.',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+
+    final top4to8 = gkLeaderboard.skip(3).take(5).toList();
+
+    return Screenshot(
+      controller: _screenshotController,
+      child: Container(
+        color: AppColors.deepBlue,
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: AppColors.headerBlue.withValues(alpha: 0.6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Ordenar por',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _gkSortColumn,
+                          dropdownColor: AppColors.headerBlue,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white54,
+                          ),
+                          isDense: true,
+                          items: _gkSortOptions
+                              .map(
+                                (opt) => DropdownMenuItem<String>(
+                                  value: opt['value'],
+                                  child: Text(opt['label']!),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _onGkSortChanged,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'Como a nota é calculada',
+                      child: InkWell(
+                        onTap: _showGkRatingInfoDialog,
+                        borderRadius: BorderRadius.circular(20),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            color: Colors.white38,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+                child: _buildGkPodium(gkLeaderboard.take(3).toList()),
+              ),
+              const SizedBox(height: 20),
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+              ),
+              const SizedBox(height: 8),
+              if (gkLeaderboard.length > 3) _buildTop4To8(top4to8, isGk: true),
+              if (gkLeaderboard.length > 8) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(
+                      Icons.format_list_numbered_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Ver todos (${gkLeaderboard.length} goleiros)',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: _showFullGkRankingModal,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

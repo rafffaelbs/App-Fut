@@ -159,6 +159,71 @@ double calculateMatchRating({
   return raw.clamp(kMinRating, kMaxRating);
 }
 
+/// Calcula a nota bruta de um Goleiro numa partida.
+double calculateGkMatchRating({
+  required int status,
+  required int goals,
+  required int assists,
+  required int conceded,
+  required int yellow,
+  required int red,
+  required int teamWinStreak,
+  double? teamAvgRating,
+  double? opponentAvgRating,
+}) {
+  double resultImpact =
+      status == 1 ? kResultImpactWin : (status == -1 ? kResultImpactLoss : 0.0);
+
+  // Elo-Lite Asymmetric Pressure generalizada
+  double positiveMultiplier = 1.0;
+  double negativeMultiplier = 1.0;
+
+  if (teamAvgRating != null && opponentAvgRating != null) {
+    final double diff = teamAvgRating - opponentAvgRating;
+    final double factor = (diff.abs() * 0.5).clamp(0.0, 2.0);
+    
+    if (diff < 0) {
+      // Underdog (Time mais fraco)
+      positiveMultiplier = 1.0 + factor; // Ganha mais por ações boas
+      negativeMultiplier = 1.0 / (1.0 + factor); // Perde menos por ações ruins
+    } else if (diff > 0) {
+      // Favorito (Time mais forte)
+      positiveMultiplier = 1.0 / (1.0 + factor); // Ganha menos por ações boas
+      negativeMultiplier = 1.0 + factor; // Perde mais por ações ruins
+    }
+  }
+
+  if (resultImpact > 0) resultImpact *= positiveMultiplier;
+  else if (resultImpact < 0) resultImpact *= negativeMultiplier;
+
+  double streakBonus = 0.0;
+  if (status == 1) {
+    if (teamWinStreak == 2) streakBonus = kStreakBonus2Wins * positiveMultiplier;
+    else if (teamWinStreak >= 3) streakBonus = kStreakBonus3PlusWins * positiveMultiplier;
+  }
+
+  double attackImpact = (goals * kWeightGoal) + (assists * kWeightAssist);
+  if (attackImpact > 0) attackImpact *= positiveMultiplier;
+
+  // Goleiros são penalizados mais fortemente por cada gol sofrido, mas como
+  // reduzimos para -0.2 o normal, o do goleiro será -0.3.
+  const double gkWeightConceded = -0.3;
+  double defenseImpact = conceded * gkWeightConceded;
+  defenseImpact *= negativeMultiplier;
+
+  double disciplineImpact = (yellow * kWeightYellowCard) + (red * kWeightRedCard);
+  disciplineImpact *= negativeMultiplier;
+
+  double raw = kRatingBase + resultImpact + streakBonus + attackImpact + defenseImpact + disciplineImpact;
+
+  // Clean sheet bônus reforçado para goleiros
+  if (conceded == 0 && status >= 0) {
+    raw += (1.5 * positiveMultiplier);
+  }
+
+  return raw.clamp(kMinRating, kMaxRating);
+}
+
 /// Calcula a Média Final usando Exponential Moving Average (EMA).
 /// [useEMA] = true  -> ranking global (EMA com maior peso para jogos recentes).
 /// [useEMA] = false -> ranking de pelada (média aritmética simples).

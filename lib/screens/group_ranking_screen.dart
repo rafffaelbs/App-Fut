@@ -24,6 +24,19 @@ class GroupRankingScreen extends StatefulWidget {
 class _GroupRankingScreenState extends State<GroupRankingScreen>
     with RouteAware {
   List<Map<String, dynamic>> _globalLeaderboard = [];
+  List<Map<String, dynamic>> _globalGkLeaderboard = [];
+  bool d = false;
+  String _gkSortColumn = 'nota';
+  bool _gkSortDescending = true;
+
+  static const List<Map<String, String>> _gkSortOptions = [
+    {'value': 'nota', 'label': 'Nota'},
+    {'value': 'games', 'label': 'Jogos'},
+    {'value': 'clean_sheets', 'label': 'Clean Sheets'},
+    {'value': 'conceded', 'label': 'Gols Sofridos'},
+    {'value': 'goals', 'label': 'Gols'},
+    {'value': 'assists', 'label': 'Assistências'},
+  ];
   bool _isLoading = true;
   bool _isSharing = false;
 
@@ -46,6 +59,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
   List<Map<String, dynamic>> _topGA = [];
   List<Map<String, dynamic>> _topGoals = [];
   List<Map<String, dynamic>> _topAssists = [];
+
+  // Top 3 GK lists
+  List<Map<String, dynamic>> _topGkNota = [];
+  List<Map<String, dynamic>> _topGkCleanSheets = [];
+  List<Map<String, dynamic>> _topGkConceded = [];
+  List<Map<String, dynamic>> _topGkGames = [];
 
   // Gráfico de Evolução (Média geral por sessão)
   List<Map<String, dynamic>> _chartData = [];
@@ -141,6 +160,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
   void _calculateGlobalRankings() async {
     final prefs = await SharedPreferences.getInstance();
     final Map<String, Map<String, dynamic>> globalStats = {};
+    final Map<String, Map<String, dynamic>> globalGkStats = {};
 
     // Dados para o gráfico
     final Map<String, List<double>> sessionRatings = {};
@@ -214,8 +234,9 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           dynamic playerObj,
           int status,
           int scored,
-          int conceded,
-        ) {
+          int conceded, {
+          bool isGk = false,
+        }) {
           if (playerObj == null) return;
           final String playerId = playerIdFromObject(playerObj);
           if (playerId.isEmpty || processed.contains(playerId)) return;
@@ -223,61 +244,116 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
 
           final String playerName = (playerObj['name'] ?? '').toString();
 
-          globalStats.putIfAbsent(
-            playerId,
-            () => {
-              'id': playerId,
-              'name': playerName,
-              'goals': 0,
-              'assists': 0,
-              'games': 0,
-              'wins': 0,
-              'draws': 0,
-              'losses': 0,
-              'ratings': <double>[],
-            },
-          );
-          if (playerName.isNotEmpty)
-            globalStats[playerId]!['name'] = playerName;
-
-          globalStats[playerId]!['games'] =
-              (globalStats[playerId]!['games'] as int) + 1;
-
-          if (status == 1)
-            globalStats[playerId]!['wins'] =
-                (globalStats[playerId]!['wins'] as int) + 1;
-          else if (status == -1)
-            globalStats[playerId]!['losses'] =
-                (globalStats[playerId]!['losses'] as int) + 1;
-          else
-            globalStats[playerId]!['draws'] =
-                (globalStats[playerId]!['draws'] as int) + 1;
-
           final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
           final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
           final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
           final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
           final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-          globalStats[playerId]!['goals'] =
-              (globalStats[playerId]!['goals'] as int) + g;
-          globalStats[playerId]!['assists'] =
-              (globalStats[playerId]!['assists'] as int) + a;
+          if (!isGk) {
+            globalStats.putIfAbsent(
+              playerId,
+              () => {
+                'id': playerId,
+                'name': playerName,
+                'goals': 0,
+                'assists': 0,
+                'games': 0,
+                'wins': 0,
+                'draws': 0,
+                'losses': 0,
+                'ratings': <double>[],
+              },
+            );
+            if (playerName.isNotEmpty)
+              globalStats[playerId]!['name'] = playerName;
 
-          final double matchRating = calculateMatchRating(
-            status: status,
-            goals: g,
-            assists: a,
-            ownGoals: og,
-            teamGoals: scored,
-            conceded: conceded,
-            yellow: yc,
-            red: rc,
-            teamWinStreak: 0,
-          );
-          (globalStats[playerId]!['ratings'] as List<double>).add(matchRating);
+            globalStats[playerId]!['games'] =
+                (globalStats[playerId]!['games'] as int) + 1;
 
-          sessionRatings[sessionLabel]!.add(matchRating);
+            if (status == 1)
+              globalStats[playerId]!['wins'] =
+                  (globalStats[playerId]!['wins'] as int) + 1;
+            else if (status == -1)
+              globalStats[playerId]!['losses'] =
+                  (globalStats[playerId]!['losses'] as int) + 1;
+            else
+              globalStats[playerId]!['draws'] =
+                  (globalStats[playerId]!['draws'] as int) + 1;
+
+            globalStats[playerId]!['goals'] =
+                (globalStats[playerId]!['goals'] as int) + g;
+            globalStats[playerId]!['assists'] =
+                (globalStats[playerId]!['assists'] as int) + a;
+
+            final double matchRating = calculateMatchRating(
+              status: status,
+              goals: g,
+              assists: a,
+              ownGoals: og,
+              teamGoals: scored,
+              conceded: conceded,
+              yellow: yc,
+              red: rc,
+              teamWinStreak: 0,
+            );
+            (globalStats[playerId]!['ratings'] as List<double>).add(matchRating);
+            sessionRatings[sessionLabel]!.add(matchRating);
+          } else {
+            // GK-specific tracking
+            globalGkStats.putIfAbsent(
+              playerId,
+              () => {
+                'id': playerId,
+                'name': playerName,
+                'gk_games': 0,
+                'gk_wins': 0,
+                'gk_draws': 0,
+                'gk_losses': 0,
+                'gk_conceded': 0,
+                'gk_clean_sheets': 0,
+                'gk_goals': 0,
+                'gk_assists': 0,
+                'gk_ratings': <double>[],
+              },
+            );
+            if (playerName.isNotEmpty)
+              globalGkStats[playerId]!['name'] = playerName;
+
+            globalGkStats[playerId]!['gk_games'] =
+                (globalGkStats[playerId]!['gk_games'] as int) + 1;
+            globalGkStats[playerId]!['gk_conceded'] =
+                (globalGkStats[playerId]!['gk_conceded'] as int) + conceded;
+            if (conceded == 0) {
+              globalGkStats[playerId]!['gk_clean_sheets'] =
+                  (globalGkStats[playerId]!['gk_clean_sheets'] as int) + 1;
+            }
+            globalGkStats[playerId]!['gk_goals'] =
+                (globalGkStats[playerId]!['gk_goals'] as int) + g;
+            globalGkStats[playerId]!['gk_assists'] =
+                (globalGkStats[playerId]!['gk_assists'] as int) + a;
+
+            if (status == 1)
+              globalGkStats[playerId]!['gk_wins'] =
+                  (globalGkStats[playerId]!['gk_wins'] as int) + 1;
+            else if (status == -1)
+              globalGkStats[playerId]!['gk_losses'] =
+                  (globalGkStats[playerId]!['gk_losses'] as int) + 1;
+            else
+              globalGkStats[playerId]!['gk_draws'] =
+                  (globalGkStats[playerId]!['gk_draws'] as int) + 1;
+
+            final double gkRating = calculateGkMatchRating(
+              status: status,
+              goals: g,
+              assists: a,
+              conceded: conceded,
+              yellow: yc,
+              red: rc,
+              teamWinStreak: 0,
+            );
+            (globalGkStats[playerId]!['gk_ratings'] as List<double>).add(gkRating);
+          }
         }
 
         if (match['players']['red'] != null)
@@ -292,6 +368,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
             redStatus,
             scoreRed,
             scoreWhite,
+            isGk: true,
           );
         if (match['players']['gk_white'] != null)
           processPlayer(
@@ -299,6 +376,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
             whiteStatus,
             scoreWhite,
             scoreRed,
+            isGk: true,
           );
 
         // Build a map of playerId -> name from events for lookup
@@ -361,22 +439,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                 (globalStats[playerId]!['assists'] as int) + a;
 
             // No win/loss/draw since not in lineup
-            final double matchRating = calculateMatchRating(
-              status: 0, // Neutral - not in lineup
-              goals: g,
-              assists: a,
-              ownGoals: og,
-              teamGoals: 0,
-              conceded: 0,
-              yellow: yc,
-              red: rc,
-              teamWinStreak: 0,
-            );
-            (globalStats[playerId]!['ratings'] as List<double>).add(
-              matchRating,
-            );
-
-            sessionRatings[sessionLabel]!.add(matchRating);
+            // Do not calculate or add a matchRating here to preserve their current Nota
           }
         }
       }
@@ -408,6 +471,30 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
 
     _globalLeaderboard = List.from(sortedList);
 
+    final List<Map<String, dynamic>> sortedGkList = [];
+    globalGkStats.forEach((id, data) {
+      final int games = data['gk_games'] as int;
+      if (games > 0) {
+        sortedGkList.add({
+          'id': id,
+          'name': data['name'],
+          'games': games,
+          'conceded': data['gk_conceded'],
+          'clean_sheets': data['gk_clean_sheets'],
+          'goals': data['gk_goals'],
+          'assists': data['gk_assists'],
+          'wins': data['gk_wins'],
+          'draws': data['gk_draws'],
+          'losses': data['gk_losses'],
+          'nota': calculateFinalRating(
+            ratings: data['gk_ratings'] as List<double>,
+          ),
+        });
+      }
+    });
+    _applyGkSorting(sortedGkList);
+    _globalGkLeaderboard = List.from(sortedGkList);
+
     // Calcular Tops
     _topNota = List.from(_globalLeaderboard)
       ..sort((a, b) => (b['nota'] as num).compareTo(a['nota'] as num));
@@ -427,6 +514,28 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     if (_topGA.length > 3) _topGA = _topGA.sublist(0, 3);
     if (_topGoals.length > 3) _topGoals = _topGoals.sublist(0, 3);
     if (_topAssists.length > 3) _topAssists = _topAssists.sublist(0, 3);
+
+    // Calcular Tops GK
+    _topGkNota = List.from(_globalGkLeaderboard)
+      ..sort((a, b) => (b['nota'] as num).compareTo(a['nota'] as num));
+    _topGkCleanSheets = List.from(_globalGkLeaderboard)
+      ..sort(
+        (a, b) =>
+            (b['clean_sheets'] as num).compareTo(a['clean_sheets'] as num),
+      );
+    _topGkConceded = List.from(_globalGkLeaderboard)
+      ..sort(
+        (a, b) => (a['conceded'] as num).compareTo(b['conceded'] as num),
+      ); // Menos vazados
+    _topGkGames = List.from(_globalGkLeaderboard)
+      ..sort((a, b) => (b['games'] as num).compareTo(a['games'] as num));
+
+    if (_topGkNota.length > 3) _topGkNota = _topGkNota.sublist(0, 3);
+    if (_topGkCleanSheets.length > 3)
+      _topGkCleanSheets = _topGkCleanSheets.sublist(0, 3);
+    if (_topGkConceded.length > 3)
+      _topGkConceded = _topGkConceded.sublist(0, 3);
+    if (_topGkGames.length > 3) _topGkGames = _topGkGames.sublist(0, 3);
 
     // Gráfico de Evolução Média
     _chartData = [];
@@ -949,6 +1058,58 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     });
   }
 
+  void _applyGkSorting(List<Map<String, dynamic>> list) {
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (_gkSortColumn) {
+        case 'nota':
+          cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+          break;
+        case 'games':
+          cmp = (a['games'] as num).compareTo(b['games'] as num);
+          break;
+        case 'clean_sheets':
+          cmp = (a['clean_sheets'] as num).compareTo(b['clean_sheets'] as num);
+          break;
+        case 'conceded':
+          // For goals conceded, lower is better, so we swap a and b for the base comparison
+          cmp = (b['conceded'] as num).compareTo(a['conceded'] as num);
+          break;
+        case 'goals':
+          cmp = (a['goals'] as num).compareTo(b['goals'] as num);
+          break;
+        case 'assists':
+          cmp = (a['assists'] as num).compareTo(b['assists'] as num);
+          break;
+        default:
+          cmp = (a[_gkSortColumn] as num).compareTo(b[_gkSortColumn] as num);
+      }
+
+      // Tie-breakers
+      if (cmp == 0 && _gkSortColumn != 'nota') {
+        cmp = (a['nota'] as num).compareTo(b['nota'] as num);
+      }
+      if (cmp == 0 && _gkSortColumn != 'clean_sheets') {
+        cmp = (a['clean_sheets'] as num).compareTo(b['clean_sheets'] as num);
+      }
+
+      return _gkSortDescending ? -cmp : cmp;
+    });
+  }
+
+  void _onGkSortChanged(String? newValue) {
+    if (newValue == null) return;
+    setState(() {
+      if (_gkSortColumn == newValue) {
+        _gkSortDescending = !_gkSortDescending;
+      } else {
+        _gkSortColumn = newValue;
+        _gkSortDescending = true;
+      }
+      _applyGkSorting(_globalGkLeaderboard);
+    });
+  }
+
   Widget _sortHeader(String label, String column, Color color) {
     final bool active = _sortColumn == column;
     return GestureDetector(
@@ -1176,6 +1337,242 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
     );
   }
 
+  Widget _gkSortHeaderFull(String label, String column, Color color) {
+    final bool active = _gkSortColumn == column;
+    return GestureDetector(
+      onTap: () {
+        _onGkSortChanged(column);
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            active
+                ? (_gkSortDescending
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded)
+                : Icons.unfold_more_rounded,
+            size: 11,
+            color: active ? Colors.white54 : color.withValues(alpha: 0.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGkFullTable() {
+    if (_globalGkLeaderboard.isEmpty) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Theme(
+        data: Theme.of(
+          context,
+        ).copyWith(dividerColor: Colors.white.withValues(alpha: 0.05)),
+        child: DataTable(
+          showCheckboxColumn: false,
+          headingRowHeight: 40,
+          dataRowMinHeight: 52,
+          dataRowMaxHeight: 52,
+          columnSpacing: 16,
+          horizontalMargin: 16,
+          columns: [
+            const DataColumn(
+              label: Text(
+                '#',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
+            const DataColumn(
+              label: Text(
+                'JOGADOR',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('NOTA', 'nota', Colors.amber),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull(
+                'CS',
+                'clean_sheets',
+                AppColors.highlightGreen,
+              ),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('GS', 'conceded', Colors.redAccent),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('GOLS', 'goals', Colors.white38),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('AST', 'assists', Colors.white38),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('VIT', 'wins', Colors.greenAccent),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('EMP', 'draws', Colors.orangeAccent),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('DER', 'losses', Colors.redAccent),
+            ),
+            DataColumn(
+              numeric: true,
+              label: _gkSortHeaderFull('JOGOS', 'games', Colors.white24),
+            ),
+          ],
+          rows: List<DataRow>.generate(_globalGkLeaderboard.length, (index) {
+            final p = _globalGkLeaderboard[index];
+            final String? icon = _playersMap[p['id']]?['icon'];
+            return DataRow(
+              onSelectChanged: (_) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlayerDetailScreen(
+                      groupId: widget.groupId,
+                      playerId: p['id'].toString(),
+                      initialPlayerName: p['name'],
+                      playerIcon: icon,
+                    ),
+                  ),
+                );
+              },
+              cells: [
+                DataCell(
+                  Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      color: index < 3 ? Colors.amber : Colors.white24,
+                      fontSize: 12,
+                      fontWeight: index < 3
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: Colors.white10,
+                        child: icon != null
+                            ? ClipOval(child: Image.asset(icon))
+                            : const Icon(
+                                Icons.person,
+                                size: 14,
+                                color: Colors.white38,
+                              ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        p['name'],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    (p['nota'] as double).toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['clean_sheets']}',
+                    style: const TextStyle(
+                      color: AppColors.highlightGreen,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['conceded']}',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['goals']}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['assists']}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['wins']}',
+                    style: const TextStyle(color: Colors.greenAccent),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['draws']}',
+                    style: const TextStyle(color: Colors.orangeAccent),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['losses']}',
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${p['games']}',
+                    style: const TextStyle(color: Colors.white30, fontSize: 12),
+                  ),
+                ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1186,6 +1583,69 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           _buildFilterToggle(),
           _buildMonthSelector(),
           _buildSeasonSelector(),
+          // GK / Linha toggle
+          if (_activeTab == 1)
+            Container(
+              color: AppColors.headerBlue,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => d = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: !d
+                                  ? AppColors.accentBlue
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          "Linha",
+                          style: TextStyle(
+                            color: !d ? AppColors.textWhite : Colors.white38,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => d = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: d
+                                  ? AppColors.accentBlue
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          "Goleiros",
+                          style: TextStyle(
+                            color: d ? AppColors.textWhite : Colors.white38,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -1201,47 +1661,89 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
                         physics: const BouncingScrollPhysics(),
                         child: Column(
                           children: [
-                            if (_globalLeaderboard.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(40),
-                                child: Text(
-                                  'Nenhum jogo registrado nesse período.',
-                                  style: TextStyle(color: Colors.white54),
-                                ),
-                              )
-                            else if (_activeTab == 0) ...[
-                              _buildTop3Card(
-                                title: 'Os Melhores',
-                                players: _topNota,
-                                metric: 'nota',
-                                sortColumn: 'nota',
-                                highlightColor: Colors.amber,
-                              ),
-                              _buildTop3Card(
-                                title: 'Part. Ofensivas (G+A)',
-                                players: _topGA,
-                                metric: 'ga',
-                                sortColumn: 'ga',
-                                highlightColor: AppColors.highlightGreen,
-                              ),
-                              _buildTop3Card(
-                                title: 'Artilheiros',
-                                players: _topGoals,
-                                metric: 'goals',
-                                sortColumn: 'goals',
-                                highlightColor: Colors.blueAccent,
-                              ),
-                              _buildTop3Card(
-                                title: 'Garçons (Assist.)',
-                                players: _topAssists,
-                                metric: 'assists',
-                                sortColumn: 'assists',
-                                highlightColor: Colors.deepPurpleAccent,
-                              ),
-                              _buildEvolutionChart(),
-                            ] else
-                              _buildFullTable(),
-                            const SizedBox(height: 30),
+                            if (_activeTab == 0) ...[
+                              // Destaques
+                              if (_globalLeaderboard.isEmpty && _globalGkLeaderboard.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(40),
+                                  child: Text(
+                                    'Nenhum jogo registrado nesse período.',
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
+                                )
+                              else ...[
+                                if (_globalLeaderboard.isNotEmpty) ...[
+                                  _buildTop3Card(
+                                    title: 'Os Melhores',
+                                    players: _topNota,
+                                    metric: 'nota',
+                                    sortColumn: 'nota',
+                                    highlightColor: Colors.amber,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Part. Ofensivas (G+A)',
+                                    players: _topGA,
+                                    metric: 'ga',
+                                    sortColumn: 'ga',
+                                    highlightColor: AppColors.highlightGreen,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Artilheiros',
+                                    players: _topGoals,
+                                    metric: 'goals',
+                                    sortColumn: 'goals',
+                                    highlightColor: Colors.blueAccent,
+                                  ),
+                                  _buildTop3Card(
+                                    title: 'Garçons',
+                                    players: _topAssists,
+                                    metric: 'assists',
+                                    sortColumn: 'assists',
+                                    highlightColor: Colors.deepPurpleAccent,
+                                  ),
+                                ],
+                                if (_globalGkLeaderboard.isNotEmpty) ...[
+                                  _buildTop3Card(
+                                    title: 'Melhores Goleiros',
+                                    players: _topGkNota,
+                                    metric: 'nota',
+                                    sortColumn: 'nota',
+                                    highlightColor: Colors.amber,
+                                  ),
+                                ],
+                                _buildEvolutionChart(),
+                              ],
+                              const SizedBox(height: 30),
+                            ] else ...[
+                              // Ranking Geral
+                              if (d) ...[
+                                // Goleiros
+                                if (_globalGkLeaderboard.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child: Text(
+                                      'Sem goleiros registrados nesse período.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                else
+                                  _buildGkFullTable(),
+                                const SizedBox(height: 30),
+                              ] else ...[
+                                // Linha
+                                if (_globalLeaderboard.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child: Text(
+                                      'Nenhum jogo registrado nesse período.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                else
+                                  _buildFullTable(),
+                                const SizedBox(height: 30),
+                              ],
+                            ],
                           ],
                         ),
                       ),
