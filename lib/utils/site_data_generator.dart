@@ -265,6 +265,8 @@ class SiteDataGenerator {
         'yellow': kWeightYellowCard,
         'red': kWeightRedCard,
         'own_goal': kWeightOwnGoal,
+        'clean_sheet': kBonusCleanSheet,
+        'team_goal': kBonusTeamGoal,
       }
     };
   }
@@ -326,6 +328,10 @@ class SiteDataGenerator {
       if (tId != currentTemporada) {
         currentTemporada = tId;
         currentEmaRatings.clear();
+        for (var stats in sitePlayers.values) {
+          stats['ratings'] = <double>[];
+          stats['gk_stats']['ratings'] = <double>[];
+        }
       }
 
       final int scoreRed = match['scoreRed'] ?? 0;
