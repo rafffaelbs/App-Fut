@@ -1,0 +1,12 @@
+android/
+ios/
+linux/
+macos/
+web/
+windows/
+build/
+.dart_tool/
+screenshots/
+test/
+.flutter-plugins-dependencies
+firebase.json
