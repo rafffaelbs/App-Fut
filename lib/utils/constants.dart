@@ -47,6 +47,7 @@ const List<String> availablePlayerIcons = [
   'assets/players_icons/neuer.png',
   'assets/players_icons/neymar.png',
   'assets/players_icons/ozil.png',
+  'assets/players_icons/ortiz.png',
   'assets/players_icons/palmer.webp',
   'assets/players_icons/paqueta.png',
   'assets/players_icons/pedro.png',
