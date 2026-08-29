@@ -46,20 +46,29 @@ void showIconPickerModal({
             const SizedBox(height: 16),
             SizedBox(
               height: 400, // Altura fixa para scroll
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: (availablePlayerIcons.length / 4).ceil(),
-                itemBuilder: (ctx, rowIndex) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: List.generate(4, (colIndex) {
-                        final iconIndex = rowIndex * 4 + colIndex;
-                        if (iconIndex >= availablePlayerIcons.length) {
-                          return const Expanded(child: SizedBox());
-                        }
+              child: Builder(
+                builder: (ctx) {
+                  final sortedIcons = List<String>.from(availablePlayerIcons)
+                    ..sort((a, b) {
+                      final aTaken = takenIcons.contains(a) && a != currentIcon;
+                      final bTaken = takenIcons.contains(b) && b != currentIcon;
+                      if (aTaken == bTaken) return a.compareTo(b);
+                      return aTaken ? 1 : -1;
+                    });
+                  return ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: (sortedIcons.length / 4).ceil(),
+                    itemBuilder: (ctx, rowIndex) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: List.generate(4, (colIndex) {
+                            final iconIndex = rowIndex * 4 + colIndex;
+                            if (iconIndex >= sortedIcons.length) {
+                              return const Expanded(child: SizedBox());
+                            }
 
-                        final path = availablePlayerIcons[iconIndex];
+                            final path = sortedIcons[iconIndex];
                         final bool selected = currentIcon == path;
                         final bool isTaken = takenIcons.contains(path);
 
@@ -112,6 +121,7 @@ void showIconPickerModal({
                   );
                 },
               ),
+            ),
             ),
           ],
         ),
