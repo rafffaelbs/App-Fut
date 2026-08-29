@@ -58,6 +58,23 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
 
     if (currentTemporadaId != null) {
       // Retorna apenas partidas cuja data caia na Temporada Atual (Main ou Pre)
+      // Precisamos saber exatamente qual é a temporada atual para separar estatísticas (G+A)
+      String exactCurrentSeasonId = '';
+      for (var season in seasonsConfig) {
+        if (season['startDate'] == null || season['endDate'] == null) continue;
+        try {
+          DateTime start = DateTime.parse(season['startDate']);
+          DateTime end = DateTime.parse(season['endDate']).add(const Duration(days: 1));
+          if (now.isAfter(start.subtract(const Duration(seconds: 1))) && now.isBefore(end)) {
+            exactCurrentSeasonId = season['id'];
+            break;
+          }
+        } catch (_) {}
+      }
+      if (exactCurrentSeasonId.isEmpty && seasonsConfig.isNotEmpty) {
+        exactCurrentSeasonId = seasonsConfig[0]['id'];
+      }
+
       final filtered = allHistory.where((match) {
         String sessionDate = match['session_date'] ?? match['date'] ?? '';
         if (sessionDate.isEmpty) return false;
@@ -71,7 +88,13 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
               String sId = (season['isPreSeason'] == true && season['parentSeasonId'] != null)
                   ? season['parentSeasonId']
                   : season['id'];
-              return sId == currentTemporadaId;
+              if (sId == currentTemporadaId) {
+                if (match is Map) {
+                  match['isPreSeasonMatch'] = season['isPreSeason'] == true;
+                  match['isExactCurrentSeason'] = season['id'] == exactCurrentSeasonId;
+                }
+                return true;
+              }
             }
           }
         } catch (_) {}
@@ -175,22 +198,27 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
       });
       
       final Map<String, dynamic> playerStats = globalStats[playerId]!;
-      playerStats['games'] = (playerStats['games'] as int) + 1;
       
-      if (status == 1) playerStats['wins'] = (playerStats['wins'] as int) + 1;
-      else if (status == -1) playerStats['losses'] = (playerStats['losses'] as int) + 1;
-      else playerStats['draws'] = (playerStats['draws'] as int) + 1;
-
       final int g = matchPlayerEvents[playerId]?['g'] ?? 0;
       final int a = matchPlayerEvents[playerId]?['a'] ?? 0;
       final int og = matchPlayerEvents[playerId]?['og'] ?? 0;
       final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
       final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-      playerStats['goals'] = (playerStats['goals'] as int) + g;
-      playerStats['assists'] = (playerStats['assists'] as int) + a;
-      playerStats['yellow'] = (playerStats['yellow'] as int) + yc;
-      playerStats['red'] = (playerStats['red'] as int) + rc;
+      // Incrementa as estatísticas APENAS se a partida for da temporada (ou pre-temporada) exata atual.
+      // Jogos de pre-temporada não afetam as estatísticas da temporada principal, apenas a nota.
+      if (match['isExactCurrentSeason'] == true) {
+        playerStats['games'] = (playerStats['games'] as int) + 1;
+        
+        if (status == 1) playerStats['wins'] = (playerStats['wins'] as int) + 1;
+        else if (status == -1) playerStats['losses'] = (playerStats['losses'] as int) + 1;
+        else playerStats['draws'] = (playerStats['draws'] as int) + 1;
+
+        playerStats['goals'] = (playerStats['goals'] as int) + g;
+        playerStats['assists'] = (playerStats['assists'] as int) + a;
+        playerStats['yellow'] = (playerStats['yellow'] as int) + yc;
+        playerStats['red'] = (playerStats['red'] as int) + rc;
+      }
 
       final double matchRating = calculateMatchRating(
         status: status, goals: g, assists: a,

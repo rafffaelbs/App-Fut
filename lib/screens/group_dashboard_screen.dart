@@ -1,5 +1,4 @@
 import 'package:app_do_fut/constants/app_colors.dart';
-import 'package:app_do_fut/screens/group_ranking_screen.dart';
 import 'package:app_do_fut/screens/players_screen.dart';
 import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
@@ -28,11 +27,10 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       SessionsScreen(groupId: widget.groupId), 
-      GroupRankingScreen(groupId: widget.groupId),
       PlayersScreen(groupId: widget.groupId),
     ];
 
-    final List<String> titles = ["Peladas", "Estatísticas Gerais", "Elenco"];
+    final List<String> titles = ["Peladas", "Elenco"];
 
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
@@ -176,10 +174,6 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_month),
             label: "Peladas",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: "Ranking",
           ),
           BottomNavigationBarItem(icon: Icon(Icons.groups), label: "Elenco"),
         ],

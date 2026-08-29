@@ -13,6 +13,15 @@ void showIconPickerModal({
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (ctx) {
+      // Sort: available icons first, taken icons last
+      final sortedIcons = List<String>.from(availablePlayerIcons)
+        ..sort((a, b) {
+          final aTaken = takenIcons.contains(a) && a != currentIcon;
+          final bTaken = takenIcons.contains(b) && b != currentIcon;
+          if (aTaken == bTaken) return a.compareTo(b);
+          return aTaken ? 1 : -1;
+        });
+
       return Container(
         decoration: const BoxDecoration(
           color: AppColors.headerBlue,
@@ -45,32 +54,23 @@ void showIconPickerModal({
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 400, // Altura fixa para scroll
-              child: Builder(
-                builder: (ctx) {
-                  final sortedIcons = List<String>.from(availablePlayerIcons)
-                    ..sort((a, b) {
-                      final aTaken = takenIcons.contains(a) && a != currentIcon;
-                      final bTaken = takenIcons.contains(b) && b != currentIcon;
-                      if (aTaken == bTaken) return a.compareTo(b);
-                      return aTaken ? 1 : -1;
-                    });
-                  return ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: (sortedIcons.length / 4).ceil(),
-                    itemBuilder: (ctx, rowIndex) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: List.generate(4, (colIndex) {
-                            final iconIndex = rowIndex * 4 + colIndex;
-                            if (iconIndex >= sortedIcons.length) {
-                              return const Expanded(child: SizedBox());
-                            }
+              height: 400,
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: (sortedIcons.length / 4).ceil(),
+                itemBuilder: (ctx, rowIndex) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: List.generate(4, (colIndex) {
+                        final iconIndex = rowIndex * 4 + colIndex;
+                        if (iconIndex >= sortedIcons.length) {
+                          return const Expanded(child: SizedBox());
+                        }
 
-                            final path = sortedIcons[iconIndex];
+                        final path = sortedIcons[iconIndex];
                         final bool selected = currentIcon == path;
-                        final bool isTaken = takenIcons.contains(path);
+                        final bool isTaken = takenIcons.contains(path) && path != currentIcon;
 
                         return Expanded(
                           child: Padding(
@@ -121,7 +121,6 @@ void showIconPickerModal({
                   );
                 },
               ),
-            ),
             ),
           ],
         ),
