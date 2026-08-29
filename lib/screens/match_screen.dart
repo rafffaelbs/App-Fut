@@ -62,6 +62,7 @@ class _MatchScreenState extends State<MatchScreen>
   DateTime? _lastStartTime;
 
   bool _showTacticalPitch = true;
+  bool _requireGk = true;
 
   int get totalSecondsElapsed {
     if (!isMatchRunning || _lastStartTime == null)
@@ -93,8 +94,7 @@ class _MatchScreenState extends State<MatchScreen>
   bool get _isReadyToStart =>
       teamRed.length == widget.totalPlayers &&
       teamWhite.length == widget.totalPlayers &&
-      activeGkRed != null &&
-      activeGkWhite != null;
+      (!_requireGk || (activeGkRed != null && activeGkWhite != null));
 
   String _formatTime(int totalSeconds) {
     int min = totalSeconds ~/ 60;
@@ -155,6 +155,7 @@ class _MatchScreenState extends State<MatchScreen>
     final String id = widget.tournamentId;
 
     _showTacticalPitch = prefs.getBool('show_tactical_pitch') ?? true;
+    _requireGk = prefs.getBool('require_gk') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null)
@@ -256,6 +257,14 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _startMatch() async {
     if (isMatchRunning) return;
+    if (_requireGk && (activeGkRed == null || activeGkWhite == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Os times precisam de goleiros para iniciar a partida"),
+        ),
+      );
+      return;
+    }
     setState(() {
       isMatchRunning = true;
       _lastStartTime = DateTime.now();
@@ -977,6 +986,24 @@ class _MatchScreenState extends State<MatchScreen>
                 await prefs.setBool('show_tactical_pitch', val);
               },
             ),
+            SwitchListTile(
+              activeColor: AppColors.accentBlue,
+              title: const Text(
+                "Obrigatório ter goleiro para começar",
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                "Exige que ambos os times tenham goleiros definidos",
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              value: _requireGk,
+              onChanged: (val) async {
+                setState(() => _requireGk = val);
+                setModalState(() => _requireGk = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('require_gk', val);
+              },
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -1511,12 +1538,6 @@ class _MatchScreenState extends State<MatchScreen>
     return Expanded(
       child: GestureDetector(
         onTap: () {
-          if (!isMatchRunning) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Inicie a partida primeiro!")),
-            );
-            return;
-          }
           if (gk == null) {
             _showGoalkeeperSelectionDialog(isRed, (player) {
               setState(() {
