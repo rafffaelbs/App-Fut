@@ -92,7 +92,9 @@ class _MatchScreenState extends State<MatchScreen>
 
   bool get _isReadyToStart =>
       teamRed.length == widget.totalPlayers &&
-      teamWhite.length == widget.totalPlayers;
+      teamWhite.length == widget.totalPlayers &&
+      activeGkRed != null &&
+      activeGkWhite != null;
 
   String _formatTime(int totalSeconds) {
     int min = totalSeconds ~/ 60;

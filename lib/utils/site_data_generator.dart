@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'player_identity.dart';
 import 'rating_calculator.dart';
+import 'stats_calculator.dart';
 
 class SiteDataGenerator {
   /// Gera o pacote de dados `site_data` contendo estatísticas pré-calculadas
@@ -80,15 +81,10 @@ class SiteDataGenerator {
     }
 
     // 5. Calcular estatísticas globais e avançadas para cada jogador
-    // Sort allHistory chronologically to ensure EMA and Elo calculations are correct
-    allHistory.sort((a, b) {
-      String dateA = (a as Map)['session_date'] ?? a['date'] ?? '';
-      String dateB = (b as Map)['session_date'] ?? b['date'] ?? '';
-      return dateA.compareTo(dateB);
-    });
+    List<dynamic> filteredHistory = await getAllGroupMatches(groupId);
 
     Map<String, Map<String, dynamic>> sitePlayers = {};
-    _calculateGlobalAndAdvancedStats(allHistory, sitePlayers, playersMap, seasonsConfig);
+    _calculateGlobalAndAdvancedStats(filteredHistory, sitePlayers, playersMap, seasonsConfig);
 
     // 6. Resumo das Sessões (Dias de pelada)
     List<Map<String, dynamic>> siteSessions = [];
