@@ -1,22 +1,28 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
-import 'package:app_do_fut/firebase_options.dart';
 import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/sync_screen.dart';
 import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/services/sync_service.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:app_do_fut/services/fix_event_times_service.dart';
+import 'package:app_do_fut/config/supabase_config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:app_do_fut/models/group_model.dart';
+import 'package:app_do_fut/repositories/supabase_service.dart';
+
 // Global route observer for tracking navigation
-final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
+final RouteObserver routeObserver = RouteObserver();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await SupabaseConfig.initialize();
+
+
+  // para armazenamento remoto de dados.
+
   runApp(const MyApp());
 }
 
@@ -45,12 +51,12 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State {
   final SyncService _syncService = SyncService();
-  List<Map<String, dynamic>> groups = [];
+  List groups = [];
   bool isLoading = true;
 
   @override
@@ -59,35 +65,92 @@ class _HomePageState extends State<HomePage> {
     _loadGroups();
   }
 
-  // --- PERSISTENCE: LOAD & SAVE ---
-  Future<void> _loadGroups() async {
+  // --- PERSISTENCE: LOAD ---
+  Future _loadGroups() async {
+    setState(() => isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? savedGroups = prefs.getString('app_groups');
-
-      if (savedGroups != null && savedGroups.isNotEmpty) {
-        // Decode the JSON string into a generic List
-        final List<dynamic> decodedData = jsonDecode(savedGroups);
-
-        setState(() {
-          // Safely map each dynamic item back into a Map<String, dynamic>
-          groups = decodedData
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList();
-        });
-      }
+      final fetchedGroups = await SupabaseService.instance.grupos.getMeusGrupos();
+      setState(() {
+        groups = fetchedGroups;
+      });
     } catch (e) {
-      // If the saved data is corrupted, we catch the error here so the app doesn't freeze
       debugPrint("Error loading groups: $e");
     } finally {
-      // The 'finally' block ensures this line runs NO MATTER WHAT happens above
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
-  Future<void> _saveGroups() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_groups', jsonEncode(groups));
+  // --- MAINTENANCE: Fix event times from backup ---
+  Future<void> _runFixEventTimes() async {
+    Navigator.pop(context); // fecha o drawer
+
+    // Caminho absoluto do arquivo de backup
+    const backupPath = '/home/marinho/Documents/github/App-Fut/pelada_backup_1789226662128.json';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final List<String> progressLines = ['Iniciando...'];
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.headerBlue,
+              title: const Text('Corrigindo Tempos', style: TextStyle(color: Colors.white)),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 280,
+                child: ListView.builder(
+                  itemCount: progressLines.length,
+                  itemBuilder: (_, i) => Text(
+                    progressLines[i],
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    try {
+      final result = await FixEventTimesService().run(
+        backupJsonPath: backupPath,
+        onProgress: (msg) => debugPrint(msg),
+      );
+
+      if (mounted) Navigator.pop(context); // fecha o loading dialog
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.headerBlue,
+            title: const Text('Concluído!', style: TextStyle(color: Colors.white)),
+            content: Text(
+              '✅ ${result['updated']} eventos atualizados\n⏭️ ${result['skipped']} partidas sem alteração\n❌ ${(result['errors'] as List).length} erros',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accentBlue)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // --- UNIFIED DIALOG: CREATE OR EDIT ---
@@ -96,7 +159,7 @@ class _HomePageState extends State<HomePage> {
     final group = isEditing ? groups[index] : null;
 
     final TextEditingController nameController = TextEditingController(
-      text: isEditing ? group!['name'] : '',
+      text: isEditing ? group!.nome : '',
     );
 
     showModalBottomSheet(
@@ -155,7 +218,7 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -167,26 +230,29 @@ class _HomePageState extends State<HomePage> {
                       return;
                     }
 
-                    setState(() {
-                      final newGroupData = {
-                        'id': isEditing
-                            ? group!['id']
-                            : 'grupo_${DateTime.now().millisecondsSinceEpoch}',
-                        'name': nameController.text.trim(),
-                        'createdAt': isEditing
-                            ? group!['createdAt']
-                            : DateTime.now().toIso8601String(),
-                      };
-
-                      if (isEditing) {
-                        groups[index] = newGroupData;
-                      } else {
-                        groups.insert(0, newGroupData);
-                      }
-                    });
-
-                    _saveGroups();
                     Navigator.pop(ctx);
+                    setState(() => isLoading = true);
+
+                    try {
+                      if (isEditing) {
+                        final updatedGroup = group!.copyWith(nome: nameController.text.trim());
+                        await SupabaseService.instance.grupos.atualizarGrupo(updatedGroup);
+                      } else {
+                        await SupabaseService.instance.grupos.criarGrupo(nome: nameController.text.trim());
+                      }
+                      await _loadGroups();
+                    } catch (e) {
+                      debugPrint('Error saving group: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erro: ${e.toString()}')),
+                        );
+                      }
+                    } finally {
+                      if (mounted) {
+                        setState(() => isLoading = false);
+                      }
+                    }
                   },
                   child: Text(
                     isEditing ? "SALVAR ALTERAÇÕES" : "CRIAR GRUPO",
@@ -216,7 +282,7 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(color: AppColors.textWhite),
         ),
         content: const Text(
-          "Tem certeza? Isso removerá o grupo da sua lista principal.",
+          "Tem certeza? Isso removerá o grupo e todos os dados associados.",
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -228,12 +294,24 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           TextButton(
-            onPressed: () {
-              setState(() {
-                groups.removeAt(index);
-              });
-              _saveGroups();
+            onPressed: () async {
               Navigator.pop(ctx);
+              setState(() => isLoading = true);
+              try {
+                await SupabaseService.instance.grupos.deletarGrupo(groups[index].id);
+                await _loadGroups();
+              } catch (e) {
+                debugPrint('Error deleting group: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: ${e.toString()}')),
+                  );
+                }
+              } finally {
+                if (mounted) {
+                  setState(() => isLoading = false);
+                }
+              }
             },
             child: const Text(
               "Excluir",
@@ -372,101 +450,18 @@ class _HomePageState extends State<HomePage> {
                   vertical: 20,
                 ),
                 children: [
-                  _buildDrawerSection('DADOS E SINCRONIA'),
-                  _buildDrawerTile(
-                    icon: Icons.cloud_sync_rounded,
-                    title: 'Cloud Sync',
-                    subtitle: 'Sincronizar com Firebase',
-                    onTap: () {
-                      Navigator.pop(context);
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
-                        ).then((success) {
-                          if (success == true) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const SyncScreen(),
-                              ),
-                            );
-                          }
-                        });
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SyncScreen(),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  _buildDrawerTile(
-                    icon: Icons.download_rounded,
-                    title: 'Exportar',
-                    subtitle: 'Salvar backup local (JSON)',
-                    onTap: () async {
-                      Navigator.pop(context);
-                      await _syncService.exportToFile();
-                    },
-                  ),
-                  _buildDrawerTile(
-                    icon: Icons.upload_file_rounded,
-                    title: 'Importar',
-                    subtitle: 'Restaurar de arquivo JSON',
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final imported = await _syncService.importFromFile();
-                      if (!mounted) return;
-                      if (imported) {
-                        await _loadGroups();
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Dados importados com sucesso.'),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _buildDrawerSection('APLICATIVO'),
-                  _buildDrawerTile(
-                    icon: Icons.settings_rounded,
-                    title: 'Configurações',
-                    subtitle: 'Preferências do app',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BlankScreen(),
-                        ),
-                      );
-                    },
-                  ),
                   _buildDrawerTile(
                     icon: Icons.info_outline_rounded,
                     title: 'Sobre',
                     subtitle: 'Versão 1.2.0',
                     onTap: () {},
                   ),
-                  if (FirebaseAuth.instance.currentUser != null)
-                    _buildDrawerTile(
-                      icon: Icons.logout_rounded,
-                      title: 'Sair',
-                      subtitle: 'Deslogar da conta',
-                      onTap: () async {
-                        await FirebaseAuth.instance.signOut();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
+                  _buildDrawerTile(
+                    icon: Icons.timer_rounded,
+                    title: 'Corrigir Tempos',
+                    subtitle: 'Restaurar horários dos eventos do backup',
+                    onTap: () => _runFixEventTimes(),
+                  ),
                 ],
               ),
             ),
@@ -541,8 +536,8 @@ class _HomePageState extends State<HomePage> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => GroupDashboardScreen(
-                              groupId: group['id'],
-                              groupName: group['name'],
+                              groupId: group.id,
+                              groupName: group.nome,
                             ),
                           ),
                         );
@@ -557,7 +552,7 @@ class _HomePageState extends State<HomePage> {
                           child: Icon(Icons.groups, color: Colors.white),
                         ),
                         title: Text(
-                          group['name'],
+                          group.nome,
                           style: const TextStyle(
                             color: AppColors.textWhite,
                             fontWeight: FontWeight.bold,
@@ -568,7 +563,7 @@ class _HomePageState extends State<HomePage> {
                           "Toque para ver elenco e jogos",
                           style: TextStyle(color: Colors.grey, fontSize: 13),
                         ),
-                        trailing: PopupMenuButton<String>(
+                        trailing: PopupMenuButton(
                           icon: const Icon(
                             Icons.more_vert,
                             color: Colors.white54,

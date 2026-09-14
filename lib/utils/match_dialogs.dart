@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../models/player.dart';
+import '../models/player_model.dart';
 
 class MatchDialogs {
   static void showRemovePopup(
     BuildContext context,
-    Player player,
+    PlayerModel player,
     VoidCallback onConfirm,
   ) {
     showDialog<void>(

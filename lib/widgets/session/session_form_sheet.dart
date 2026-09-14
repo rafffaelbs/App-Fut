@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../constants/app_colors.dart';
-import '../../models/session.dart';
+import '../../models/session_model.dart';
 
-/// Abre a bottom sheet de criação/edição de uma [Session].
+/// Abre a bottom sheet de criação/edição de uma [SessionModel].
 ///
-/// Não acessa SharedPreferences — apenas monta/atualiza a [Session] e a entrega
+/// Não acessa SharedPreferences — apenas monta/atualiza a [SessionModel] e a entrega
 /// via [onSubmit]. Quando [existing] é informado, edita a pelada; caso contrário,
 /// cria uma nova (mantendo `id`, `status` e demais chaves legadas).
 Future<void> showSessionFormSheet(
   BuildContext context, {
-  Session? existing,
-  required ValueChanged<Session> onSubmit,
+  SessionModel? existing,
+  required ValueChanged<SessionModel> onSubmit,
 }) async {
   final bool isEditing = existing != null;
 
@@ -241,8 +241,8 @@ Future<void> showSessionFormSheet(
   );
 }
 
-Session _buildSession({
-  required Session? existing,
+SessionModel _buildSession({
+  required SessionModel? existing,
   required String title,
   required String date,
   required DateTime selectedDate,
@@ -253,16 +253,15 @@ Session _buildSession({
   required bool draftMode,
 }) {
   final bool isEditing = existing != null;
-  return Session(
+  return SessionModel(
     id: isEditing
         ? existing.id
         : 'session_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${const Uuid().v4().substring(0, 4)}',
     title: title,
-    date: date,
-    timestamp: selectedDate.toIso8601String(),
-    status: isEditing ? existing.status : Session.statusEmAndamento,
+    timestamp: selectedDate,
+    status: isEditing ? existing.status : SessionModel.statusEmAndamento,
     jogadores: jogadores,
-    duration: duration,
+    durationMinutes: duration,
     winLimit: winLimit,
     streakAction: streakAction,
     draftMode: draftMode,

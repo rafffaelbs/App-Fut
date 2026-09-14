@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,20 +25,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
       if (mounted) Navigator.pop(context, true); // Retorna true se logou com sucesso
-    } on FirebaseAuthException catch (e) {
-      String message = 'Ocorreu um erro ao fazer login.';
-      if (e.code == 'user-not-found') message = 'Usuário não encontrado.';
-      if (e.code == 'wrong-password') message = 'Senha incorreta.';
-      if (e.code == 'invalid-email') message = 'E-mail inválido.';
-      
+    } on AuthException catch (e) {
+      String message = e.message;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ocorreu um erro ao fazer login.'), backgroundColor: Colors.redAccent),
         );
       }
     } finally {

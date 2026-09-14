@@ -4,12 +4,13 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../repositories/supabase_service.dart';
 
 class HistoryScreen extends StatefulWidget {
-  final String tournamentId; 
-  final String groupId; 
+  final String tournamentId;
+  final String groupId;
 
   const HistoryScreen({
     super.key,
@@ -23,6 +24,7 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> history = [];
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -30,22 +32,154 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
-  Future<void> _loadHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
+  Map<String, String> _idToName = {};
 
-    if (prefs.containsKey(historyKey)) {
-      setState(() {
-        history = jsonDecode(prefs.getString(historyKey)!);
-        // Ordena pela data mais recente
-        history.sort((a, b) {
-          final dateA = DateTime.parse(a['date'] ?? '1970-01-01');
-          final dateB = DateTime.parse(b['date'] ?? '1970-01-01');
-          return dateB.compareTo(dateA); 
-        });
+  /// Converte PartidaModel para o mapa dinâmico que a UI já consome.
+  Map<String, dynamic> _toLegacyMatch(dynamic partida) {
+    final redPlayers = partida.escalacao
+        .where((e) => e.isRed || e.isTeamA || e.team.toLowerCase() == 'red')
+        .map((e) => {
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.nome ?? e.playerId,
+              'id': e.playerId
+            })
+        .toList();
+    final whitePlayers = partida.escalacao
+        .where((e) => e.isWhite || e.isTeamB || e.team.toLowerCase() == 'white')
+        .map((e) => {
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.nome ?? e.playerId,
+              'id': e.playerId
+            })
+        .toList();
+
+    final events = partida.eventos.map<Map<String, dynamic>>((ev) {
+      final playerName = _idToName[ev.playerId] ?? ev.player?.name ?? ev.player?.nome ?? ev.playerId;
+      final assistName = ev.assistPlayerId != null
+          ? (_idToName[ev.assistPlayerId!] ?? ev.assistPlayer?.name ?? ev.assistPlayer?.nome)
+          : null;
+
+      return {
+        'type': ev.eventType,
+        'playerId': ev.playerId,
+        'player': playerName,
+        'assistId': ev.assistPlayerId,
+        'assist': assistName,
+        'team': ev.team ?? 'red',
+        'time': ev.minute ?? ev.timestamp ?? '',
+      };
+    }).toList();
+
+    String durationMin;
+    if (partida.duracaoSegundos != null) {
+      final secs = partida.duracaoSegundos!;
+      durationMin = '${(secs ~/ 60).toString().padLeft(2, '0')}:${(secs % 60).toString().padLeft(2, '0')}';
+    } else if (partida.matchDuration != null && partida.matchDuration!.isNotEmpty) {
+      durationMin = partida.matchDuration!;
+    } else {
+      durationMin = '—';
+    }
+
+    return {
+      'id': partida.id,
+      'session_id': partida.sessionId,
+      'start_time': partida.startTime?.toIso8601String(),
+      'end_time': partida.endTime?.toIso8601String(),
+      'date': partida.timestamp.toIso8601String(),
+      'scoreRed': partida.scoreRed,
+      'scoreWhite': partida.scoreWhite,
+      'match_duration': durationMin,
+      'players': {'red': redPlayers, 'white': whitePlayers},
+      'events': events,
+    };
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => isLoading = true);
+    try {
+      if (widget.groupId.isNotEmpty) {
+        try {
+          final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+          for (final p in groupPlayers) {
+            _idToName[p.id] = p.displayName;
+          }
+        } catch (_) {}
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final String historyKey = 'match_history_${widget.tournamentId}';
+      List<dynamic> localHistory = [];
+      if (prefs.containsKey(historyKey)) {
+        try {
+          final localData = jsonDecode(prefs.getString(historyKey)!);
+          if (localData is List) localHistory = localData;
+        } catch (_) {}
+      }
+
+      String defaultDuration = '08:00';
+      final sessionsData = prefs.getString('sessions_${widget.groupId}');
+      if (sessionsData != null) {
+        try {
+          final List<dynamic> allSessions = jsonDecode(sessionsData);
+          final currentSession = allSessions.firstWhere(
+            (s) => s['id'] == widget.tournamentId,
+            orElse: () => null,
+          );
+          if (currentSession != null && currentSession['duration'] != null) {
+            defaultDuration = '${currentSession['duration'].toString().padLeft(2, '0')}:00';
+          }
+        } catch (_) {}
+      }
+
+      final partidas = await SupabaseService.instance.partidas
+          .getPartidasPorSessao(widget.tournamentId);
+
+      List<dynamic> mapped = partidas.map(_toLegacyMatch).toList();
+      
+      // Fallback local caso o Supabase ainda não tenha partidas sincronizadas
+      if (mapped.isEmpty) {
+        mapped = localHistory;
+      } else {
+        // Enriquece partidas do Supabase com a duração real salva localmente
+        for (int i = 0; i < mapped.length; i++) {
+          if (mapped[i]['match_duration'] == '—' || mapped[i]['match_duration'] == null) {
+            final matchingLocal = localHistory.firstWhere(
+              (loc) => loc['id'] == mapped[i]['id'] || (loc['scoreRed'] == mapped[i]['scoreRed'] && loc['scoreWhite'] == mapped[i]['scoreWhite']),
+              orElse: () => null,
+            );
+            if (matchingLocal != null && matchingLocal['match_duration'] != null) {
+              mapped[i]['match_duration'] = matchingLocal['match_duration'];
+            } else if (i < localHistory.length && localHistory[i]['match_duration'] != null) {
+              mapped[i]['match_duration'] = localHistory[i]['match_duration'];
+            } else {
+              mapped[i]['match_duration'] = defaultDuration;
+            }
+          }
+        }
+      }
+
+      mapped.sort((a, b) {
+        final dateA = DateTime.parse(a['date'] ?? '1970-01-01');
+        final dateB = DateTime.parse(b['date'] ?? '1970-01-01');
+        return dateB.compareTo(dateA);
       });
+
+      setState(() => history = mapped);
+    } catch (e) {
+      debugPrint('Error loading history: $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final String historyKey = 'match_history_${widget.tournamentId}';
+        if (prefs.containsKey(historyKey)) {
+          final localData = jsonDecode(prefs.getString(historyKey)!);
+          if (localData is List) {
+            setState(() => history = localData);
+          }
+        }
+      } catch (_) {}
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
+
 
   Future<void> _exportHistory() async {
     if (history.isEmpty) {
@@ -70,12 +204,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _clearHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
-    await prefs.remove(historyKey);
-    setState(() {
-      history = [];
-    });
+    setState(() => isLoading = true);
+    try {
+      // Deleta cada partida individualmente para garantir que o repositório
+      // exclua em cascata os eventos, escalações e histórico de ratings associados.
+      for (final match in history) {
+        if (match['id'] != null) {
+          await SupabaseService.instance.partidas.deletarPartida(match['id']);
+        }
+      }
+      await _loadHistory();
+    } catch (e) {
+      debugPrint('Error clearing history: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao limpar histórico: ${e.toString()}')),
+        );
+      }
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
@@ -181,7 +328,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final List<dynamic> redTeam = match['players']?['red'] ?? [];
                 final List<dynamic> whiteTeam = match['players']?['white'] ?? [];
 
-                return Card(
+                return GestureDetector(
+                  onLongPress: () => _showDebugInfo(match),
+                  child: Card(
                   color: AppColors.headerBlue,
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ExpansionTile(
@@ -275,9 +424,71 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                     ],
                   ),
-                );
+                ));
               },
             ),
+    );
+  }
+
+  void _showDebugInfo(Map<String, dynamic> match) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0D1B2A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final rows = <_DebugRow>[
+          _DebugRow('match_id', match['id']?.toString() ?? '—'),
+          _DebugRow('session_id', match['session_id']?.toString() ?? '—'),
+          _DebugRow('start_time', match['start_time']?.toString() ?? '—'),
+          _DebugRow('end_time', match['end_time']?.toString() ?? '—'),
+          _DebugRow('date', match['date']?.toString() ?? '—'),
+          _DebugRow('duration', match['match_duration']?.toString() ?? '—'),
+          _DebugRow('score', '${match['scoreRed']} x ${match['scoreWhite']}'),
+        ];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Debug Info',
+                style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 1.2),
+              ),
+              const SizedBox(height: 10),
+              ...rows.map((r) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      child: Text(r.label,
+                        style: const TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'monospace')),
+                    ),
+                    Expanded(
+                      child: SelectableText(r.value,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace')),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -301,4 +512,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (type == 'red_card') return const Icon(Icons.style, color: Colors.red, size: 18);
     return const Icon(Icons.circle, color: Colors.grey, size: 10);
   }
+}
+
+class _DebugRow {
+  final String label;
+  final String value;
+  const _DebugRow(this.label, this.value);
 }

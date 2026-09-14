@@ -1,8 +1,10 @@
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/players_screen.dart';
 import 'package:app_do_fut/screens/sessions_screen.dart';
+import 'package:app_do_fut/screens/season_stats_screen.dart';
 import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
 import 'package:app_do_fut/screens/manage_seasons_screen.dart';
+import 'package:app_do_fut/screens/admin_debug_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,9 +30,10 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
     final List<Widget> screens = [
       SessionsScreen(groupId: widget.groupId), 
       PlayersScreen(groupId: widget.groupId),
+      SeasonStatsScreen(groupId: widget.groupId),
     ];
 
-    final List<String> titles = ["Peladas", "Elenco"];
+    final List<String> titles = ["Peladas", "Elenco", "Estatísticas"];
 
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
@@ -94,6 +97,11 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                   context,
                   MaterialPageRoute(builder: (context) => ManageSeasonsScreen(groupId: widget.groupId)),
                 );
+              } else if (value == 'debug') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AdminDebugScreen(groupId: widget.groupId)),
+                );
               } else if (value == 'settings') {
                 showDialog(
                   context: context,
@@ -150,6 +158,10 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                 child: Row(children: [Icon(Icons.calendar_month, color: AppColors.accentBlue, size: 20), SizedBox(width: 8), Text('Gerenciar Temporadas', style: TextStyle(color: Colors.white))]),
               ),
               const PopupMenuItem(
+                value: 'debug',
+                child: Row(children: [Icon(Icons.terminal, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Admin & Debug Cache', style: TextStyle(color: Colors.white))]),
+              ),
+              const PopupMenuItem(
                 value: 'settings',
                 child: Row(children: [Icon(Icons.settings, color: Colors.grey, size: 20), SizedBox(width: 8), Text('Configurações', style: TextStyle(color: Colors.white))]),
               ),
@@ -176,6 +188,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
             label: "Peladas",
           ),
           BottomNavigationBarItem(icon: Icon(Icons.groups), label: "Elenco"),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Estatísticas"),
         ],
       ),
     );

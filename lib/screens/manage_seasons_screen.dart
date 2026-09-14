@@ -1,8 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import '../constants/app_colors.dart';
+import '../models/season_model.dart';
+import '../repositories/supabase_service.dart';
 
 class ManageSeasonsScreen extends StatefulWidget {
   final String groupId;
@@ -14,8 +13,7 @@ class ManageSeasonsScreen extends StatefulWidget {
 }
 
 class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
-  static const Uuid _uuid = Uuid();
-  List<Map<String, dynamic>> _seasons = [];
+  List<SeasonModel> _seasons = [];
   bool _isLoading = true;
 
   @override
@@ -25,31 +23,22 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   }
 
   Future<void> _loadSeasons() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'seasons_${widget.groupId}';
-    if (prefs.containsKey(key)) {
-      final List<dynamic> decoded = jsonDecode(prefs.getString(key)!);
-      setState(() {
-        _seasons = List<Map<String, dynamic>>.from(decoded);
-      });
+    setState(() => _isLoading = true);
+    try {
+      final fetched = await SupabaseService.instance.temporadas.getTemporadas(widget.groupId);
+      setState(() => _seasons = fetched);
+    } catch (e) {
+      debugPrint('Error loading seasons: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-    setState(() {
-      _isLoading = false;
-    });
   }
 
-  Future<void> _saveSeasons() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'seasons_${widget.groupId}';
-    await prefs.setString(key, jsonEncode(_seasons));
-  }
-
-  void _showSeasonDialog({Map<String, dynamic>? season}) {
-    final TextEditingController nameCtrl = TextEditingController(text: season?['name']);
-    DateTime? startDate = season != null ? DateTime.tryParse(season['startDate'] ?? '') : null;
-    DateTime? endDate = season != null ? DateTime.tryParse(season['endDate'] ?? '') : null;
-    bool isPreSeason = season?['isPreSeason'] == true;
-    String? parentSeasonId = season?['parentSeasonId'];
+  void _showSeasonDialog({SeasonModel? season}) {
+    final TextEditingController nameCtrl = TextEditingController(text: season?.name);
+    DateTime? startDate = season?.startDate;
+    DateTime? endDate = season?.endDate;
+    bool isAtual = season?.isActive ?? false;
 
     showDialog(
       context: context,
@@ -58,7 +47,10 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
           builder: (context, setStateDialog) {
             return AlertDialog(
               backgroundColor: AppColors.headerBlue,
-              title: Text(season == null ? 'Nova Temporada' : 'Editar Temporada', style: const TextStyle(color: Colors.white)),
+              title: Text(
+                season == null ? 'Nova Temporada' : 'Editar Temporada',
+                style: const TextStyle(color: Colors.white),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -69,8 +61,10 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Nome (ex: 2026.1)',
                         labelStyle: TextStyle(color: Colors.white54),
-                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentBlue)),
+                        enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.white24)),
+                        focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: AppColors.accentBlue)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -78,7 +72,8 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.deepBlue),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.deepBlue),
                             onPressed: () async {
                               final date = await showDatePicker(
                                 context: context,
@@ -88,13 +83,19 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                               );
                               if (date != null) setStateDialog(() => startDate = date);
                             },
-                            child: Text(startDate == null ? 'Início' : '${startDate!.day}/${startDate!.month}/${startDate!.year}', style: const TextStyle(color: Colors.white70)),
+                            child: Text(
+                              startDate == null
+                                  ? 'Início'
+                                  : '${startDate!.day}/${startDate!.month}/${startDate!.year}',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.deepBlue),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.deepBlue),
                             onPressed: () async {
                               final date = await showDatePicker(
                                 context: context,
@@ -104,90 +105,86 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                               );
                               if (date != null) setStateDialog(() => endDate = date);
                             },
-                            child: Text(endDate == null ? 'Fim' : '${endDate!.day}/${endDate!.month}/${endDate!.year}', style: const TextStyle(color: Colors.white70)),
+                            child: Text(
+                              endDate == null
+                                  ? 'Fim'
+                                  : '${endDate!.day}/${endDate!.month}/${endDate!.year}',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     CheckboxListTile(
-                      title: const Text('É Pré-temporada?', style: TextStyle(color: Colors.white)),
-                      value: isPreSeason,
+                      title: const Text('Temporada atual?',
+                          style: TextStyle(color: Colors.white)),
+                      value: isAtual,
                       activeColor: AppColors.accentBlue,
                       checkColor: Colors.white,
                       onChanged: (val) {
-                        setStateDialog(() {
-                          isPreSeason = val ?? false;
-                          if (!isPreSeason) parentSeasonId = null;
-                        });
+                        setStateDialog(() => isAtual = val ?? false);
                       },
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
-                    if (isPreSeason) ...[
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        value: parentSeasonId,
-                        dropdownColor: AppColors.headerBlue,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: 'Temporada Principal (Pai)',
-                          labelStyle: TextStyle(color: Colors.white54),
-                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                        ),
-                        items: _seasons
-                            .where((s) => s['isPreSeason'] != true && s['id'] != season?['id'])
-                            .map((s) => DropdownMenuItem<String>(
-                                  value: s['id'],
-                                  child: Text(s['name']),
-                                ))
-                            .toList(),
-                        onChanged: (val) {
-                          setStateDialog(() {
-                            parentSeasonId = val;
-                          });
-                        },
-                      ),
-                    ],
                   ],
                 ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                  child: const Text('Cancelar',
+                      style: TextStyle(color: Colors.white54)),
                 ),
                 TextButton(
                   onPressed: () async {
-                    if (nameCtrl.text.trim().isEmpty || startDate == null || endDate == null) return;
-                    if (startDate!.isAfter(endDate!)) {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A data de início deve ser menor ou igual à data de fim.')));
-                       return;
+                    if (nameCtrl.text.trim().isEmpty) return;
+                    if (startDate != null &&
+                        endDate != null &&
+                        startDate!.isAfter(endDate!)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'A data de início deve ser menor ou igual à data de fim.')),
+                      );
+                      return;
                     }
 
-                    setState(() {
+                    Navigator.pop(ctx);
+                    setState(() => _isLoading = true);
+
+                    try {
                       if (season == null) {
-                        _seasons.add({
-                          'id': _uuid.v4(),
-                          'name': nameCtrl.text.trim(),
-                          'startDate': startDate!.toIso8601String(),
-                          'endDate': endDate!.toIso8601String(),
-                          'isPreSeason': isPreSeason,
-                          'parentSeasonId': isPreSeason ? parentSeasonId : null,
-                        });
+                        await SupabaseService.instance.seasons.createSeason(
+                          groupId: widget.groupId,
+                          name: nameCtrl.text.trim(),
+                          startDate: startDate,
+                          endDate: endDate,
+                          isActive: isAtual,
+                        );
                       } else {
-                        season['name'] = nameCtrl.text.trim();
-                        season['startDate'] = startDate!.toIso8601String();
-                        season['endDate'] = endDate!.toIso8601String();
-                        season['isPreSeason'] = isPreSeason;
-                        season['parentSeasonId'] = isPreSeason ? parentSeasonId : null;
+                        final updated = season.copyWith(
+                          name: nameCtrl.text.trim(),
+                          startDate: startDate,
+                          endDate: endDate,
+                          isActive: isAtual,
+                        );
+                        await SupabaseService.instance.seasons.updateSeason(updated);
                       }
-                      // Ordena temporadas da mais recente para a mais antiga (baseado no endDate)
-                      _seasons.sort((a, b) => DateTime.parse(b['endDate']).compareTo(DateTime.parse(a['endDate'])));
-                    });
-                    await _saveSeasons();
-                    if (context.mounted) Navigator.pop(ctx);
+                      await _loadSeasons();
+                    } catch (e) {
+                      debugPrint('Error saving season: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erro: ${e.toString()}')),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isLoading = false);
+                    }
                   },
-                  child: const Text('Salvar', style: TextStyle(color: AppColors.highlightGreen)),
+                  child: const Text('Salvar',
+                      style: TextStyle(color: AppColors.highlightGreen)),
                 ),
               ],
             );
@@ -197,11 +194,51 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
     );
   }
 
-  void _deleteSeason(int index) async {
-    setState(() {
-      _seasons.removeAt(index);
-    });
-    await _saveSeasons();
+  Future<void> _deleteSeason(SeasonModel season) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text('Excluir temporada?',
+            style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Deseja excluir "${season.name}"? Isso removerá as sessões e partidas vinculadas.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await SupabaseService.instance.temporadas.deletarTemporada(
+        groupId: widget.groupId,
+        temporadaId: season.id,
+      );
+      await _loadSeasons();
+    } catch (e) {
+      debugPrint('Error deleting season: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -209,56 +246,79 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       appBar: AppBar(
-        title: const Text('Gerenciar Temporadas', style: TextStyle(color: Colors.white)),
+        title: const Text('Gerenciar Temporadas',
+            style: TextStyle(color: Colors.white)),
         backgroundColor: AppColors.headerBlue,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accentBlue))
           : _seasons.isEmpty
               ? const Center(
-                  child: Text('Nenhuma temporada cadastrada.\nClique no + para criar.',
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)))
+                  child: Text(
+                    'Nenhuma temporada cadastrada.\nClique no + para criar.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _seasons.length,
                   itemBuilder: (context, index) {
                     final s = _seasons[index];
-                    final start = DateTime.parse(s['startDate']);
-                    final end = DateTime.parse(s['endDate']);
                     return Card(
                       color: AppColors.headerBlue,
                       child: ListTile(
                         title: Row(
                           children: [
-                            Text(s['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            if (s['isPreSeason'] == true) ...[
+                            Text(
+                              s.name,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            if (s.isActive) ...[
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.orangeAccent,
+                                  color: AppColors.highlightGreen,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text('Pré', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                                child: const Text(
+                                  'Atual',
+                                  style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ]
                           ],
                         ),
-                        subtitle: Text(
-                          '${start.day.toString().padLeft(2, '0')}/${start.month.toString().padLeft(2, '0')}/${start.year} - ${end.day.toString().padLeft(2, '0')}/${end.month.toString().padLeft(2, '0')}/${end.year}',
-                          style: const TextStyle(color: Colors.white54),
-                        ),
+                        subtitle: s.startDate != null && s.endDate != null
+                            ? Text(
+                                '${s.startDate!.day.toString().padLeft(2, '0')}/${s.startDate!.month.toString().padLeft(2, '0')}/${s.startDate!.year}'
+                                ' - '
+                                '${s.endDate!.day.toString().padLeft(2, '0')}/${s.endDate!.month.toString().padLeft(2, '0')}/${s.endDate!.year}',
+                                style: const TextStyle(color: Colors.white54),
+                              )
+                            : const Text('Sem datas definidas',
+                                style: TextStyle(color: Colors.white38)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit, color: AppColors.accentBlue),
+                              icon: const Icon(Icons.edit,
+                                  color: AppColors.accentBlue),
                               onPressed: () => _showSeasonDialog(season: s),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.redAccent),
-                              onPressed: () => _deleteSeason(index),
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.redAccent),
+                              onPressed: () => _deleteSeason(s),
                             ),
                           ],
                         ),

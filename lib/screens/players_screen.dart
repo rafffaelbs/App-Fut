@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import '../constants/app_colors.dart';
+import '../repositories/supabase_service.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
@@ -20,13 +18,10 @@ class PlayersScreen extends StatefulWidget {
 }
 
 class _PlayersScreenState extends State<PlayersScreen> {
-  static const Uuid _uuid = Uuid();
 
   List<Map<String, dynamic>> players = [];
   bool isLoading = true;
   String _groupBy = 'A-Z';
-
-  String get _storageKey => 'players_${widget.groupId}';
 
   @override
   void initState() {
@@ -39,77 +34,108 @@ class _PlayersScreenState extends State<PlayersScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPlayers() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? playersString = prefs.getString(_storageKey);
+    setState(() => isLoading = true);
 
-    if (playersString != null) {
-      final loaded = List<Map<String, dynamic>>.from(jsonDecode(playersString));
-      setState(() { players = ensurePlayerIds(loaded); });
+    try {
+      final fetchedJogadores = await SupabaseService.instance.jogadores.getJogadoresDoGrupo(widget.groupId);
+      
+      final List<Map<String, dynamic>> mappedPlayers = fetchedJogadores.map((j) => {
+        'id': j.id,
+        'name': j.nome,
+        'icon': j.avatarUrl,
+        'rating': kRatingBase,
+        'totalGames': 0,
+      }).toList();
+      
+      if (!mounted) return;
+      setState(() {
+        players = mappedPlayers;
+      });
+
+      await _calculateDynamicRatings();
+    } catch (e) {
+      debugPrint("Error loading players: $e");
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-
-    await _calculateDynamicRatings();
-    setState(() => isLoading = false);
   }
 
   Future<void> _calculateDynamicRatings() async {
+    // Note: getAllGroupMatches may still be fetching from SharedPreferences until refactored.
+    // If it's refactored, it will fetch from Supabase.
     final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
 
     if (allHistory.isEmpty) {
-      setState(() {
-        for (final p in players) {
-          p['rating']     = kRatingBase;
-          p['totalGames'] = 0;
-        }
-      });
-      await _savePlayers();
+      if (mounted) {
+        setState(() {
+          for (final p in players) {
+            p['rating']     = kRatingBase;
+            p['totalGames'] = 0;
+          }
+        });
+      }
       return;
     }
 
     final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
 
-    setState(() {
-      for (int i = 0; i < players.length; i++) {
-        final String pId = (players[i]['id'] ?? '').toString();
-        if (globalStats.containsKey(pId)) {
-          final data = globalStats[pId]!;
-          players[i]['rating'] = data['nota'];
-          players[i]['totalGames'] = data['games'];
-        } else {
-          players[i]['rating']     = kRatingBase;
-          players[i]['totalGames'] = 0;
+    if (mounted) {
+      setState(() {
+        for (int i = 0; i < players.length; i++) {
+          final String pId = (players[i]['id'] ?? '').toString();
+          if (globalStats.containsKey(pId)) {
+            final data = globalStats[pId]!;
+            players[i]['rating'] = data['nota'];
+            players[i]['totalGames'] = data['games'];
+          } else {
+            players[i]['rating']     = kRatingBase;
+            players[i]['totalGames'] = 0;
+          }
         }
-      }
-    });
-
-    await _savePlayers();
-  }
-
-  Future<void> _savePlayers() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(players));
-  }
-
-  void _addNewPlayer(String name, double rating, String? iconPath) {
-    setState(() {
-      players.add({
-        'id': _uuid.v4(),
-        'name': name,
-        'rating': rating,
-        'totalGames': 0,
-        'icon': iconPath
       });
-    });
-    _savePlayers();
+    }
   }
 
-  void _removePlayer(int index) {
-    setState(() => players.removeAt(index));
-    _savePlayers();
+  Future<void> _addNewPlayer(String name, double rating, String? iconPath) async {
+    setState(() => isLoading = true);
+    try {
+      await SupabaseService.instance.jogadores.criarJogadorFantasma(
+        groupId: widget.groupId,
+        nome: name,
+        avatarUrl: iconPath,
+      );
+      await _loadPlayers();
+    } catch(e) {
+      debugPrint("Error adding player: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao adicionar: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
-  void _updatePlayerIcon(int index, String iconPath) {
-    setState(() => players[index]['icon'] = iconPath);
-    _savePlayers();
+  Future<void> _removePlayer(int index) async {
+    final player = players[index];
+    setState(() => isLoading = true);
+    try {
+      await SupabaseService.instance.jogadores.removerJogadorDoGrupo(
+        groupId: widget.groupId,
+        jogadorId: player['id'].toString(),
+      );
+      await _loadPlayers();
+    } catch(e) {
+      debugPrint("Error removing player: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao remover: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────

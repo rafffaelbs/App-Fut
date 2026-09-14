@@ -3,6 +3,7 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../repositories/supabase_service.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
@@ -83,17 +84,27 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPlayerDetails() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Load all players to find specific player and check taken icons
-    final String playersKey = 'players_${widget.groupId}';
     List<Map<String, dynamic>> players = [];
-    if (prefs.containsKey(playersKey)) {
-      players = ensurePlayerIds(
-        List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString(playersKey)!),
-        ),
-      );
+    try {
+      final fetched = await SupabaseService.instance.jogadores.getJogadoresDoGrupo(widget.groupId);
+      players = fetched.map((j) => {
+        'id': j.id,
+        'name': j.nome,
+        'icon': j.avatarUrl,
+        'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
+      }).toList();
+    } catch (_) {}
+
+    if (players.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final String playersKey = 'players_${widget.groupId}';
+      if (prefs.containsKey(playersKey)) {
+        players = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString(playersKey)!),
+          ),
+        );
+      }
     }
 
     final Map<String, dynamic>? player = players.firstWhere(

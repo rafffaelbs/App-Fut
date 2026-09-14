@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,13 +8,16 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/player_identity.dart';
 import '../utils/site_data_generator.dart';
+import '../config/supabase_config.dart';
+import 'cache_sync_manager.dart';
 
 class SyncService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = SupabaseConfig.client;
+  final CacheSyncManager _cacheSyncManager = CacheSyncManager();
   static const Uuid _uuid = Uuid();
 
-  /// Faz o backup de todos os dados locais (SharedPreferences) para o Firestore.
-  Future<void> exportDataToFirebase(String syncCode) async {
+  /// Faz o backup de todos os dados locais (SharedPreferences) para o Supabase.
+  Future<void> exportDataToSupabase(String syncCode) async {
     final prefs = await SharedPreferences.getInstance();
     await _normalizeUuidData(prefs);
     await _normalizeSessionIds(prefs);
@@ -27,24 +30,30 @@ class SyncService {
 
     final siteData = await SiteDataGenerator.generate(prefs);
 
-    // Salvar o json completo no Firestore
-    await _firestore.collection('sync_data').doc(syncCode).set({
+    // Salvar o json completo no Supabase
+    await _supabase.from('sync_data').upsert({
+      'sync_code': syncCode,
       'data': data,
       'site_data': siteData,
-      'last_updated': FieldValue.serverTimestamp(),
+      'last_updated': DateTime.now().toIso8601String(),
     });
+
+    await _cacheSyncManager.recordCloudSyncSuccess();
   }
 
-  /// Restaura os dados do Firestore para o armazenamento local, substituindo tudo.
-  Future<void> importDataFromFirebase(String syncCode) async {
-    final docRefs = _firestore.collection('sync_data').doc(syncCode);
-    final doc = await docRefs.get();
+  /// Restaura os dados do Supabase para o armazenamento local, substituindo tudo.
+  Future<void> importDataFromSupabase(String syncCode) async {
+    final response = await _supabase
+        .from('sync_data')
+        .select()
+        .eq('sync_code', syncCode)
+        .maybeSingle();
 
-    if (!doc.exists) {
+    if (response == null) {
       throw Exception("Código de sincronização não encontrado na nuvem.");
     }
 
-    final docData = doc.data() as Map<String, dynamic>;
+    final docData = response as Map<String, dynamic>;
     if (!docData.containsKey('data')) {
       throw Exception("Dados mal formatados ou ausentes neste código.");
     }
@@ -75,7 +84,8 @@ class SyncService {
     }
 
     await _normalizeUuidData(prefs);
-    await _pushNormalizedDataToFirebase(syncCode, prefs);
+    await _pushNormalizedDataToSupabase(syncCode, prefs);
+    await _cacheSyncManager.recordCloudFetchSuccess();
   }
 
   /// Gera um novo sync code
@@ -195,7 +205,7 @@ class SyncService {
     }
   }
 
-Future<void> _pushNormalizedDataToFirebase(
+Future<void> _pushNormalizedDataToSupabase(
     String syncCode,
     SharedPreferences prefs,
   ) async {
@@ -208,12 +218,12 @@ Future<void> _pushNormalizedDataToFirebase(
     // 1. Generate the site_data again with the normalized UUIDs
     final siteData = await SiteDataGenerator.generate(prefs);
 
-    // 2. Use merge: true so we don't accidentally overwrite the whole document
-    await _firestore.collection('sync_data').doc(syncCode).set({
+    await _supabase.from('sync_data').upsert({
+      'sync_code': syncCode,
       'data': data,
-      'site_data': siteData, // 3. Include site_data in the upload
-      'last_updated': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'site_data': siteData,
+      'last_updated': DateTime.now().toIso8601String(),
+    });
   }
 
   Future<void> _normalizeUuidData(SharedPreferences prefs) async {

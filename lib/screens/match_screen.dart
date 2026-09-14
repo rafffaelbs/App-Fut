@@ -7,7 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../utils/stats_calculator.dart';
 import '../services/sync_service.dart';
+import '../repositories/supabase_service.dart';
+import '../models/match_lineup_model.dart';
+import '../models/match_event_model.dart';
 
 import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_pitch_player.dart';
@@ -105,10 +109,12 @@ class _MatchScreenState extends State<MatchScreen>
   double _calculateTeamRating(List<Map<String, dynamic>> team) {
     if (team.isEmpty) return 0.0;
     double totalStars = 0.0;
-    for (var player in team)
-      totalStars += player['rating'] != null
+    for (var player in team) {
+      final double r = player['rating'] != null
           ? (player['rating'] as num).toDouble()
-          : 0.0;
+          : kRatingBase;
+      totalStars += r;
+    }
     return totalStars / team.length;
   }
 
@@ -158,10 +164,42 @@ class _MatchScreenState extends State<MatchScreen>
     _requireGk = prefs.getBool('require_gk') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null)
+    if (dbData != null) {
       allSavedPlayers = ensurePlayerIds(
         List<Map<String, dynamic>>.from(jsonDecode(dbData)),
       );
+    }
+    if (widget.groupId.isNotEmpty) {
+      try {
+        final fetched = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        if (fetched.isNotEmpty) {
+          allSavedPlayers = fetched.map((p) => {
+            'id': p.id,
+            'name': p.displayName,
+            'icon': p.icon,
+            'rating': p.rating,
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('Error fetching players from Supabase: $e');
+      }
+
+      try {
+        final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
+        final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
+        for (var p in allSavedPlayers) {
+          final pid = _pid(p);
+          if (globalStats.containsKey(pid)) {
+            p['rating'] = globalStats[pid]!['nota'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
+        }
+        await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+      } catch (e) {
+        debugPrint('Error calculating dynamic ratings in MatchScreen: $e');
+      }
+    }
 
     setState(() {
       if (prefs.containsKey('present_players_$id'))
@@ -215,8 +253,11 @@ class _MatchScreenState extends State<MatchScreen>
             (dbP) => _pid(dbP) == _pid(p),
             orElse: () => {},
           );
-          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null)
+          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
             p['rating'] = dbPlayer['rating'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
         }
       }
 
@@ -240,6 +281,15 @@ class _MatchScreenState extends State<MatchScreen>
       if (prefs.containsKey('first_gk_red_$id')) firstGkRed = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_red_$id')!));
       if (prefs.containsKey('first_gk_white_$id')) firstGkWhite = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_white_$id')!));
 
+      if (activeGkRed != null && activeGkRed!['rating'] == null) {
+        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkRed!), orElse: () => {});
+        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkRed!['rating'] = dbP['rating'];
+      }
+      if (activeGkWhite != null && activeGkWhite!['rating'] == null) {
+        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkWhite!), orElse: () => {});
+        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkWhite!['rating'] = dbP['rating'];
+      }
+
       if (isMatchRunning && _lastStartTime != null) {
         _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           setState(() {
@@ -253,6 +303,62 @@ class _MatchScreenState extends State<MatchScreen>
         });
       }
     });
+  }
+
+  Future<void> _calculateDynamicRatings() async {
+    if (widget.groupId.isEmpty) return;
+    try {
+      final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
+      final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
+
+      for (var p in allSavedPlayers) {
+        final pid = _pid(p);
+        if (globalStats.containsKey(pid)) {
+          p['rating'] = globalStats[pid]!['nota'];
+        } else if (p['rating'] == null) {
+          p['rating'] = kRatingBase;
+        }
+      }
+
+      void syncList(List<Map<String, dynamic>> list) {
+        for (var p in list) {
+          final pid = _pid(p);
+          final dbPlayer = allSavedPlayers.firstWhere(
+            (dbP) => _pid(dbP) == pid,
+            orElse: () => {},
+          );
+          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
+            p['rating'] = dbPlayer['rating'];
+          } else if (globalStats.containsKey(pid)) {
+            p['rating'] = globalStats[pid]!['nota'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          syncList(presentPlayers);
+          syncList(teamRed);
+          syncList(teamWhite);
+          if (activeGkRed != null) {
+            final pid = _pid(activeGkRed!);
+            if (globalStats.containsKey(pid)) activeGkRed!['rating'] = globalStats[pid]!['nota'];
+          }
+          if (activeGkWhite != null) {
+            final pid = _pid(activeGkWhite!);
+            if (globalStats.containsKey(pid)) activeGkWhite!['rating'] = globalStats[pid]!['nota'];
+          }
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+      await _saveMatchState();
+    } catch (e) {
+      debugPrint("Error in _calculateDynamicRatings: $e");
+    }
   }
 
   void _startMatch() async {
@@ -1909,10 +2015,27 @@ class _MatchScreenState extends State<MatchScreen>
   void _showMultiSelectDialog() async {
     final prefs = await SharedPreferences.getInstance();
     final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null)
+    if (dbData != null) {
       setState(() {
         allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
       });
+    }
+    if (allSavedPlayers.isEmpty && widget.groupId.isNotEmpty) {
+      try {
+        final fetched = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        if (fetched.isNotEmpty) {
+          setState(() {
+            allSavedPlayers = fetched.map((p) => {
+              'id': p.id,
+              'name': p.displayName,
+              'icon': p.icon,
+              'rating': p.rating,
+            }).toList();
+          });
+          await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+        }
+      } catch (_) {}
+    }
     if (allSavedPlayers.isEmpty) {
       if (!mounted) return;
       showDialog(
@@ -2431,14 +2554,76 @@ class _MatchScreenState extends State<MatchScreen>
     history.add(matchRecord);
     await prefs.setString(historyKey, jsonEncode(history));
 
-    if (mounted)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Partida salva no Histórico!"),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+    // Persist direct to Supabase
+    try {
+      final List<MatchLineupModel> lineups = [];
+      for (final p in teamRed) {
+        final pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          lineups.add(MatchLineupModel(
+            matchId: '',
+            playerId: pid,
+            team: 'red',
+            isGoalkeeper: pid == playerIdFromObject(firstGkRed),
+          ));
+        }
+      }
+      for (final p in teamWhite) {
+        final pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          lineups.add(MatchLineupModel(
+            matchId: '',
+            playerId: pid,
+            team: 'white',
+            isGoalkeeper: pid == playerIdFromObject(firstGkWhite),
+          ));
+        }
+      }
+
+      final List<MatchEventModel> events = matchEvents.map((ev) {
+        final pid = eventPlayerId(ev, 'player');
+        final astId = eventPlayerId(ev, 'assist');
+        return MatchEventModel(
+          matchId: '',
+          playerId: pid,
+          assistPlayerId: astId.isNotEmpty ? astId : null,
+          eventType: ev['type']?.toString() ?? 'goal',
+          team: ev['team']?.toString() ?? 'red',
+          minute: ev['time']?.toString(),
+        );
+      }).toList();
+
+      await SupabaseService.instance.partidas.salvarPartidaCompleta(
+        sessionId: widget.tournamentId,
+        teamAScore: scoreRed,
+        teamBScore: scoreWhite,
+        startTime: _lastStartTime ?? DateTime.now().subtract(Duration(seconds: totalSecondsElapsed)),
+        lineups: lineups,
+        events: events,
       );
+      debugPrint("Match saved to Supabase successfully. session_id=${widget.tournamentId}");
+      _calculateDynamicRatings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Partida salva no Histórico!"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error saving match to Supabase: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao salvar partida no servidor: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
 
     bool isTie = scoreRed == scoreWhite;
     bool redWon = scoreRed > scoreWhite;
@@ -2986,7 +3171,7 @@ class _MatchScreenState extends State<MatchScreen>
     try {
       final syncService = SyncService();
       final String code = await syncService.getOrCreateSyncCode();
-      syncService.exportDataToFirebase(code).then((_) async {
+      syncService.exportDataToSupabase(code).then((_) async {
         _recordSyncHistory(true);
       }).catchError((e) {
         _recordSyncHistory(false, e.toString());

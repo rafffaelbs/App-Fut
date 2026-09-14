@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../repositories/supabase_service.dart';
 
 class RankingScreen extends StatefulWidget {
   final String groupId;
@@ -69,36 +70,101 @@ class _RankingScreenState extends State<RankingScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _calculateRankings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
+    setState(() => isLoading = true);
 
-    if (!prefs.containsKey(historyKey)) {
-      setState(() => isLoading = false);
-      return;
-    }
-
-    // Carrega ícones do banco de jogadores salvos e cria mapa de normalização (Nome -> ID Real)
     final Map<String, String?> iconMap = {};
     final Map<String, String> nameToIdMap = {};
     final Map<String, String> idToNameMap = {};
 
-    final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null) {
-      final List<dynamic> dbPlayers = jsonDecode(dbData);
-      for (final p in dbPlayers) {
-        final String pid = playerIdFromObject(p as Map<String, dynamic>);
-        final String name = (p['name'] ?? '').toString();
-        if (pid.isNotEmpty) {
-          iconMap[pid] = p['icon'] as String?;
-          if (name.isNotEmpty) {
-            nameToIdMap[name] = pid;
-            idToNameMap[pid] = name;
+    // 1. Carrega jogadores do grupo
+    try {
+      if (widget.groupId.isNotEmpty) {
+        final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        for (final p in groupPlayers) {
+          iconMap[p.id] = p.avatarUrl;
+          if (p.name.isNotEmpty) {
+            nameToIdMap[p.name] = p.id;
+            idToNameMap[p.id] = p.name;
+          }
+        }
+      }
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    if (nameToIdMap.isEmpty) {
+      final String? dbData = prefs.getString('players_${widget.groupId}');
+      if (dbData != null) {
+        final List<dynamic> dbPlayers = jsonDecode(dbData);
+        for (final p in dbPlayers) {
+          final String pid = playerIdFromObject(p as Map<String, dynamic>);
+          final String name = (p['name'] ?? '').toString();
+          if (pid.isNotEmpty) {
+            iconMap[pid] = p['icon'] as String?;
+            if (name.isNotEmpty) {
+              nameToIdMap[name] = pid;
+              idToNameMap[pid] = name;
+            }
           }
         }
       }
     }
 
-    final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
+    // 2. Carrega partidas da sessão
+    List<dynamic> history = [];
+    try {
+      final partidas = await SupabaseService.instance.partidas.getPartidasPorSessao(widget.tournamentId);
+      if (partidas.isNotEmpty) {
+        history = partidas.map((p) => {
+          'id': p.id,
+          'date': p.startTime?.toIso8601String() ?? p.timestamp.toIso8601String(),
+          'scoreRed': p.teamAScore,
+          'scoreWhite': p.teamBScore,
+          'players': {
+            'red': p.lineups.where((l) => l.isTeamA && !l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? idToNameMap[l.playerId] ?? l.playerId,
+              'icon': l.player?.avatarUrl ?? iconMap[l.playerId],
+            }).toList(),
+            'white': p.lineups.where((l) => l.isTeamB && !l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? idToNameMap[l.playerId] ?? l.playerId,
+              'icon': l.player?.avatarUrl ?? iconMap[l.playerId],
+            }).toList(),
+            'gk_red': p.lineups.where((l) => l.isTeamA && l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? idToNameMap[l.playerId] ?? l.playerId,
+              'icon': l.player?.avatarUrl ?? iconMap[l.playerId],
+            }).firstOrNull,
+            'gk_white': p.lineups.where((l) => l.isTeamB && l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? idToNameMap[l.playerId] ?? l.playerId,
+              'icon': l.player?.avatarUrl ?? iconMap[l.playerId],
+            }).firstOrNull,
+          },
+          'events': p.events.map((ev) => {
+            'player': ev.playerId,
+            'playerId': ev.playerId,
+            'assist': ev.assistPlayerId ?? '',
+            'assistId': ev.assistPlayerId ?? '',
+            'type': ev.eventType,
+            'team': ev.team ?? '',
+            'time': ev.minute ?? '',
+          }).toList(),
+        }).toList();
+      }
+    } catch (_) {}
+
+    if (history.isEmpty) {
+      final String historyKey = 'match_history_${widget.tournamentId}';
+      if (prefs.containsKey(historyKey)) {
+        history = jsonDecode(prefs.getString(historyKey)!);
+      }
+    }
+
+    if (history.isEmpty) {
+      if (mounted) setState(() => isLoading = false);
+      return;
+    }
     final Map<String, Map<String, dynamic>> stats = {};
     final Map<String, Map<String, dynamic>> gkStats = {};
 

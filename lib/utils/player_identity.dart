@@ -1,13 +1,13 @@
-import '../models/player.dart';
+import '../models/player_model.dart';
 
-/// Converte um objeto `dynamic` (mapa JSON legado ou [Player]) em um
-/// [Player] tipado, mantendo a regra de id-fallback do legado:
+/// Converte um objeto `dynamic` (mapa JSON legado ou [PlayerModel]) em um
+/// [PlayerModel] tipado, mantendo a regra de id-fallback do legado:
 /// id vazio/ausente vira o próprio `name`.
-Player playerFromObject(dynamic playerObj) {
-  if (playerObj is Player) return playerObj;
-  if (playerObj is! Map) return Player(id: '', name: '');
+PlayerModel playerFromObject(dynamic playerObj) {
+  if (playerObj is PlayerModel) return playerObj;
+  if (playerObj is! Map) return PlayerModel(id: '', name: '');
   final Map<String, dynamic> map = Map<String, dynamic>.from(playerObj);
-  return Player.fromJson(map);
+  return PlayerModel.fromJson(map);
 }
 
 /// Garante um id não-vazio para cada jogador, mutando os maps legados.

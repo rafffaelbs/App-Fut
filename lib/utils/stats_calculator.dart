@@ -3,8 +3,69 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'player_identity.dart';
 import 'rating_calculator.dart';
 
+import '../repositories/matches_repository.dart';
+
 /// Utilitário para agregar todo o histórico de partidas de um grupo.
 Future<List<dynamic>> getAllGroupMatches(String groupId) async {
+  try {
+    final matchesRepo = MatchesRepository();
+    final matches = await matchesRepo.getPartidasPorGrupo(groupId);
+    if (matches.isNotEmpty) {
+      final List<dynamic> allHistory = matches.map((m) {
+        final lineups = m.lineups;
+        final events = m.events;
+        return {
+          'id': m.id,
+          'sessionId': m.sessionId,
+          'scoreRed': m.teamAScore,
+          'scoreWhite': m.teamBScore,
+          'session_date': m.startTime?.toIso8601String() ?? m.timestamp.toIso8601String(),
+          'date': m.startTime?.toIso8601String() ?? m.timestamp.toIso8601String(),
+          'events': events.map((ev) => {
+            'player': ev.playerId,
+            'playerId': ev.playerId,
+            'assist': ev.assistPlayerId ?? '',
+            'assistId': ev.assistPlayerId ?? '',
+            'type': ev.eventType,
+            'time': ev.team ?? '',
+            'minute': ev.minute,
+          }).toList(),
+          'players': {
+            'red': lineups.where((l) => l.isTeamA && !l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? l.playerId,
+              'icon': l.player?.avatarUrl,
+            }).toList(),
+            'white': lineups.where((l) => l.isTeamB && !l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? l.playerId,
+              'icon': l.player?.avatarUrl,
+            }).toList(),
+            'gk_red': lineups.where((l) => l.isTeamA && l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? l.playerId,
+              'icon': l.player?.avatarUrl,
+            }).firstOrNull,
+            'gk_white': lineups.where((l) => l.isTeamB && l.isGoalkeeper).map((l) => {
+              'id': l.playerId,
+              'name': l.player?.name ?? l.playerId,
+              'icon': l.player?.avatarUrl,
+            }).firstOrNull,
+          },
+          'isExactCurrentSeason': true,
+        };
+      }).toList();
+
+      allHistory.sort((a, b) {
+        String dateA = (a as Map)['session_date'] ?? a['date'] ?? '';
+        String dateB = (b as Map)['session_date'] ?? b['date'] ?? '';
+        return dateA.compareTo(dateB);
+      });
+      return allHistory;
+    }
+  } catch (_) {}
+
+  // Fallback para SharedPreferences caso esteja offline ou local
   final prefs = await SharedPreferences.getInstance();
   final String sessionsKey = 'sessions_$groupId';
   final List<dynamic> allHistory = [];
@@ -57,8 +118,6 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
     }
 
     if (currentTemporadaId != null) {
-      // Retorna apenas partidas cuja data caia na Temporada Atual (Main ou Pre)
-      // Precisamos saber exatamente qual é a temporada atual para separar estatísticas (G+A)
       String exactCurrentSeasonId = '';
       for (var season in seasonsConfig) {
         if (season['startDate'] == null || season['endDate'] == null) continue;
@@ -205,9 +264,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
       final int yc = matchPlayerEvents[playerId]?['yc'] ?? 0;
       final int rc = matchPlayerEvents[playerId]?['rc'] ?? 0;
 
-      // Incrementa as estatísticas APENAS se a partida for da temporada (ou pre-temporada) exata atual.
-      // Jogos de pre-temporada não afetam as estatísticas da temporada principal, apenas a nota.
-      if (match['isExactCurrentSeason'] == true) {
+      if (match['isExactCurrentSeason'] == true || match['isExactCurrentSeason'] == null) {
         playerStats['games'] = (playerStats['games'] as int) + 1;
         
         if (status == 1) playerStats['wins'] = (playerStats['wins'] as int) + 1;
