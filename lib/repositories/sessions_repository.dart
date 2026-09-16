@@ -9,6 +9,18 @@ class SessionsRepository {
   SessionsRepository({SupabaseClient? client})
       : _client = client ?? supabase;
 
+  /// Retorna uma sessão específica pelo seu id, ou null se não existir.
+  Future<SessionModel?> getSessaoPorId(String sessaoId) async {
+    final response = await _client
+        .from('sessions')
+        .select()
+        .eq('id', sessaoId)
+        .maybeSingle();
+
+    if (response == null) return null;
+    return SessionModel.fromMap(Map<String, dynamic>.from(response));
+  }
+
   /// Retorna as sessões de uma determinada temporada.
   Future<List<SessionModel>> getSessoesPorTemporada(String seasonId) async {
     final response = await _client
@@ -76,6 +88,7 @@ class SessionsRepository {
   // English method aliases
   Future<List<SessionModel>> getSessionsByGroup(String groupId) =>
       getSessoesPorGrupo(groupId);
+  Future<SessionModel?> getSessionById(String id) => getSessaoPorId(id);
   Future<SessionModel> createSession(SessionModel s) => criarSessao(s);
   Future<SessionModel> updateSession(SessionModel s) => atualizarSessao(s);
   Future<void> deleteSession(String id) => deletarSessao(id);

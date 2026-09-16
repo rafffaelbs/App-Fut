@@ -3,7 +3,9 @@ import 'player_model.dart';
 /// Model for the `group_members` table in Supabase PostgreSQL.
 class GroupMemberModel {
   static const String roleAdmin = 'admin';
-  static const String roleMember = 'member';
+  // Must match the CHECK constraint on group_members.role in Supabase,
+  // which only accepts 'admin' or 'membro' (Portuguese).
+  static const String roleMember = 'membro';
 
   final String id;
   final String groupId;

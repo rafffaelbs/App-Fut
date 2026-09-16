@@ -33,7 +33,7 @@ class GroupMembersRepository {
         .from('group_members')
         .select('*, players!inner(*)')
         .eq('group_id', groupId)
-        .eq('players.user_id', currentUserId)
+        .eq('players.creator_id', currentUserId)
         .maybeSingle();
 
     if (response == null) return null;

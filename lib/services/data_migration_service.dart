@@ -137,10 +137,10 @@ class DataMigrationService {
         groupMapping[legacyId] = groupUuid;
 
         log('Inserindo grupo: "$groupName" com UUID: $groupUuid');
-        await _client.from('grupos').insert({
+        await _client.from('groups').insert({
           'id': groupUuid,
-          'nome': groupName,
-          'criador_id': null,
+          'name': groupName,
+          'creator_id': null,
           'created_at': g['createdAt'] ?? DateTime.now().toIso8601String(),
         });
         totalGroups++;
@@ -170,19 +170,19 @@ class DataMigrationService {
             registeredPlayerIds.add(pId);
             playersToInsert.add({
               'id': pId,
-              'user_id': null,
-              'nome': (p['name']?.toString().trim() ?? 'Jogador').isNotEmpty
+              'creator_id': null,
+              'name': (p['name']?.toString().trim() ?? 'Jogador').isNotEmpty
                   ? p['name'].toString().trim()
                   : 'Jogador',
-              'avatar_url': p['icon']?.toString(),
+              'icon': p['icon']?.toString(),
               'badges': p['manual_badges'] ?? [],
             });
 
             membersToInsert.add({
               'id': _uuid.v4(),
-              'grupo_id': targetGroupUuid,
-              'jogador_id': pId,
-              'papel': 'membro',
+              'group_id': targetGroupUuid,
+              'player_id': pId,
+              'role': 'membro',
             });
           }
         }
@@ -254,16 +254,16 @@ class DataMigrationService {
           registeredPlayerIds.add(entry.key);
           playersToInsert.add({
             'id': entry.key,
-            'user_id': null,
-            'nome': entry.value,
-            'avatar_url': null,
+            'creator_id': null,
+            'name': entry.value,
+            'icon': null,
             'badges': [],
           });
           membersToInsert.add({
             'id': _uuid.v4(),
-            'grupo_id': primaryGroupUuid,
-            'jogador_id': entry.key,
-            'papel': 'membro',
+            'group_id': primaryGroupUuid,
+            'player_id': entry.key,
+            'role': 'membro',
           });
           log('Jogador recuperado de partidas: "${entry.value}" (${entry.key})');
         }
@@ -271,15 +271,15 @@ class DataMigrationService {
 
       // Inserção em lote de jogadores
       if (playersToInsert.isNotEmpty) {
-        log('Inserindo ${playersToInsert.length} jogadores em lote na tabela "jogadores"...');
-        await _insertInBatches('jogadores', playersToInsert);
+        log('Inserindo ${playersToInsert.length} jogadores em lote na tabela "players"...');
+        await _insertInBatches('players', playersToInsert);
         totalPlayers = playersToInsert.length;
       }
 
-      // Inserção em lote de membros_grupo
+      // Inserção em lote de group_members
       if (membersToInsert.isNotEmpty) {
-        log('Inserindo ${membersToInsert.length} registros em "membros_grupo"...');
-        await _insertInBatches('membros_grupo', membersToInsert);
+        log('Inserindo ${membersToInsert.length} registros em "group_members"...');
+        await _insertInBatches('group_members', membersToInsert);
       }
 
       // 5. Extração e Inserção de Temporadas
@@ -304,11 +304,11 @@ class DataMigrationService {
 
             final seasonMap = {
               'id': sId,
-              'grupo_id': targetGroupUuid,
-              'nome': sName,
-              'data_inicio': startStr != null ? DateTime.tryParse(startStr)?.toIso8601String().substring(0, 10) : null,
-              'data_fim': endStr != null ? DateTime.tryParse(endStr)?.toIso8601String().substring(0, 10) : null,
-              'is_atual': sName.contains('2026.2'),
+              'group_id': targetGroupUuid,
+              'name': sName,
+              'start_date': startStr != null ? DateTime.tryParse(startStr)?.toIso8601String().substring(0, 10) : null,
+              'end_date': endStr != null ? DateTime.tryParse(endStr)?.toIso8601String().substring(0, 10) : null,
+              'is_active': sName.contains('2026.2'),
             };
 
             seasonsToInsert.add(seasonMap);
@@ -327,11 +327,11 @@ class DataMigrationService {
         final defaultSeasonId = _uuid.v4();
         seasonsToInsert.add({
           'id': defaultSeasonId,
-          'grupo_id': primaryGroupUuid,
-          'nome': 'Temporada 1',
-          'data_inicio': '2026-01-01',
-          'data_fim': '2026-12-31',
-          'is_atual': true,
+          'group_id': primaryGroupUuid,
+          'name': 'Temporada 1',
+          'start_date': '2026-01-01',
+          'end_date': '2026-12-31',
+          'is_active': true,
         });
         parsedSeasons.add({
           'id': defaultSeasonId,
@@ -342,7 +342,7 @@ class DataMigrationService {
       }
 
       log('Inserindo ${seasonsToInsert.length} temporadas em lote...');
-      await _insertInBatches('temporadas', seasonsToInsert);
+      await _insertInBatches('seasons', seasonsToInsert);
       totalSeasons = seasonsToInsert.length;
 
       // 6. Extração e Inserção de Sessões (Peladas)
@@ -393,11 +393,11 @@ class DataMigrationService {
 
             sessionsToInsert.add({
               'id': newSessUuid,
-              'temporada_id': matchedSeasonId,
-              'titulo': sess['title']?.toString() ?? 'Pelada',
+              'season_id': matchedSeasonId,
+              'title': sess['title']?.toString() ?? 'Pelada',
               'timestamp': sessDate.toIso8601String(),
               'status': 'finalizada',
-              'duracao_minutos': int.tryParse(sess['duration']?.toString() ?? '8') ?? 8,
+              'duration_minutes': int.tryParse(sess['duration']?.toString() ?? '8') ?? 8,
               'win_limit': int.tryParse(sess['win_limit']?.toString() ?? '3') ?? 3,
             });
           }
@@ -405,7 +405,7 @@ class DataMigrationService {
       }
 
       log('Inserindo ${sessionsToInsert.length} sessões de pelada em lote...');
-      await _insertInBatches('sessoes', sessionsToInsert);
+      await _insertInBatches('sessions', sessionsToInsert);
       totalSessions = sessionsToInsert.length;
 
       // 7. Extração e Inserção de Partidas, Escalações, Eventos e Histórico de Ratings
@@ -446,11 +446,11 @@ class DataMigrationService {
 
             matchesToInsert.add({
               'id': matchUuid,
-              'sessao_id': newSessUuid,
-              'timestamp': matchDate.toIso8601String(),
-              'score_red': int.tryParse(m['scoreRed']?.toString() ?? '0') ?? 0,
-              'score_white': int.tryParse(m['scoreWhite']?.toString() ?? '0') ?? 0,
-              'duracao_segundos': duracaoSeg,
+              'session_id': newSessUuid,
+              'start_time': matchDate.toIso8601String(),
+              'team_a_score': int.tryParse(m['scoreRed']?.toString() ?? '0') ?? 0,
+              'team_b_score': int.tryParse(m['scoreWhite']?.toString() ?? '0') ?? 0,
+              'duration_seconds': duracaoSeg,
             });
 
             // Escalação e Ratings
@@ -466,20 +466,20 @@ class DataMigrationService {
                     final double rating = double.tryParse(pl['rating']?.toString() ?? '6.0') ?? 6.0;
 
                     escalacoesToInsert.add({
-                      'partida_id': matchUuid,
-                      'jogador_id': pId,
+                      'match_id': matchUuid,
+                      'player_id': pId,
                       'time': side,
-                      'is_goleiro': isGk,
-                      'nota_partida': rating,
+                      'is_goalkeeper': isGk,
+                      'rating': rating,
                     });
 
                     ratingsToInsert.add({
-                      'jogador_id': pId,
-                      'partida_id': matchUuid,
-                      'temporada_id': seasonId,
-                      'rating_resultante': rating,
-                      'is_goleiro': isGk,
-                      'timestamp': matchDate.toIso8601String(),
+                      'player_id': pId,
+                      'match_id': matchUuid,
+                      'season_id': seasonId,
+                      'new_rating': rating,
+                      'is_goalkeeper': isGk,
+                      'created_at': matchDate.toIso8601String(),
                     });
                   }
                 }
@@ -506,12 +506,12 @@ class DataMigrationService {
                   }
 
                   eventosToInsert.add({
-                    'partida_id': matchUuid,
-                    'jogador_id': pId,
-                    'assist_jogador_id': astId,
-                    'tipo': ev['type']?.toString() ?? 'goal',
+                    'match_id': matchUuid,
+                    'player_id': pId,
+                    'assist_player_id': astId,
+                    'event_type': ev['type']?.toString() ?? 'goal',
                     'time': side,
-                    'tempo': ev['time']?.toString(), // ex: "08:25"
+                    'minute': ev['time']?.toString(), // ex: "08:25"
                   });
                 }
               }
@@ -522,22 +522,22 @@ class DataMigrationService {
 
       // Inserção em lote de Partidas
       log('Inserindo ${matchesToInsert.length} partidas...');
-      await _insertInBatches('partidas', matchesToInsert);
+      await _insertInBatches('matches', matchesToInsert);
       totalMatches = matchesToInsert.length;
 
       // Inserção em lote de Escalações
       log('Inserindo ${escalacoesToInsert.length} escalações de atletas...');
-      await _insertInBatches('escalacao_partida', escalacoesToInsert);
+      await _insertInBatches('match_lineups', escalacoesToInsert);
       totalEscalacoes = escalacoesToInsert.length;
 
       // Inserção em lote de Eventos
       log('Inserindo ${eventosToInsert.length} eventos de partida (gols, assistências, cartões)...');
-      await _insertInBatches('eventos_partida', eventosToInsert);
+      await _insertInBatches('match_events', eventosToInsert);
       totalEvents = eventosToInsert.length;
 
       // Inserção em lote de Histórico de Ratings
       log('Inserindo ${ratingsToInsert.length} registros no histórico de ratings...');
-      await _insertInBatches('historico_ratings', ratingsToInsert);
+      await _insertInBatches('rating_history', ratingsToInsert);
       totalRatings = ratingsToInsert.length;
 
       log('✅ Migração concluída com sucesso!');

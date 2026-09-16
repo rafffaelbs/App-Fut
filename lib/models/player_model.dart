@@ -65,6 +65,8 @@ class PlayerModel {
     final data = <String, dynamic>{
       'creator_id': creatorId,
       'name': name,
+      'icon': icon,
+      'badges': manualBadges.map((b) => b.toMap()).toList(),
     };
     if (includeId && id.isNotEmpty) {
       data['id'] = id;

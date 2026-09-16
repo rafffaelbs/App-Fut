@@ -46,8 +46,8 @@ class GroupsRepository {
     // 2. Groups where user is a member
     final membroResponse = await _client
         .from('group_members')
-        .select('groups(*), players!inner(user_id)')
-        .eq('players.user_id', currentUserId);
+        .select('groups(*), players!inner(creator_id)')
+        .eq('players.creator_id', currentUserId);
 
     for (final item in (membroResponse as List)) {
       if (item is Map && item['groups'] is Map) {
@@ -85,7 +85,7 @@ class GroupsRepository {
       final jogadorExistente = await _client
           .from('players')
           .select()
-          .eq('user_id', currentUserId)
+          .eq('creator_id', currentUserId)
           .maybeSingle();
 
       String adminJogadorId;
@@ -95,7 +95,7 @@ class GroupsRepository {
         final novoJogadorResp = await _client
             .from('players')
             .insert({
-              'user_id': currentUserId,
+              'creator_id': currentUserId,
               'name': adminPlayerName?.trim().isNotEmpty == true
                   ? adminPlayerName!.trim()
                   : 'Administrador',

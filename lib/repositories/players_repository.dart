@@ -2,39 +2,64 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/player_model.dart';
 import '../models/player_badge_model.dart';
+import '../services/cache_store.dart';
 
 /// Repositório de Jogadores integrado ao Supabase PostgreSQL.
 class PlayersRepository {
   final SupabaseClient _client;
+  final CacheStore _cache;
 
-  PlayersRepository({SupabaseClient? client})
-      : _client = client ?? supabase;
+  PlayersRepository({SupabaseClient? client, CacheStore? cache})
+      : _client = client ?? supabase,
+        _cache = cache ?? CacheStore();
 
   /// Retorna todos os jogadores vinculados a um determinado grupo.
+  ///
+  /// Supabase é sempre a fonte de verdade. O cache local só entra em jogo
+  /// se a chamada de rede falhar (ex: sem conexão) — nesse caso devolvemos
+  /// o último resultado bom conhecido em vez de uma lista vazia.
   Future<List<PlayerModel>> getJogadoresDoGrupo(String groupId) async {
+    final cacheKey = 'players:group:$groupId';
+
     try {
       final response = await _client
           .from('group_members')
           .select('players(*)')
           .eq('group_id', groupId);
 
-      final List<PlayerModel> list = [];
+      final List<Map<String, dynamic>> rawPlayers = [];
       for (final item in (response as List)) {
         if (item is Map && item['players'] is Map) {
-          list.add(PlayerModel.fromMap(Map<String, dynamic>.from(item['players'])));
+          rawPlayers.add(Map<String, dynamic>.from(item['players']));
         }
       }
-      if (list.isNotEmpty) return list;
-    } catch (_) {}
 
-    // Fallback: Busca todos os jogadores da tabela `players` se group_members estiver vazio ou falhar
+      if (rawPlayers.isNotEmpty) {
+        await _cache.write(cacheKey, rawPlayers);
+        return rawPlayers.map((m) => PlayerModel.fromMap(m)).toList();
+      }
+    } catch (_) {
+      // Falha de rede/consulta: cai para o cache abaixo em vez de propagar.
+      final cached = await _cache.read(cacheKey);
+      if (cached != null) {
+        return cached.asMapList().map((m) => PlayerModel.fromMap(m)).toList();
+      }
+    }
+
+    // Fallback: Busca todos os jogadores da tabela `players` se group_members estiver vazio
     try {
       final response = await _client.from('players').select();
-      return (response as List)
+      final rawPlayers = (response as List)
           .whereType<Map>()
-          .map((item) => PlayerModel.fromMap(Map<String, dynamic>.from(item)))
+          .map((item) => Map<String, dynamic>.from(item))
           .toList();
+      await _cache.write(cacheKey, rawPlayers);
+      return rawPlayers.map((m) => PlayerModel.fromMap(m)).toList();
     } catch (_) {
+      final cached = await _cache.read(cacheKey);
+      if (cached != null) {
+        return cached.asMapList().map((m) => PlayerModel.fromMap(m)).toList();
+      }
       return [];
     }
   }
@@ -78,7 +103,7 @@ class PlayersRepository {
     required String nome,
     String? avatarUrl,
     List<PlayerBadgeModel> badges = const [],
-    String papel = 'member',
+    String papel = 'membro',
   }) async {
     final insertPayload = <String, dynamic>{
       'creator_id': userId,
@@ -106,6 +131,8 @@ class PlayersRepository {
   Future<PlayerModel> atualizarJogador(PlayerModel jogador) async {
     final updatePayload = <String, dynamic>{
       'name': jogador.name.trim(),
+      'icon': jogador.icon,
+      'badges': jogador.manualBadges.map((b) => b.toMap()).toList(),
     };
 
     final response = await _client

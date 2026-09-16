@@ -5,7 +5,6 @@ import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/supabase_service.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -25,6 +24,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> history = [];
   bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -93,66 +93,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
     try {
       if (widget.groupId.isNotEmpty) {
-        try {
-          final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
-          for (final p in groupPlayers) {
-            _idToName[p.id] = p.displayName;
-          }
-        } catch (_) {}
+        final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        for (final p in groupPlayers) {
+          _idToName[p.id] = p.displayName;
+        }
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      final String historyKey = 'match_history_${widget.tournamentId}';
-      List<dynamic> localHistory = [];
-      if (prefs.containsKey(historyKey)) {
-        try {
-          final localData = jsonDecode(prefs.getString(historyKey)!);
-          if (localData is List) localHistory = localData;
-        } catch (_) {}
-      }
-
+      // Duração padrão: vem da própria sessão (duration_minutes), não mais
+      // de uma chave solta em SharedPreferences.
       String defaultDuration = '08:00';
-      final sessionsData = prefs.getString('sessions_${widget.groupId}');
-      if (sessionsData != null) {
-        try {
-          final List<dynamic> allSessions = jsonDecode(sessionsData);
-          final currentSession = allSessions.firstWhere(
-            (s) => s['id'] == widget.tournamentId,
-            orElse: () => null,
-          );
-          if (currentSession != null && currentSession['duration'] != null) {
-            defaultDuration = '${currentSession['duration'].toString().padLeft(2, '0')}:00';
-          }
-        } catch (_) {}
+      final session = await SupabaseService.instance.sessoes.getSessaoPorId(widget.tournamentId);
+      if (session?.durationMinutes != null) {
+        defaultDuration = '${session!.durationMinutes.toString().padLeft(2, '0')}:00';
       }
 
       final partidas = await SupabaseService.instance.partidas
           .getPartidasPorSessao(widget.tournamentId);
 
-      List<dynamic> mapped = partidas.map(_toLegacyMatch).toList();
-      
-      // Fallback local caso o Supabase ainda não tenha partidas sincronizadas
-      if (mapped.isEmpty) {
-        mapped = localHistory;
-      } else {
-        // Enriquece partidas do Supabase com a duração real salva localmente
-        for (int i = 0; i < mapped.length; i++) {
-          if (mapped[i]['match_duration'] == '—' || mapped[i]['match_duration'] == null) {
-            final matchingLocal = localHistory.firstWhere(
-              (loc) => loc['id'] == mapped[i]['id'] || (loc['scoreRed'] == mapped[i]['scoreRed'] && loc['scoreWhite'] == mapped[i]['scoreWhite']),
-              orElse: () => null,
-            );
-            if (matchingLocal != null && matchingLocal['match_duration'] != null) {
-              mapped[i]['match_duration'] = matchingLocal['match_duration'];
-            } else if (i < localHistory.length && localHistory[i]['match_duration'] != null) {
-              mapped[i]['match_duration'] = localHistory[i]['match_duration'];
-            } else {
-              mapped[i]['match_duration'] = defaultDuration;
-            }
-          }
+      final List<dynamic> mapped = partidas.map(_toLegacyMatch).toList();
+
+      for (final match in mapped) {
+        if (match['match_duration'] == '—' || match['match_duration'] == null) {
+          match['match_duration'] = defaultDuration;
         }
       }
 
@@ -165,16 +133,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       setState(() => history = mapped);
     } catch (e) {
       debugPrint('Error loading history: $e');
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final String historyKey = 'match_history_${widget.tournamentId}';
-        if (prefs.containsKey(historyKey)) {
-          final localData = jsonDecode(prefs.getString(historyKey)!);
-          if (localData is List) {
-            setState(() => history = localData);
-          }
-        }
-      } catch (_) {}
+      setState(() {
+        errorMessage = 'Não foi possível carregar o histórico. Verifique sua conexão.';
+      });
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -315,7 +276,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
-      body: history.isEmpty
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
+          : errorMessage != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off, color: Colors.white38, size: 40),
+                    const SizedBox(height: 12),
+                    Text(errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white38)),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _loadHistory,
+                      child: const Text("Tentar novamente", style: TextStyle(color: AppColors.accentBlue)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : history.isEmpty
           ? const Center(child: Text("Sem partidas.", style: TextStyle(color: Colors.white38)))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
