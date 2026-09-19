@@ -5,13 +5,16 @@ import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
 import '../models/match_event_model.dart';
 import '../models/rating_history_model.dart';
+import '../services/cache_store.dart';
 
 class MatchesRepository {
   final SupabaseClient _client;
+  final CacheStore _cache;
   static const _uuid = Uuid();
 
-  MatchesRepository({SupabaseClient? client})
-      : _client = client ?? supabase;
+  MatchesRepository({SupabaseClient? client, CacheStore? cache})
+      : _client = client ?? supabase,
+        _cache = cache ?? CacheStore();
 
   /// Fetches all matches for a session with lineups (including players) and events
   Future<List<MatchModel>> getMatchesBySession(String sessionId) async {
@@ -62,18 +65,40 @@ class MatchesRepository {
 
   /// Fetches all matches belonging to a group. `matches` already carries its
   /// own group_id column, so there's no need to go through sessions/seasons.
+  /// Returns every match for a group, with lineups and events.
+  ///
+  /// Two performance notes vs. a naive `select('*, match_lineups(*, players(*)), match_events(*)')`:
+  /// - We don't join `players(*)` inside `match_lineups` here. The only
+  ///   caller (SeasonStatsScreen) already loads the full player list
+  ///   separately and falls back to it by `player_id`, so joining the full
+  ///   player row into *every lineup row of every match* was pure duplicated
+  ///   payload -- for a group with hundreds of matches this was the single
+  ///   biggest contributor to how long the Estatísticas screen took to load.
+  /// - Results are cached locally so a slow/flaky connection doesn't mean a
+  ///   blank screen -- same pattern as PlayersRepository.getPlayersByGroup.
   Future<List<MatchModel>> getMatchesByGroup(String groupId) async {
+    final cacheKey = 'matches:group:$groupId';
     try {
       final matchesResp = await _client
           .from("matches")
-          .select("*, match_lineups(*, players(*)), match_events(*)")
+          .select("*, match_lineups(*), match_events(*)")
           .eq("group_id", groupId)
           .order("played_at", ascending: false);
 
-      return (matchesResp as List)
-          .map((m) => MatchModel.fromMap(Map<String, dynamic>.from(m as Map)))
+      final rawMatches = (matchesResp as List)
+          .map((m) => Map<String, dynamic>.from(m as Map))
           .toList();
+      await _cache.write(cacheKey, rawMatches);
+      return rawMatches.map((m) => MatchModel.fromMap(m)).toList();
     } catch (e) {
+      // Antes isso falhava em silêncio (por isso o elenco aparecia todo
+      // zerado sem nenhuma pista do motivo). Logamos o erro real agora.
+      // ignore: avoid_print
+      print('getMatchesByGroup($groupId) failed: $e');
+      final cached = await _cache.read(cacheKey);
+      if (cached != null) {
+        return cached.asMapList().map((m) => MatchModel.fromMap(m)).toList();
+      }
       return [];
     }
   }

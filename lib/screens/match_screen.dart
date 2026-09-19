@@ -335,6 +335,7 @@ class _MatchScreenState extends State<MatchScreen>
       }
     }
 
+    if (!mounted) return; // usuário já saiu da tela enquanto isso carregava
     setState(() {
       if (prefs.containsKey('present_players_$id'))
         presentPlayers = ensurePlayerIds(

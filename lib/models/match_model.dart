@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'match_lineup_model.dart';
 import 'match_event_model.dart';
 import 'player_model.dart';

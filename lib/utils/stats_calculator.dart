@@ -1,19 +1,38 @@
+import 'package:collection/collection.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'player_identity.dart';
 import 'rating_calculator.dart';
 
+import '../models/match_model.dart';
+import '../models/match_lineup_model.dart';
 import '../repositories/matches_repository.dart';
+import '../repositories/players_repository.dart';
 
 /// Utility to aggregate a group's entire match history.
 Future<List<dynamic>> getAllGroupMatches(String groupId) async {
   try {
     final matchesRepo = MatchesRepository();
-    final matches = await matchesRepo.getMatchesByGroup(groupId);
+    // getMatchesByGroup não traz mais o objeto completo do jogador dentro de
+    // cada escalação (isso duplicava um payload enorme). Por isso buscamos
+    // os nomes aqui, à parte -- é uma consulta leve (1 linha por jogador do
+    // grupo) e já é cacheada pelo PlayersRepository.
+    final results = await Future.wait([
+      matchesRepo.getMatchesByGroup(groupId),
+      PlayersRepository().getPlayersByGroup(groupId),
+    ]);
+    final matches = results[0] as List<MatchModel>;
+    final players = results[1] as List<dynamic>;
+    final Map<String, String> namesById = {
+      for (final p in players) p.id.toString(): p.name.toString(),
+    };
+
     if (matches.isNotEmpty) {
-      final List<dynamic> allHistory = matches.map((m) {
-        final lineups = m.lineups;
+      final List<dynamic> allHistory = matches.map((MatchModel m) {
+        final List<MatchLineupModel> lineups = m.lineups;
         final events = m.events;
+        String nameFor(String playerId, dynamic player) =>
+            player?.name ?? namesById[playerId] ?? playerId;
         return {
           'id': m.id,
           'sessionId': m.sessionId,
@@ -33,22 +52,22 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
           'players': {
             'red': lineups.where((l) => l.isTeamA && !l.isGoalkeeper).map((l) => {
               'id': l.playerId,
-              'name': l.player?.name ?? l.playerId,
+              'name': nameFor(l.playerId, l.player),
               'icon': l.player?.avatarUrl,
             }).toList(),
             'white': lineups.where((l) => l.isTeamB && !l.isGoalkeeper).map((l) => {
               'id': l.playerId,
-              'name': l.player?.name ?? l.playerId,
+              'name': nameFor(l.playerId, l.player),
               'icon': l.player?.avatarUrl,
             }).toList(),
             'gk_red': lineups.where((l) => l.isTeamA && l.isGoalkeeper).map((l) => {
               'id': l.playerId,
-              'name': l.player?.name ?? l.playerId,
+              'name': nameFor(l.playerId, l.player),
               'icon': l.player?.avatarUrl,
             }).firstOrNull,
             'gk_white': lineups.where((l) => l.isTeamB && l.isGoalkeeper).map((l) => {
               'id': l.playerId,
-              'name': l.player?.name ?? l.playerId,
+              'name': nameFor(l.playerId, l.player),
               'icon': l.player?.avatarUrl,
             }).firstOrNull,
           },
@@ -63,7 +82,14 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
       });
       return allHistory;
     }
-  } catch (_) {}
+    // ignore: avoid_print
+    print('getAllGroupMatches($groupId): getMatchesByGroup returned 0 matches (no error thrown).');
+  } catch (e) {
+    // Antes isso caía em silêncio pro fallback local (tela toda zerada,
+    // "Estreante" pra todo mundo) sem nenhuma pista do motivo real.
+    // ignore: avoid_print
+    print('getAllGroupMatches($groupId) failed, falling back to local cache: $e');
+  }
 
   // Fallback para SharedPreferences caso esteja offline ou local
   final prefs = await SharedPreferences.getInstance();

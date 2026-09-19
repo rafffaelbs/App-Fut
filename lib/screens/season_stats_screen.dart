@@ -210,12 +210,18 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   Future<void> _loadData() async {
     setState(() => isLoading = true);
     try {
-      final matchesList =
-          await SupabaseService.instance.matches.getMatchesByGroup(widget.groupId);
-      final playersList =
-          await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
-      final seasonsList =
-          await SupabaseService.instance.seasons.getSeasons(widget.groupId);
+      // As 3 buscas são independentes entre si -- rodar em paralelo em vez
+      // de sequencialmente (await, await, await) corta a espera de
+      // "soma dos 3 tempos" pra "o tempo do mais lento dos 3".
+      final results = await Future.wait([
+        SupabaseService.instance.matches.getMatchesByGroup(widget.groupId),
+        SupabaseService.instance.players.getPlayersByGroup(widget.groupId),
+        SupabaseService.instance.seasons.getSeasons(widget.groupId),
+      ]);
+
+      final matchesList = results[0] as List<MatchModel>;
+      final playersList = results[1] as List<PlayerModel>;
+      final seasonsList = results[2] as List<SeasonModel>;
 
       matchesList.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
@@ -438,6 +444,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     }).toList()
       ..sort((a, b) => b.count.compareTo(a.count));
 
+    if (!mounted) return; // usuário já saiu da tela enquanto calculava
     setState(() {
       stats = map.values.where((s) => s.matches > 0 || s.gkGames > 0).toList();
       dynamicDuos = parsedDuos.take(5).toList();
