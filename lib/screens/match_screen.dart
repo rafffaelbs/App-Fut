@@ -47,6 +47,10 @@ class _MatchScreenState extends State<MatchScreen>
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
 
+  // Guarda uma "chave" do último sorteio (times, sem levar a cor em conta)
+  // pra garantir que o próximo sorteio nunca saia idêntico a ele.
+  String? _lastDrawKey;
+
   Map<String, dynamic>? activeGkRed;
   Map<String, dynamic>? activeGkWhite;
   Map<String, dynamic>? firstGkRed;
@@ -912,58 +916,127 @@ class _MatchScreenState extends State<MatchScreen>
       int needed = widget.totalPlayers * 2;
       final random = Random();
 
-      List<Map<String, dynamic>> pool;
-
+      List<Map<String, dynamic>> basePool;
       if (useAllPlayers) {
-        // Shuffle all players randomly and select n players
         List<Map<String, dynamic>> shuffledPlayers =
             List<Map<String, dynamic>>.from(eligible);
         shuffledPlayers.shuffle(random);
-        pool = shuffledPlayers.take(needed).toList();
+        basePool = shuffledPlayers.take(needed).toList();
       } else {
         // Take the first n players in arrival order (no shuffling)
-        pool = eligible.take(needed).toList();
+        basePool = eligible.take(needed).toList();
       }
 
-      // Sort selected players by rating (highest first) for balanced distribution
-      pool.sort(
-        (a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo(
-          (a['rating'] ?? kRatingBase) as num,
-        ),
-      );
-
-      teamRed.clear();
-      teamWhite.clear();
-      double sumRed = 0;
-      double sumWhite = 0;
-
-      // Balance with some randomness: 70% chance to pick "correct" team, 30% random
-      for (var p in pool) {
-        if (teamRed.length < widget.totalPlayers &&
-            teamWhite.length < widget.totalPlayers) {
-          bool shouldPickRed = sumRed <= sumWhite;
-          // Add randomness: 30% chance to invert the decision
-          if (random.nextDouble() < 0.3) {
-            shouldPickRed = !shouldPickRed;
-          }
-          if (shouldPickRed) {
-            teamRed.add(p);
-            sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-          } else {
-            teamWhite.add(p);
-            sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
-          }
-        } else if (teamRed.length < widget.totalPlayers) {
-          teamRed.add(p);
-          sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-        } else if (teamWhite.length < widget.totalPlayers) {
-          teamWhite.add(p);
-          sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
+      // Sorteia até sair diferente do último sorteio (ignorando cor -- times
+      // trocados de lado contam como repetição). Tenta algumas vezes; se não
+      // conseguir (grupos muito pequenos), força uma troca de 1 jogador no
+      // fim pra garantir que nunca saia igual ao anterior.
+      List<Map<String, dynamic>> redResult = [];
+      List<Map<String, dynamic>> whiteResult = [];
+      const maxAttempts = 15;
+      for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        final split = _draftOneSplit(basePool, random);
+        redResult = split.$1;
+        whiteResult = split.$2;
+        if (_lastDrawKey == null || _splitKey(redResult, whiteResult) != _lastDrawKey) {
+          break;
         }
-        // If both teams are full, stop adding players
       }
+
+      // Garantia final: se mesmo assim saiu igual ao anterior, troca um par
+      // de jogadores de nota parecida entre os dois times pra forçar diferença.
+      if (_lastDrawKey != null &&
+          _splitKey(redResult, whiteResult) == _lastDrawKey &&
+          redResult.isNotEmpty &&
+          whiteResult.isNotEmpty) {
+        final tmp = redResult[0];
+        redResult[0] = whiteResult[0];
+        whiteResult[0] = tmp;
+      }
+
+      teamRed
+        ..clear()
+        ..addAll(redResult);
+      teamWhite
+        ..clear()
+        ..addAll(whiteResult);
+
+      _lastDrawKey = _splitKey(teamRed, teamWhite);
     });
     _saveMatchState();
+  }
+
+  /// Sorteia uma divisão dos jogadores em dois times, com aleatoriedade real:
+  /// jogadores são agrupados em faixas próximas de nota (não em ranking
+  /// estritamente ordenado) e embaralhados dentro de cada faixa antes de
+  /// serem distribuídos, ao invés de reordenados por nota (o que antes
+  /// anulava qualquer shuffle anterior).
+  (List<Map<String, dynamic>>, List<Map<String, dynamic>>) _draftOneSplit(
+    List<Map<String, dynamic>> basePool,
+    Random random,
+  ) {
+    final pool = List<Map<String, dynamic>>.from(basePool);
+
+    // Agrupa em faixas de ~0.5 pontos de nota e embaralha dentro de cada
+    // faixa, mantendo as faixas em ordem decrescente (melhores primeiro).
+    const bandWidth = 0.5;
+    final byBand = <int, List<Map<String, dynamic>>>{};
+    for (final p in pool) {
+      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
+      final band = (rating / bandWidth).floor();
+      byBand.putIfAbsent(band, () => []).add(p);
+    }
+    final bands = byBand.keys.toList()..sort((a, b) => b.compareTo(a));
+    final shuffledPool = <Map<String, dynamic>>[];
+    for (final band in bands) {
+      final group = byBand[band]!;
+      group.shuffle(random);
+      shuffledPool.addAll(group);
+    }
+
+    final teamRedDraft = <Map<String, dynamic>>[];
+    final teamWhiteDraft = <Map<String, dynamic>>[];
+    double sumRed = 0;
+    double sumWhite = 0;
+
+    for (var p in shuffledPool) {
+      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
+      if (teamRedDraft.length < widget.totalPlayers &&
+          teamWhiteDraft.length < widget.totalPlayers) {
+        bool shouldPickRed = sumRed <= sumWhite;
+        // 40% de chance de inverter a escolha "ideal" -- suficiente pra dar
+        // variedade real, já que agora a ordem de entrada dos jogadores de
+        // nota parecida também é aleatória (antes só isso já não bastava
+        // porque o pool inteiro era reordenado por nota logo depois).
+        if (random.nextDouble() < 0.4) {
+          shouldPickRed = !shouldPickRed;
+        }
+        if (shouldPickRed) {
+          teamRedDraft.add(p);
+          sumRed += rating;
+        } else {
+          teamWhiteDraft.add(p);
+          sumWhite += rating;
+        }
+      } else if (teamRedDraft.length < widget.totalPlayers) {
+        teamRedDraft.add(p);
+        sumRed += rating;
+      } else if (teamWhiteDraft.length < widget.totalPlayers) {
+        teamWhiteDraft.add(p);
+        sumWhite += rating;
+      }
+    }
+
+    return (teamRedDraft, teamWhiteDraft);
+  }
+
+  /// Chave única de uma divisão de times, ignorando qual lado é vermelho ou
+  /// branco -- duas divisões com os mesmos jogadores só de lado trocado
+  /// geram a mesma chave (contam como repetição).
+  String _splitKey(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    final keyA = (a.map(_pid).toList()..sort()).join(',');
+    final keyB = (b.map(_pid).toList()..sort()).join(',');
+    return keyA.compareTo(keyB) <= 0 ? '$keyA|$keyB' : '$keyB|$keyA';
   }
 
   void _iniciarTimesDraft() async {
@@ -1142,6 +1215,14 @@ class _MatchScreenState extends State<MatchScreen>
     int status = myScore > oppScore ? 1 : (myScore < oppScore ? -1 : 0);
     int streak = isRedTeam ? redWinStreak : whiteWinStreak;
 
+    // Gol da virada / gol decisivo do fim de jogo -- derivados dos
+    // próprios eventos da partida (minuto + placar), sem pedir nada novo.
+    final specialGoals = findSpecialGoals(matchEvents);
+    final bool scoredComeback = specialGoals.comebackGoalIndex != -1 &&
+        matchEvents[specialGoals.comebackGoalIndex]['playerId'] == _pid(player);
+    final bool scoredClutch = specialGoals.clutchGoalIndex != -1 &&
+        matchEvents[specialGoals.clutchGoalIndex]['playerId'] == _pid(player);
+
     // USANDO O RATING CALCULATOR AQUI!
     double matchRating = calculateMatchRating(
       status: status,
@@ -1153,6 +1234,8 @@ class _MatchScreenState extends State<MatchScreen>
       yellow: yellow,
       red: red,
       teamWinStreak: streak,
+      scoredComebackGoal: scoredComeback,
+      scoredClutchGoal: scoredClutch,
     );
 
     return {

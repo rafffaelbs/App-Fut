@@ -39,8 +39,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   // ── Gráfico ──────────────────────────────────────────────────
   List<dynamic> _allHistory = [];
-  String _chartMetric = 'Nota';
+  String _chartMetric = 'Nota'; // 'Nota' ou 'G+A' (Gols/Assistências)
   String _chartPeriod = 'Sessão';
+  bool _chartAccumulated = false; // dia a dia (false) ou acumulado (true)
   List<Map<String, dynamic>> _chartData = [];
 
   Map<String, dynamic> playerStats = {
@@ -288,6 +289,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       chartList.add({
         'label': key,
         'date': data['date'],
+        'games': games,
         'Nota': avgNota,
         'Gols': data['goals'],
         'Assistências': data['assists'],
@@ -1131,6 +1133,38 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // WIDGETS DE CONTEÚDO
   // ─────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────
+  // Transforma _chartData em série "dia a dia" ou "acumulada"
+  // ─────────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _seriesFor(List<String> keys) {
+    if (!_chartAccumulated) return _chartData;
+
+    final List<Map<String, dynamic>> result = [];
+    final Map<String, num> running = {for (final k in keys) k: 0};
+    int runningGames = 0;
+    double runningRatingSum = 0; // soma ponderada por jogos (para Nota)
+
+    for (final item in _chartData) {
+      final Map<String, dynamic> acc = Map<String, dynamic>.from(item);
+      for (final k in keys) {
+        if (k == 'Nota') continue; // tratado à parte abaixo
+        running[k] = (running[k] ?? 0) + (item[k] as num);
+        acc[k] = running[k];
+      }
+      if (keys.contains('Nota')) {
+        final int games = (item['games'] as int?) ?? 1;
+        final double nota = (item['Nota'] as num).toDouble();
+        runningRatingSum += nota * games;
+        runningGames += games;
+        acc['Nota'] = runningGames == 0
+            ? nota
+            : (runningRatingSum / runningGames);
+      }
+      result.add(acc);
+    }
+    return result;
+  }
+
   Widget _buildEvolutionChart() {
     if (_chartData.isEmpty) {
       return const Padding(
@@ -1144,32 +1178,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       );
     }
 
-    final List<FlSpot> spots = [];
-    double maxY = 0;
-    double minY = _chartMetric == 'Nota' ? kMaxRating : 0;
-
-    for (int i = 0; i < _chartData.length; i++) {
-      final double value = (_chartData[i][_chartMetric] as num).toDouble();
-      spots.add(FlSpot(i.toDouble(), value));
-      if (value > maxY) maxY = value;
-      if (value < minY) minY = value;
-    }
-
-    if (_chartMetric == 'Nota') {
-      maxY = kMaxRating;
-      minY = minY < kMinRating ? minY : kMinRating;
-    } else {
-      maxY = (maxY + 2).ceilToDouble();
-      minY = 0;
-    }
-
-    final Color lineColor = _chartMetric == 'Nota'
-        ? Colors.amber
-        : _chartMetric == 'Gols'
-        ? AppColors.textWhite
-        : _chartMetric == 'G+A'
-        ? AppColors.highlightGreen
-        : AppColors.accentBlue;
+    final bool isNota = _chartMetric == 'Nota';
+    final List<String> keys = isNota
+        ? ['Nota']
+        : ['G+A', 'Gols', 'Assistências'];
+    final List<Map<String, dynamic>> series = _seriesFor(keys);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1231,165 +1244,388 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Seletor de métrica
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['Nota', 'G+A', 'Gols', 'Assistências'].map((metric) {
-                final bool isSelected = _chartMetric == metric;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() => _chartMetric = metric);
-                      _calculateChartData();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.accentBlue.withOpacity(0.2)
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.accentBlue
-                              : Colors.white24,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        metric,
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.accentBlue
-                              : Colors.white54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Linha do gráfico
-          SizedBox(
-            height: 200,
-            child: LineChart(
-              LineChartData(
-                minY: minY,
-                maxY: maxY,
-                minX: 0,
-                maxX: (spots.length - 1).toDouble(),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: _chartMetric == 'Nota' ? 2.0 : 1.0,
-                  getDrawingHorizontalLine: (_) =>
-                      const FlLine(color: Colors.white10, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      getTitlesWidget: (value, _) => Text(
-                        _chartMetric == 'Nota'
-                            ? value.toStringAsFixed(1)
-                            : value.toInt().toString(),
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      interval: 1,
-                      getTitlesWidget: (value, _) {
-                        final int i = value.toInt();
-                        if (i < 0 || i >= _chartData.length)
-                          return const SizedBox();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            _chartData[i]['label'],
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 9,
+          // Seletor de métrica + toggle acumulado
+          Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['Nota', 'G+A'].map((metric) {
+                      final bool isSelected = _chartMetric == metric;
+                      final String label = metric == 'G+A'
+                          ? 'Gols e Assistências'
+                          : metric;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _chartMetric = metric);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.accentBlue.withOpacity(0.2)
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.accentBlue
+                                    : Colors.white24,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? AppColors.accentBlue
+                                    : Colors.white54,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: lineColor,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                        radius: 4,
-                        color: lineColor,
-                        strokeWidth: 1.5,
-                        strokeColor: AppColors.headerBlue,
-                      ),
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: lineColor.withOpacity(0.15),
-                    ),
-                  ),
-                ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
-                      return LineTooltipItem(
-                        '${_chartData[spot.x.toInt()]['label']}\n',
-                        const TextStyle(color: Colors.white70, fontSize: 10),
-                        children: [
-                          TextSpan(
-                            text: _chartMetric == 'Nota'
-                                ? spot.y.toStringAsFixed(1)
-                                : spot.y.toInt().toString(),
-                            style: TextStyle(
-                              color: lineColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                        ),
                       );
                     }).toList(),
                   ),
                 ),
               ),
+              GestureDetector(
+                onTap: () =>
+                    setState(() => _chartAccumulated = !_chartAccumulated),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: Checkbox(
+                        value: _chartAccumulated,
+                        activeColor: AppColors.accentBlue,
+                        checkColor: Colors.white,
+                        side: const BorderSide(color: Colors.white38),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) =>
+                            setState(() => _chartAccumulated = v ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Acumulado',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Gráfico
+          SizedBox(
+            height: 220,
+            child: isNota
+                ? _buildSingleLineChart(series)
+                : _buildGoalsAssistsChart(series),
+          ),
+
+          if (!isNota) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLegendDot('G+A', AppColors.highlightBlue),
+                const SizedBox(width: 16),
+                _buildLegendDot('Gols', AppColors.highlightGreen),
+                const SizedBox(width: 16),
+                _buildLegendDot('Assistências', Colors.amberAccent),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSingleLineChart(List<Map<String, dynamic>> series) {
+    final List<FlSpot> spots = [];
+    double maxY = kMaxRating;
+    double minY = kMinRating;
+
+    for (int i = 0; i < series.length; i++) {
+      final double value = (series[i]['Nota'] as num).toDouble();
+      spots.add(FlSpot(i.toDouble(), value));
+    }
+
+    const Color lineColor = Colors.amber;
+
+    return LineChart(
+      LineChartData(
+        minY: minY,
+        maxY: maxY,
+        minX: 0,
+        maxX: (spots.length - 1).toDouble(),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 2.0,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: Colors.white10, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 32,
+              getTitlesWidget: (value, _) => Text(
+                value.toStringAsFixed(1),
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: 1,
+              getTitlesWidget: (value, _) {
+                final int i = value.toInt();
+                if (i < 0 || i >= series.length) return const SizedBox();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    series[i]['label'],
+                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: lineColor,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 4,
+                color: lineColor,
+                strokeWidth: 1.5,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: lineColor.withOpacity(0.15),
             ),
           ),
         ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+              return LineTooltipItem(
+                '${series[spot.x.toInt()]['label']}\n',
+                const TextStyle(color: Colors.white70, fontSize: 10),
+                children: [
+                  TextSpan(
+                    text: spot.y.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: lineColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGoalsAssistsChart(List<Map<String, dynamic>> series) {
+    List<FlSpot> spotsFor(String key) => [
+      for (int i = 0; i < series.length; i++)
+        FlSpot(i.toDouble(), (series[i][key] as num).toDouble()),
+    ];
+
+    final List<FlSpot> gaSpots = spotsFor('G+A');
+    final List<FlSpot> golsSpots = spotsFor('Gols');
+    final List<FlSpot> assistSpots = spotsFor('Assistências');
+
+    double maxY = 0;
+    for (final s in [...gaSpots, ...golsSpots, ...assistSpots]) {
+      if (s.y > maxY) maxY = s.y;
+    }
+    maxY = (maxY + 2).ceilToDouble();
+
+    Widget label(double value) => Text(
+      value.toInt().toString(),
+      style: const TextStyle(color: Colors.white54, fontSize: 10),
+      textAlign: TextAlign.right,
+    );
+
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: maxY,
+        minX: 0,
+        maxX: (series.length - 1).toDouble(),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 1.0,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: Colors.white10, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, _) => label(value),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: 1,
+              getTitlesWidget: (value, _) {
+                final int i = value.toInt();
+                if (i < 0 || i >= series.length) return const SizedBox();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    series[i]['label'],
+                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: golsSpots,
+            isCurved: true,
+            color: AppColors.highlightGreen,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 3,
+                color: AppColors.highlightGreen,
+                strokeWidth: 1,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: assistSpots,
+            isCurved: true,
+            color: Colors.amberAccent,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 3,
+                color: Colors.amberAccent,
+                strokeWidth: 1,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: gaSpots,
+            isCurved: true,
+            color: AppColors.highlightBlue,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: AppColors.highlightBlue.withOpacity(0.10),
+            ),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+              final String key = spot.barIndex == 0
+                  ? 'Gols'
+                  : spot.barIndex == 1
+                  ? 'Assistências'
+                  : 'G+A';
+              final Color color = spot.barIndex == 0
+                  ? AppColors.highlightGreen
+                  : spot.barIndex == 1
+                  ? Colors.amberAccent
+                  : AppColors.highlightBlue;
+              return LineTooltipItem(
+                '${series[spot.x.toInt()]['label']}\n',
+                const TextStyle(color: Colors.white70, fontSize: 10),
+                children: [
+                  TextSpan(
+                    text: '$key: ${spot.y.toInt()}',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
