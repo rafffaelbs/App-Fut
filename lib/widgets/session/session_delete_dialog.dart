@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 
-/// Exibe o diálogo de confirmação de exclusão de uma pelada.
-/// Retorna `true` se o usuário confirmou a exclusão.
+/// Shows the confirmation dialog for deleting a session.
+/// Returns `true` if the user confirmed the deletion.
 Future<bool> showSessionDeleteDialog(BuildContext context) async {
   final bool? confirmed = await showDialog<bool>(
     context: context,

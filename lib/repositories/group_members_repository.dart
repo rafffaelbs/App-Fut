@@ -11,7 +11,7 @@ class GroupMembersRepository {
       : _client = client ?? supabase;
 
   /// Returns all members of a group, including their Player data.
-  Future<List<GroupMemberModel>> getMembros(String groupId) async {
+  Future<List<GroupMemberModel>> getMembers(String groupId) async {
     final response = await _client
         .from('group_members')
         .select('*, players(*)')
@@ -25,7 +25,7 @@ class GroupMembersRepository {
   }
 
   /// Returns the member record corresponding to the currently authenticated user in the group.
-  Future<GroupMemberModel?> getMeuMembro(String groupId) async {
+  Future<GroupMemberModel?> getMyMembership(String groupId) async {
     final currentUserId = SupabaseConfig.currentUserId;
     if (currentUserId == null) return null;
 
@@ -40,11 +40,11 @@ class GroupMembersRepository {
     return GroupMemberModel.fromMap(Map<String, dynamic>.from(response));
   }
 
-  static bool mockAdmin = true;
-
   /// Checks if the current authenticated user has an 'admin' role in the group.
+  /// This is used to decide what the UI shows -- the real enforcement lives
+  /// in the Supabase RLS policies (see 004_auth_and_permissions.sql), so
+  /// this can never be used to grant more access than the database allows.
   Future<bool> isCurrentUserAdmin(String groupId) async {
-    if (mockAdmin) return true;
     final currentUserId = SupabaseConfig.currentUserId;
     if (currentUserId == null) return false;
 
@@ -60,14 +60,14 @@ class GroupMembersRepository {
     }
 
     // 2. Verify the role column in group_members
-    final member = await getMeuMembro(groupId);
+    final member = await getMyMembership(groupId);
     return member != null && member.isAdmin;
   }
 
   /// Promotes a player to 'admin'.
-  Future<void> promoverParaAdmin({
+  Future<void> promoteToAdmin({
     required String groupId,
-    required String jogadorId,
+    required String playerId,
   }) async {
     final isAdmin = await isCurrentUserAdmin(groupId);
     if (!isAdmin) {
@@ -78,13 +78,13 @@ class GroupMembersRepository {
         .from('group_members')
         .update({'role': GroupMemberModel.roleAdmin})
         .eq('group_id', groupId)
-        .eq('player_id', jogadorId);
+        .eq('player_id', playerId);
   }
 
   /// Demotes a player to a common 'member'.
-  Future<void> rebaixarParaMembro({
+  Future<void> demoteToMember({
     required String groupId,
-    required String jogadorId,
+    required String playerId,
   }) async {
     final isAdmin = await isCurrentUserAdmin(groupId);
     if (!isAdmin) {
@@ -95,21 +95,21 @@ class GroupMembersRepository {
         .from('group_members')
         .update({'role': GroupMemberModel.roleMember})
         .eq('group_id', groupId)
-        .eq('player_id', jogadorId);
+        .eq('player_id', playerId);
   }
 
   /// Adds an existing player as a member of the group.
-  Future<GroupMemberModel> adicionarMembro({
+  Future<GroupMemberModel> addMember({
     required String groupId,
-    required String jogadorId,
-    String papel = GroupMemberModel.roleMember,
+    required String playerId,
+    String role = GroupMemberModel.roleMember,
   }) async {
     final response = await _client
         .from('group_members')
         .insert({
           'group_id': groupId,
-          'player_id': jogadorId,
-          'role': papel,
+          'player_id': playerId,
+          'role': role,
         })
         .select('*, players(*)')
         .single();
@@ -118,14 +118,78 @@ class GroupMembersRepository {
   }
 
   /// Removes a player from the group.
-  Future<void> removerMembro({
+  Future<void> removeMember({
     required String groupId,
-    required String jogadorId,
+    required String playerId,
   }) async {
     await _client
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
-        .eq('player_id', jogadorId);
+        .eq('player_id', playerId);
+  }
+
+  // ---------------------------------------------------------------
+  // Join-by-code flow (pending admin approval)
+  // ---------------------------------------------------------------
+
+  /// Looks up a group by its invite code (used before creating the request,
+  /// so the UI can show "Você está solicitando entrada em <name>").
+  /// Usa uma função RPC (SECURITY DEFINER) em vez de um `select` direto,
+  /// porque a RLS da tabela `groups` só libera leitura pra quem já é
+  /// membro -- e quem está entrando ainda não é.
+  Future<GroupModel?> findGroupByCode(String code) async {
+    final response = await _client
+        .rpc('find_group_by_invite_code', params: {'code': code.trim().toUpperCase()});
+
+    final list = (response as List?) ?? [];
+    if (list.isEmpty) return null;
+    return GroupModel.fromMap(Map<String, dynamic>.from(list.first as Map));
+  }
+
+  /// Sends a join request for the currently authenticated user.
+  Future<void> requestToJoin({
+    required String inviteCode,
+    required String desiredName,
+  }) async {
+    final currentUserId = SupabaseConfig.currentUserId;
+    if (currentUserId == null) {
+      throw Exception('Você precisa estar logado para solicitar entrada em um grupo.');
+    }
+
+    final group = await findGroupByCode(inviteCode);
+    if (group == null) {
+      throw Exception('Código de convite inválido.');
+    }
+
+    await _client.from('group_join_requests').insert({
+      'group_id': group.id,
+      'user_id': currentUserId,
+      'requested_name': desiredName.trim(),
+    });
+  }
+
+  /// Pending join requests for a group (admin-only view; enforced by RLS).
+  Future<List<Map<String, dynamic>>> listPendingRequests(String groupId) async {
+    final response = await _client
+        .from('group_join_requests')
+        .select()
+        .eq('group_id', groupId)
+        .eq('status', 'pending')
+        .order('created_at');
+    return (response as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Approves a request, optionally linking it to an existing "ghost" player
+  /// instead of creating a brand new one.
+  Future<void> approveRequest(String requestId, {String? existingPlayerId}) async {
+    await _client.rpc('approve_join_request', params: {
+      'request_id': requestId,
+      'existing_player_id': existingPlayerId,
+    });
+  }
+
+  Future<void> rejectRequest(String requestId) async {
+    await _client.rpc('reject_join_request', params: {'request_id': requestId});
   }
 }

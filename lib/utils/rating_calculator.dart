@@ -3,21 +3,21 @@ import 'package:flutter/material.dart';
 /// ============================================================
 /// rating_calculator.dart
 /// ============================================================
-/// Fonte única de verdade para o cálculo de notas do app.
+/// Single source of truth for the app's rating calculation.
 /// ============================================================
 
-// --------------- Constantes públicas -------------------------
+// --------------- Public constants -------------------------
 
-/// A nota de partida de alguém que não fez nada (nem ganhou nem perdeu).
-/// Abaixado para 6.0 para evitar a inflação de notas.
+/// The match rating for someone who did nothing (neither won nor lost).
+/// Lowered to 6.0 to avoid rating inflation.
 const double kRatingBase = 6.0;
 
 /// Impacto do Resultado
-/// Aumentado para 0.8 para valorizar a vitória e gerar mais notas altas (9 e 10).
+/// Raised to 0.8 to reward winning and produce more high ratings (9 and 10).
 const double kResultImpactWin  =  0.8;
 const double kResultImpactLoss = -0.5;
 
-/// Bônus de Sequência de Vitórias (Win Streak)
+/// Win Streak Bonus
 const double kStreakBonus2Wins     = 0.2;
 const double kStreakBonus3PlusWins = 0.4;
 
@@ -33,34 +33,34 @@ const double kWeightConceded   = -0.1;
 const double kWeightYellowCard = -0.5;
 const double kWeightRedCard    = -1.5;
 
-/// Bônus Dinâmicos
+/// Dynamic Bonuses
 const double kBonusHatTrick    = 0.75;  // 3 gols
 const double kBonusPlaymaker   = 0.85;  // 3 assistências
 const double kBonusTeamGoal    = 0.1;   // Removido para evitar inflação passiva
 const double kBonusCleanSheet  = 0.2;   // Bônus menor para clean sheet geral
 
-/// Impacto da diferença de gols (por gol de diferença)
+/// Impact of the goal difference (per goal of difference)
 const double kGoalDiffImpact   = 0.05;
 
 /// Limites do App
 const double kMinRating = 0.0;
 const double kMaxRating = 10.0;
 
-/// --- Lógica Histórica (Bayesiana) ---
+/// --- Historical (Bayesian) Logic ---
 const int    kBayesianPriorGames  = 2;
 const double kBayesianPriorRating = kRatingBase;
 
-/// Bônus de Constância: +0.15 a cada 5 partidas.
-/// Isso acelera os jogadores assíduos rumo à nota 9 e 10.
+/// Consistency Bonus: +0.15 every 5 matches.
+/// This speeds up regular players toward a 9 or 10 rating.
 const double kVolumeBonusPerN   = 0.15;
 const int    kVolumeBonusEveryN = 5;
 
-/// Mínimo para figurar no ranking Geral.
+/// Minimum to appear on the Overall ranking.
 const int kMinGamesForGlobalRanking = 5;
 
-// --------------- Funções matemáticas ----------------------------
+// --------------- Math functions ----------------------------
 
-/// Calcula a nota bruta de uma partida isolada, considerando a sequência de vitórias do time.
+/// Calculates the raw rating for a single match, factoring in the team's win streak.
 double calculateMatchRating({
   required int status,
   required int goals,
@@ -99,14 +99,14 @@ double calculateMatchRating({
   if (resultImpact > 0) resultImpact *= positiveMultiplier;
   else if (resultImpact < 0) resultImpact *= negativeMultiplier;
 
-  // Bônus de sequência (só aplica se ganhou a partida atual)
+  // Streak bonus (only applies if the current match was won)
   double streakBonus = 0.0;
   if (status == 1) {
     if (teamWinStreak == 2)      streakBonus = kStreakBonus2Wins * positiveMultiplier;
     else if (teamWinStreak >= 3) streakBonus = kStreakBonus3PlusWins * positiveMultiplier;
   }
 
-  // Bônus Dinâmicos
+  // Dynamic Bonuses
   final double hatTrickBonus   = goals   >= 3 ? kBonusHatTrick   : 0.0;
   final double playmakerBonus  = assists >= 3 ? kBonusPlaymaker  : 0.0;
   final double teamGoalBonus   = teamGoals > 0 ? kBonusTeamGoal  : 0.0;
@@ -129,7 +129,7 @@ double calculateMatchRating({
   double disciplineImpact = (yellow * kWeightYellowCard) + (red * kWeightRedCard);
   disciplineImpact *= negativeMultiplier;
 
-  // Impacto da diferença de gols: bônus para quem ganhou, baque para quem perdeu
+  // Impact of the goal difference: bonus for the winner, hit for the loser
   final int goalDiff = (teamGoals - conceded).abs();
   double goalDiffImpact = 0.0;
   if (status == 1) {
@@ -146,7 +146,7 @@ double calculateMatchRating({
       disciplineImpact +
       goalDiffImpact;
 
-  // Clean sheet: apenas vitória ou empate (não punir quem perdeu mas não tomou gols)
+  // Clean sheet: only on a win or draw (don't punish a loss with no goals conceded)
   if (conceded == 0 && status >= 0) {
     raw += (kBonusCleanSheet * positiveMultiplier);
   }
@@ -154,7 +154,7 @@ double calculateMatchRating({
   return raw.clamp(kMinRating, kMaxRating);
 }
 
-/// Calcula a nota bruta de um Goleiro numa partida.
+/// Calculates the raw rating for a Goalkeeper in a match.
 double calculateGkMatchRating({
   required int status,
   required int goals,
@@ -166,7 +166,7 @@ double calculateGkMatchRating({
   double? teamAvgRating,
   double? opponentAvgRating,
 }) {
-  // O goleiro faz um favor indo no gol. Ele não é julgado por vitória ou derrota.
+  // The goalkeeper is doing everyone a favor by playing in goal. They aren't judged by win or loss.
   double resultImpact = 0.0;
 
   // Elo-Lite Asymmetric Pressure generalizada (mantida apenas para Gols/Assists do goleiro)
@@ -188,13 +188,13 @@ double calculateGkMatchRating({
     }
   }
 
-  // Sem bônus de sequência para goleiros (pois vitória não importa)
+  // No streak bonus for goalkeepers (since winning doesn't matter here)
   double streakBonus = 0.0;
 
   double attackImpact = (goals * kWeightGoal) + (assists * kWeightAssist);
   if (attackImpact > 0) attackImpact *= positiveMultiplier;
 
-  // Goleiros têm punição mínima por gols sofridos, pois dependem muito da zaga.
+  // Goalkeepers get a minimal penalty for goals conceded, since they depend a lot on the defense.
   const double gkWeightConceded = -0.1;
   double defenseImpact = conceded * gkWeightConceded;
   defenseImpact *= negativeMultiplier;
@@ -204,7 +204,7 @@ double calculateGkMatchRating({
 
   double raw = kRatingBase + resultImpact + streakBonus + attackImpact + defenseImpact + disciplineImpact;
 
-  // Clean sheet bônus reforçado para goleiros
+  // Reinforced clean sheet bonus for goalkeepers
   if (conceded == 0 && status >= 0) {
     raw += (0.8 * positiveMultiplier);
   }
@@ -212,9 +212,9 @@ double calculateGkMatchRating({
   return raw.clamp(kMinRating, kMaxRating);
 }
 
-/// Calcula a Média Final
-/// [useEMA] = false -> Ranking da Pelada (Dia): Média Aritmética Simples.
-/// [useEMA] = true  -> Ranking Global: Média Bayesiana para exigir volume de jogos.
+/// Calculates the Final Average
+/// [useEMA] = false -> Pickup Game Ranking (Day): Simple Arithmetic Average.
+/// [useEMA] = true  -> Global Ranking: Bayesian Average to require a volume of games.
 double calculateFinalRating({
   required List<double> ratings,
   bool useEMA = true, // Funciona como flag para o Ranking Global
@@ -225,23 +225,23 @@ double calculateFinalRating({
   final double sum = ratings.fold(0.0, (acc, r) => acc + r);
 
   if (!useEMA) {
-    // Ranking do dia (Média Simples)
+    // Day ranking (Simple Average)
     return (sum / games).clamp(kMinRating, kMaxRating);
   }
 
-  // Ranking Global (Média Bayesiana + Constância)
-  // Âncora inicial ultra leve. 
+  // Global Ranking (Bayesian Average + Consistency)
+  // Ultra-light initial anchor. 
   // Reduzido para apenas 3 jogos para liberar as notas altas (9 e 10) rapidamente para quem jogar muito bem.
   const int priorGames = 3; 
   final double bayesianAvg = (sum + (priorGames * kRatingBase)) / (games + priorGames);
 
-  // Pequeno bônus de constância (volume de jogo)
+  // Small consistency bonus (game volume)
   double finalRating = bayesianAvg + ((games ~/ kVolumeBonusEveryN) * kVolumeBonusPerN);
 
   return finalRating.clamp(kMinRating, kMaxRating);
 }
 
-// --------------- Funções Visuais (Cores e Labels) ----------------------------
+// --------------- Visual Functions (Colors and Labels) ----------------------------
 
 Color getRatingColor(double rating) {
   if (rating >= 9.0) return Colors.purpleAccent;    // Mitou

@@ -33,13 +33,13 @@ class CacheSyncManager {
 
   final SupabaseClient _supabase = SupabaseConfig.client;
 
-  /// Marca que há modificações locais pendentes de envio para o Supabase
+  /// Marks that there are local changes pending upload to Supabase
   Future<void> markDirty() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(keyHasPendingChanges, true);
   }
 
-  /// Registra que a sincronização para a nuvem foi realizada com sucesso
+  /// Records that the sync to the cloud completed successfully
   Future<void> recordCloudSyncSuccess() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(keyHasPendingChanges, false);
@@ -53,7 +53,7 @@ class CacheSyncManager {
     await prefs.setString(keyLastCloudFetchAt, DateTime.now().toIso8601String());
   }
 
-  /// Testa a conectividade com o Supabase e mede a latência
+  /// Tests connectivity with Supabase and measures latency
   Future<Map<String, dynamic>> testSupabaseConnection() async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -75,7 +75,7 @@ class CacheSyncManager {
     }
   }
 
-  /// Obtém o status completo de conexão e cache
+  /// Gets the full connection and cache status
   Future<CacheSyncStatus> getStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final connectionTest = await testSupabaseConnection();

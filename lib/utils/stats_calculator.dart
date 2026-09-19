@@ -5,11 +5,11 @@ import 'rating_calculator.dart';
 
 import '../repositories/matches_repository.dart';
 
-/// Utilitário para agregar todo o histórico de partidas de um grupo.
+/// Utility to aggregate a group's entire match history.
 Future<List<dynamic>> getAllGroupMatches(String groupId) async {
   try {
     final matchesRepo = MatchesRepository();
-    final matches = await matchesRepo.getPartidasPorGrupo(groupId);
+    final matches = await matchesRepo.getMatchesByGroup(groupId);
     if (matches.isNotEmpty) {
       final List<dynamic> allHistory = matches.map((m) {
         final lineups = m.lineups;
@@ -92,7 +92,7 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
     }
   }
 
-  // Lógica para filtrar APENAS a temporada atual
+  // Logic to filter ONLY the current season
   final String seasonsConfigKey = 'seasons_$groupId';
   if (prefs.containsKey(seasonsConfigKey)) {
     final List<dynamic> seasonsConfig = jsonDecode(prefs.getString(seasonsConfigKey)!);
@@ -177,8 +177,8 @@ Future<List<dynamic>> getAllGroupMatches(String groupId) async {
   return allHistory;
 }
 
-/// Processa todos os jogos e retorna um Map com as estatísticas globais de cada playerId
-/// Map<String, Map<String, dynamic>> onde a chave é o playerId.
+/// Processes every match and returns a Map with the global stats for each playerId
+/// Map<String, Map<String, dynamic>> where the key is the playerId.
 Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory) {
   final Map<String, Map<String, dynamic>> globalStats = {};
 
@@ -189,7 +189,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
     final int redStatus = scoreRed > scoreWhite ? 1 : (scoreRed == scoreWhite ? 0 : -1);
     final int whiteStatus = scoreWhite > scoreRed ? 1 : (scoreRed == scoreWhite ? 0 : -1);
 
-    // Coleta eventos por jogador nesta partida
+    // Collect events per player in this match
     final Map<String, Map<String, int>> matchPlayerEvents = {};
     if (match['events'] != null) {
       for (final ev in match['events']) {
@@ -214,7 +214,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
 
     final Set<String> processed = {};
     
-    // Calcula médias dos times baseadas nas notas até o momento
+    // Calculates team averages based on the ratings so far
     final List<dynamic> redField = List<dynamic>.from(match['players']?['red'] ?? []);
     final dynamic gkRed = match['players']?['gk_red'];
     final List<dynamic> redPlayers = [...redField, gkRed].where((p) => p != null).toList();
@@ -297,7 +297,7 @@ Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory)
     }
   }
 
-  // Precalcula a nota final (já usando as regras matemáticas definidas no rating_calculator)
+  // Precomputes the final rating (already using the math rules defined in rating_calculator)
   globalStats.forEach((id, data) {
     data['nota'] = calculateFinalRating(ratings: data['ratings'] as List<double>);
     data['ga'] = (data['goals'] as int) + (data['assists'] as int);

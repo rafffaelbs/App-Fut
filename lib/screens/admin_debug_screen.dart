@@ -48,85 +48,6 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
     }
   }
 
-  Future<void> _forceUpload() async {
-    setState(() => _isActionRunning = true);
-    try {
-      await _syncService.exportDataToSupabase(_syncCode);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cache local sincronizado com a nuvem (Supabase) com sucesso!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao enviar dados para a nuvem: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      await _loadData();
-      if (mounted) setState(() => _isActionRunning = false);
-    }
-  }
-
-  Future<void> _forceDownload() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.headerBlue,
-        title: const Text('Baixar dados da Nuvem', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Isso substituirá todos os dados do SharedPreferences local pelos dados salvos no Supabase. Deseja continuar?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.white60)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.highlightGreen),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Baixar e Substituir', style: TextStyle(color: AppColors.deepBlue)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    setState(() => _isActionRunning = true);
-    try {
-      await _syncService.importDataFromSupabase(_syncCode);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dados importados com sucesso da nuvem!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao baixar dados: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      await _loadData();
-      if (mounted) setState(() => _isActionRunning = false);
-    }
-  }
-
   String _formatDate(DateTime? dt) {
     if (dt == null) return 'Nunca sincronizado';
     final formatter = DateFormat('dd/MM/yyyy HH:mm:ss');
@@ -163,8 +84,6 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
                   _buildSupabaseConnectionCard(),
                   const SizedBox(height: 16),
                   _buildCacheStatusCard(),
-                  const SizedBox(height: 16),
-                  _buildSyncActionsCard(),
                   const SizedBox(height: 16),
                   _buildStorageInspectorCard(),
                 ],
@@ -318,63 +237,6 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
         Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
         Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
       ],
-    );
-  }
-
-  Widget _buildSyncActionsCard() {
-    return Card(
-      color: AppColors.headerBlue.withOpacity(0.5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Ações de Sincronização Manual',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.highlightGreen,
-                      foregroundColor: AppColors.deepBlue,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: _isActionRunning
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.deepBlue),
-                          )
-                        : const Icon(Icons.cloud_upload),
-                    label: const Text('Subir Cache', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: _isActionRunning ? null : _forceUpload,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white54),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.cloud_download),
-                    label: const Text('Baixar Nuvem'),
-                    onPressed: _isActionRunning ? null : _forceDownload,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 

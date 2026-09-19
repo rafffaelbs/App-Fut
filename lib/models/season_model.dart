@@ -17,11 +17,8 @@ class SeasonModel {
   });
 
   /// Getters for backward compatibility.
-  String get nome => name;
-  String get grupoId => groupId;
   DateTime? get dataInicio => startDate;
   DateTime? get dataFim => endDate;
-  bool get isAtual => isActive;
 
   factory SeasonModel.fromMap(Map<String, dynamic> map) {
     return SeasonModel(

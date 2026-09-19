@@ -19,11 +19,18 @@ class SessionsScreen extends StatefulWidget {
 class _SessionsScreenState extends State<SessionsScreen> {
   List<SessionModel> sessions = [];
   bool isLoading = true;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _loadSessions();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
   Future<void> _loadSessions() async {
@@ -47,20 +54,24 @@ class _SessionsScreenState extends State<SessionsScreen> {
       context,
       existing: existing,
       onSubmit: (SessionModel session) async {
-        // Obtém a temporada atual para vincular a sessão
+        // Gets the current season to link to the session
         final currentSeason = await SupabaseService.instance.seasons
             .getCurrentSeason(widget.groupId);
 
         final model = SessionModel(
-          id: existing?.id ?? '',
+          id: existing?.id ?? session.id,
+          groupId: widget.groupId,
           seasonId: currentSeason?.id,
           title: session.title,
-          timestamp: session.dateTime ?? DateTime.now(),
+          sessionDate: session.dateTime ?? DateTime.now(),
           status: session.isLive
-              ? SessionModel.statusEmAndamento
-              : SessionModel.statusFinalizada,
+              ? SessionModel.statusInProgress
+              : SessionModel.statusFinished,
           durationMinutes: session.durationMinutes,
           winLimit: (session.winLimit ?? 0) > 0 ? session.winLimit : null,
+          playerCount: session.playerCount,
+          streakAction: session.streakAction,
+          draftMode: session.draftMode,
         );
 
         try {
@@ -131,21 +142,33 @@ class _SessionsScreenState extends State<SessionsScreen> {
                               groupId: widget.groupId,
                               tournamentId: item.id,
                               tournamentName: item.title,
-                              totalPlayers: item.jogadores,
+                              totalPlayers: item.playerCount,
                             ),
                           ),
                         );
                       },
-                      onEdit: () => _openSessionForm(existing: item),
-                      onDelete: () => _confirmDeleteSession(item),
+                      onEdit: _isAdmin
+                          ? () => _openSessionForm(existing: item)
+                          : () => _denyPermission(),
+                      onDelete: _isAdmin
+                          ? () => _confirmDeleteSession(item)
+                          : () => _denyPermission(),
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accentBlue,
-        onPressed: () => _openSessionForm(),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              onPressed: () => _openSessionForm(),
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
+    );
+  }
+
+  void _denyPermission() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Apenas administradores podem alterar as peladas.')),
     );
   }
 }

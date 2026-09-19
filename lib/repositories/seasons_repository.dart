@@ -6,16 +6,16 @@ import 'group_members_repository.dart';
 /// Repository for Seasons integrated with Supabase PostgreSQL.
 class SeasonsRepository {
   final SupabaseClient _client;
-  final GroupMembersRepository _membrosRepo;
+  final GroupMembersRepository _membersRepo;
 
   SeasonsRepository({
     SupabaseClient? client,
-    GroupMembersRepository? membrosRepo,
+    GroupMembersRepository? membersRepo,
   })  : _client = client ?? supabase,
-        _membrosRepo = membrosRepo ?? GroupMembersRepository(client: client);
+        _membersRepo = membersRepo ?? GroupMembersRepository(client: client);
 
   /// Lists all seasons for a group.
-  Future<List<SeasonModel>> getTemporadas(String groupId) async {
+  Future<List<SeasonModel>> getSeasons(String groupId) async {
     final response = await _client
         .from('seasons')
         .select()
@@ -29,12 +29,8 @@ class SeasonsRepository {
         .toList();
   }
 
-  /// English alias for [getTemporadaAtual].
-  Future<SeasonModel?> getCurrentSeason(String groupId) =>
-      getTemporadaAtual(groupId);
-
   /// Returns the active/current season of a group.
-  Future<SeasonModel?> getTemporadaAtual(String groupId) async {
+  Future<SeasonModel?> getCurrentSeason(String groupId) async {
     final response = await _client
         .from('seasons')
         .select()
@@ -47,19 +43,19 @@ class SeasonsRepository {
   }
 
   /// Creates a new season.
-  Future<SeasonModel> criarTemporada({
+  Future<SeasonModel> createSeason({
     required String groupId,
-    required String nome,
-    DateTime? dataInicio,
-    DateTime? dataFim,
-    bool isAtual = true,
+    required String name,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool isActive = true,
   }) async {
-    final isAdmin = await _membrosRepo.isCurrentUserAdmin(groupId);
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
     if (!isAdmin) {
       throw Exception('Access denied: Only administrators can create seasons.');
     }
 
-    if (isAtual) {
+    if (isActive) {
       await _client
           .from('seasons')
           .update({'is_active': false})
@@ -68,14 +64,14 @@ class SeasonsRepository {
 
     final insertPayload = {
       'group_id': groupId,
-      'name': nome.trim(),
-      'start_date': dataInicio != null
-          ? "${dataInicio.year.toString().padLeft(4, '0')}-${dataInicio.month.toString().padLeft(2, '0')}-${dataInicio.day.toString().padLeft(2, '0')}"
+      'name': name.trim(),
+      'start_date': startDate != null
+          ? "${startDate.year.toString().padLeft(4, '0')}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}"
           : null,
-      'end_date': dataFim != null
-          ? "${dataFim.year.toString().padLeft(4, '0')}-${dataFim.month.toString().padLeft(2, '0')}-${dataFim.day.toString().padLeft(2, '0')}"
+      'end_date': endDate != null
+          ? "${endDate.year.toString().padLeft(4, '0')}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}"
           : null,
-      'is_active': isAtual,
+      'is_active': isActive,
     };
 
     final response = await _client
@@ -88,57 +84,39 @@ class SeasonsRepository {
   }
 
   /// Updates an existing season.
-  Future<SeasonModel> atualizarTemporada(SeasonModel temporada) async {
-    final isAdmin = await _membrosRepo.isCurrentUserAdmin(temporada.groupId);
+  Future<SeasonModel> updateSeason(SeasonModel season) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(season.groupId);
     if (!isAdmin) {
       throw Exception('Access denied: Only administrators can edit season configurations.');
     }
 
-    if (temporada.isActive) {
+    if (season.isActive) {
       await _client
           .from('seasons')
           .update({'is_active': false})
-          .eq('group_id', temporada.groupId);
+          .eq('group_id', season.groupId);
     }
 
     final response = await _client
         .from('seasons')
-        .update(temporada.toMap(includeId: false))
-        .eq('id', temporada.id)
+        .update(season.toMap(includeId: false))
+        .eq('id', season.id)
         .select()
         .single();
 
     return SeasonModel.fromMap(Map<String, dynamic>.from(response));
   }
 
-  Future<SeasonModel> createSeason({
-    required String groupId,
-    required String name,
-    DateTime? startDate,
-    DateTime? endDate,
-    bool isActive = true,
-  }) => criarTemporada(
-    groupId: groupId,
-    nome: name,
-    dataInicio: startDate,
-    dataFim: endDate,
-    isAtual: isActive,
-  );
-
-  Future<SeasonModel> updateSeason(SeasonModel season) => atualizarTemporada(season);
-
-  Future<List<SeasonModel>> getSeasons(String groupId) => getTemporadas(groupId);
-
   /// Deletes a season.
-  Future<void> deletarTemporada({
+  Future<void> deleteSeason({
     required String groupId,
-    required String temporadaId,
+    required String seasonId,
   }) async {
-    final isAdmin = await _membrosRepo.isCurrentUserAdmin(groupId);
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
     if (!isAdmin) {
       throw Exception('Access denied: Only administrators can delete seasons.');
     }
 
-    await _client.from('seasons').delete().eq('id', temporadaId);
+    await _client.from('seasons').delete().eq('id', seasonId);
   }
 }

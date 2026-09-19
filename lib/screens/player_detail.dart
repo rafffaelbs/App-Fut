@@ -86,10 +86,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Future<void> _loadPlayerDetails() async {
     List<Map<String, dynamic>> players = [];
     try {
-      final fetched = await SupabaseService.instance.jogadores.getJogadoresDoGrupo(widget.groupId);
+      final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
       players = fetched.map((j) => {
         'id': j.id,
-        'name': j.nome,
+        'name': j.name,
         'icon': j.avatarUrl,
         'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
       }).toList();
@@ -203,7 +203,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             : -1;
       }
 
-      // Chave de agrupamento (sessão ou mês)
+      // Grouping key (session or month)
       final String rawDate =
           match['session_date'] ??
           match['date'] ??
@@ -1957,7 +1957,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Cartão do jogador ─────────────────────────────────
+                  // ── Player card ─────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(

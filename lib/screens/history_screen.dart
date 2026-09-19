@@ -34,27 +34,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Map<String, String> _idToName = {};
 
-  /// Converte PartidaModel para o mapa dinâmico que a UI já consome.
-  Map<String, dynamic> _toLegacyMatch(dynamic partida) {
-    final redPlayers = partida.escalacao
+  /// Converts MatchModel into the dynamic map the UI already consumes.
+  Map<String, dynamic> _toLegacyMatch(dynamic match) {
+    final redPlayers = match.lineups
         .where((e) => e.isRed || e.isTeamA || e.team.toLowerCase() == 'red')
         .map((e) => {
-              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.nome ?? e.playerId,
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.name ?? e.playerId,
               'id': e.playerId
             })
         .toList();
-    final whitePlayers = partida.escalacao
+    final whitePlayers = match.lineups
         .where((e) => e.isWhite || e.isTeamB || e.team.toLowerCase() == 'white')
         .map((e) => {
-              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.nome ?? e.playerId,
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.name ?? e.playerId,
               'id': e.playerId
             })
         .toList();
 
-    final events = partida.eventos.map<Map<String, dynamic>>((ev) {
-      final playerName = _idToName[ev.playerId] ?? ev.player?.name ?? ev.player?.nome ?? ev.playerId;
+    final events = match.events.map<Map<String, dynamic>>((ev) {
+      final playerName = _idToName[ev.playerId] ?? ev.player?.name ?? ev.player?.name ?? ev.playerId;
       final assistName = ev.assistPlayerId != null
-          ? (_idToName[ev.assistPlayerId!] ?? ev.assistPlayer?.name ?? ev.assistPlayer?.nome)
+          ? (_idToName[ev.assistPlayerId!] ?? ev.assistPlayer?.name ?? ev.assistPlayer?.name)
           : null;
 
       return {
@@ -69,23 +69,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }).toList();
 
     String durationMin;
-    if (partida.duracaoSegundos != null) {
-      final secs = partida.duracaoSegundos!;
+    if (match.resolvedDurationSeconds != null) {
+      final secs = match.resolvedDurationSeconds!;
       durationMin = '${(secs ~/ 60).toString().padLeft(2, '0')}:${(secs % 60).toString().padLeft(2, '0')}';
-    } else if (partida.matchDuration != null && partida.matchDuration!.isNotEmpty) {
-      durationMin = partida.matchDuration!;
+    } else if (match.matchDuration != null && match.matchDuration!.isNotEmpty) {
+      durationMin = match.matchDuration!;
     } else {
       durationMin = '—';
     }
 
     return {
-      'id': partida.id,
-      'session_id': partida.sessionId,
-      'start_time': partida.startTime?.toIso8601String(),
-      'end_time': partida.endTime?.toIso8601String(),
-      'date': partida.timestamp.toIso8601String(),
-      'scoreRed': partida.scoreRed,
-      'scoreWhite': partida.scoreWhite,
+      'id': match.id,
+      'session_id': match.sessionId,
+      'start_time': match.startTime?.toIso8601String(),
+      'end_time': match.endTime?.toIso8601String(),
+      'date': match.timestamp.toIso8601String(),
+      'scoreRed': match.scoreRed,
+      'scoreWhite': match.scoreWhite,
       'match_duration': durationMin,
       'players': {'red': redPlayers, 'white': whitePlayers},
       'events': events,
@@ -99,24 +99,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
     try {
       if (widget.groupId.isNotEmpty) {
-        final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
         for (final p in groupPlayers) {
           _idToName[p.id] = p.displayName;
         }
       }
 
-      // Duração padrão: vem da própria sessão (duration_minutes), não mais
+      // Default duration: comes from the session itself (duration_minutes), no longer
       // de uma chave solta em SharedPreferences.
       String defaultDuration = '08:00';
-      final session = await SupabaseService.instance.sessoes.getSessaoPorId(widget.tournamentId);
+      final session = await SupabaseService.instance.sessions.getSessionById(widget.tournamentId);
       if (session?.durationMinutes != null) {
         defaultDuration = '${session!.durationMinutes.toString().padLeft(2, '0')}:00';
       }
 
-      final partidas = await SupabaseService.instance.partidas
-          .getPartidasPorSessao(widget.tournamentId);
+      final matchList = await SupabaseService.instance.matches
+          .getMatchesBySession(widget.tournamentId);
 
-      final List<dynamic> mapped = partidas.map(_toLegacyMatch).toList();
+      final List<dynamic> mapped = matchList.map(_toLegacyMatch).toList();
 
       for (final match in mapped) {
         if (match['match_duration'] == '—' || match['match_duration'] == null) {
@@ -167,11 +167,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _clearHistory() async {
     setState(() => isLoading = true);
     try {
-      // Deleta cada partida individualmente para garantir que o repositório
-      // exclua em cascata os eventos, escalações e histórico de ratings associados.
+      // Deletes each match individually to ensure the repository cascades
+      // the deletion to the associated events, lineups, and rating history.
       for (final match in history) {
         if (match['id'] != null) {
-          await SupabaseService.instance.partidas.deletarPartida(match['id']);
+          await SupabaseService.instance.matches.deleteMatch(match['id']);
         }
       }
       await _loadHistory();
@@ -306,7 +306,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final match = history[index];
                 final String duration = match['match_duration'] ?? 'N/A';
                 
-                // Extraindo as listas de jogadores 
+                // Extracting the player lists 
                 final List<dynamic> redTeam = match['players']?['red'] ?? [];
                 final List<dynamic> whiteTeam = match['players']?['white'] ?? [];
 
@@ -350,7 +350,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     children: [
                       const Divider(color: Colors.white12),
                       
-                      // --- NOVA SEÇÃO: ESCALAÇÃO DA PARTIDA ---
+                      // --- NEW SECTION: MATCH LINEUP ---
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                         child: Row(
@@ -388,7 +388,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       
                       const Divider(color: Colors.white12),
                       
-                      // --- SEÇÃO ORIGINAL: EVENTOS (GOLS/CARTÕES) ---
+                      // --- ORIGINAL SECTION: EVENTS (GOALS/CARDS) ---
                       if (match['events'] != null && (match['events'] as List).isNotEmpty)
                         ...((match['events'] as List).map((event) {
                           return ListTile(

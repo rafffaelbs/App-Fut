@@ -1,24 +1,26 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 import '../models/player_model.dart';
 import '../models/player_badge_model.dart';
 import '../services/cache_store.dart';
 
-/// Repositório de Jogadores integrado ao Supabase PostgreSQL.
+/// Players repository integrated with Supabase PostgreSQL.
 class PlayersRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
+  static const _uuid = Uuid();
 
   PlayersRepository({SupabaseClient? client, CacheStore? cache})
       : _client = client ?? supabase,
         _cache = cache ?? CacheStore();
 
-  /// Retorna todos os jogadores vinculados a um determinado grupo.
+  /// Returns every player linked to a given group.
   ///
-  /// Supabase é sempre a fonte de verdade. O cache local só entra em jogo
-  /// se a chamada de rede falhar (ex: sem conexão) — nesse caso devolvemos
-  /// o último resultado bom conhecido em vez de uma lista vazia.
-  Future<List<PlayerModel>> getJogadoresDoGrupo(String groupId) async {
+  /// Supabase is always the source of truth. The local cache only kicks in
+  /// if the network call fails (e.g. no connection) -- in that case we
+  /// return the last known good result instead of an empty list.
+  Future<List<PlayerModel>> getPlayersByGroup(String groupId) async {
     final cacheKey = 'players:group:$groupId';
 
     try {
@@ -39,14 +41,14 @@ class PlayersRepository {
         return rawPlayers.map((m) => PlayerModel.fromMap(m)).toList();
       }
     } catch (_) {
-      // Falha de rede/consulta: cai para o cache abaixo em vez de propagar.
+      // Network/query failure: fall back to the cache below instead of throwing.
       final cached = await _cache.read(cacheKey);
       if (cached != null) {
         return cached.asMapList().map((m) => PlayerModel.fromMap(m)).toList();
       }
     }
 
-    // Fallback: Busca todos os jogadores da tabela `players` se group_members estiver vazio
+    // Fallback: fetch every row from `players` if group_members is empty.
     try {
       final response = await _client.from('players').select();
       final rawPlayers = (response as List)
@@ -64,105 +66,141 @@ class PlayersRepository {
     }
   }
 
-  Future<List<PlayerModel>> getPlayersByGroup(String groupId) =>
-      getJogadoresDoGrupo(groupId);
-
-  /// Cria um "Jogador Fantasma":
-  Future<PlayerModel> criarJogadorFantasma({
+  /// Creates a "Ghost Player" (no linked user account yet).
+  Future<PlayerModel> createGhostPlayer({
     required String groupId,
-    required String nome,
+    required String name,
     String? avatarUrl,
     List<PlayerBadgeModel> badges = const [],
   }) async {
     final insertPayload = <String, dynamic>{
+      'id': _uuid.v4(),
       'creator_id': null,
-      'name': nome.trim(),
+      'name': name.trim(),
     };
 
-    final jogadorResp = await _client
+    final playerResp = await _client
         .from('players')
         .insert(insertPayload)
         .select()
         .single();
 
-    final jogador = PlayerModel.fromMap(Map<String, dynamic>.from(jogadorResp));
+    final player = PlayerModel.fromMap(Map<String, dynamic>.from(playerResp));
 
     await _client.from('group_members').insert({
       'group_id': groupId,
-      'player_id': jogador.id,
-      'role': 'membro',
+      'player_id': player.id,
+      'role': 'member',
     });
 
-    return jogador;
+    return player;
   }
 
-  /// Cria ou vincula um jogador com uma conta de usuário.
-  Future<PlayerModel> criarJogadorComUsuario({
+  /// Creates or links a player to a user account.
+  Future<PlayerModel> createPlayerWithUser({
     required String groupId,
     required String userId,
-    required String nome,
+    required String name,
     String? avatarUrl,
     List<PlayerBadgeModel> badges = const [],
-    String papel = 'membro',
+    String role = 'member',
   }) async {
     final insertPayload = <String, dynamic>{
+      'id': _uuid.v4(),
       'creator_id': userId,
-      'name': nome.trim(),
+      'name': name.trim(),
     };
 
-    final jogadorResp = await _client
+    final playerResp = await _client
         .from('players')
         .insert(insertPayload)
         .select()
         .single();
 
-    final jogador = PlayerModel.fromMap(Map<String, dynamic>.from(jogadorResp));
+    final player = PlayerModel.fromMap(Map<String, dynamic>.from(playerResp));
 
     await _client.from('group_members').insert({
       'group_id': groupId,
-      'player_id': jogador.id,
-      'role': papel,
+      'player_id': player.id,
+      'role': role,
     });
 
-    return jogador;
+    return player;
   }
 
-  /// Atualiza os dados de um jogador.
-  Future<PlayerModel> atualizarJogador(PlayerModel jogador) async {
+  /// Updates a player's data.
+  Future<PlayerModel> updatePlayer(PlayerModel player) async {
     final updatePayload = <String, dynamic>{
-      'name': jogador.name.trim(),
-      'icon': jogador.icon,
-      'badges': jogador.manualBadges.map((b) => b.toMap()).toList(),
+      'name': player.name.trim(),
+      'icon': player.icon,
+      'badges': player.manualBadges.map((b) => b.toMap()).toList(),
     };
 
     final response = await _client
         .from('players')
         .update(updatePayload)
-        .eq('id', jogador.id)
+        .eq('id', player.id)
         .select()
         .single();
 
     return PlayerModel.fromMap(Map<String, dynamic>.from(response));
   }
 
-  /// Desvincula um jogador do grupo.
-  Future<void> removerJogadorDoGrupo({
+  /// Unlinks a player from a group.
+  Future<void> removePlayerFromGroup({
     required String groupId,
-    required String jogadorId,
+    required String playerId,
   }) async {
     await _client
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
-        .eq('player_id', jogadorId);
+        .eq('player_id', playerId);
   }
 
-  /// Busca um jogador específico pelo seu UUID interno.
-  Future<PlayerModel?> getJogadorPorId(String jogadorId) async {
+  /// Sets/updates the linking email of a "ghost" player (no login yet).
+  /// Once that person signs up or logs in with the same email, the profile
+  /// gets automatically linked (see 004_auth_and_permissions.sql).
+  Future<PlayerModel> linkEmailToPlayer({
+    required String playerId,
+    required String email,
+  }) async {
+    final response = await _client
+        .from('players')
+        .update({'email': email.trim().toLowerCase()})
+        .eq('id', playerId)
+        .select()
+        .single();
+    return PlayerModel.fromMap(Map<String, dynamic>.from(response));
+  }
+
+  /// Call this right after login/signup: automatically links the current
+  /// user to any "ghost" player that already has their email saved.
+  Future<List<PlayerModel>> claimGhostProfiles() async {
+    final response = await _client.rpc('claim_ghost_profile');
+    return (response as List)
+        .whereType<Map>()
+        .map((e) => PlayerModel.fromMap(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Returns the player(s) already linked to the current authenticated account.
+  Future<List<PlayerModel>> getMyPlayers() async {
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId == null) return [];
+    final response = await _client.from('players').select().eq('creator_id', currentUserId);
+    return (response as List)
+        .whereType<Map>()
+        .map((e) => PlayerModel.fromMap(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Fetches a specific player by its internal UUID.
+  Future<PlayerModel?> getPlayerById(String playerId) async {
     final response = await _client
         .from('players')
         .select()
-        .eq('id', jogadorId)
+        .eq('id', playerId)
         .maybeSingle();
 
     if (response == null) return null;

@@ -1,4 +1,4 @@
-/// Representa uma conquista/badge atribuída a um jogador.
+/// Represents an achievement/badge assigned to a player.
 class PlayerBadgeModel {
   final String icon;
   final String title;

@@ -1,10 +1,11 @@
 import 'player_badge_model.dart';
 
-/// Modelo de dados da tabela `players` no Supabase PostgreSQL.
+/// Data model for the `players` table in Supabase PostgreSQL.
 class PlayerModel {
   final String id;
   final String? creatorId;
   final String name;
+  final String? email;
   final DateTime? createdAt;
   
   // Transient properties for UI compatibility
@@ -17,6 +18,7 @@ class PlayerModel {
     required this.id,
     this.creatorId,
     required this.name,
+    this.email,
     this.createdAt,
     this.icon,
     this.rating,
@@ -24,14 +26,13 @@ class PlayerModel {
     this.manualBadges = const [],
   });
 
-  /// Indica se é um "Jogador Fantasma" (criado por um usuário, sem login próprio).
+  /// Indicates whether this is a "Ghost Player" (created by a user, without their own login).
   bool get isGhost => creatorId == null || creatorId!.trim().isEmpty;
 
-  /// Nome de exibição defensivo.
+  /// Defensive display name.
   String get displayName => name.trim().isEmpty ? 'Jogador sem nome' : name;
 
   // Compatibility getters
-  String get nome => name;
   String? get avatarUrl => icon;
 
   factory PlayerModel.fromJson(Map<String, dynamic> json) => PlayerModel.fromMap(json);
@@ -51,6 +52,7 @@ class PlayerModel {
       id: map['id']?.toString() ?? '',
       creatorId: map['creator_id']?.toString(),
       name: map['name']?.toString() ?? '',
+      email: map['email']?.toString(),
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'].toString())
           : null,

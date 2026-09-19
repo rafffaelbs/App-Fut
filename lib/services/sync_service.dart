@@ -61,7 +61,7 @@ class SyncService {
     final Map<String, dynamic> data = Map<String, dynamic>.from(docData['data']);
     final prefs = await SharedPreferences.getInstance();
 
-    // Opcionalmente podemos limpar primeiro. O usuário aprovou que o restore sobrescreva.
+    // We could optionally clear first. The user approved the restore overwriting existing data.
     await prefs.clear();
 
     for (var entry in data.entries) {
@@ -102,7 +102,7 @@ class SyncService {
       return existingCode;
     }
 
-    // Gera um código alfanumérico de 6 dígitos aleatório
+    // Generates a random 6-character alphanumeric code
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     var rnd = DateTime.now().millisecondsSinceEpoch;
     String newCode = '';
@@ -115,7 +115,7 @@ class SyncService {
     // Se preferir um random mais forte:
     // math.Random r = math.Random();
     // newCode = List.generate(6, (i) => chars[r.nextInt(chars.length)]).join();
-    // Resolvendo usando apenas math básico sem importar math pro agora, ou importando.
+    // Solved using basic math for now, without importing the math package.
     
     // Naive way was fine but lets just hardcode a simple unique logic using timestamp
     String timeStr = DateTime.now().millisecondsSinceEpoch.toString();
@@ -142,7 +142,7 @@ class SyncService {
     // Converte para String JSON
     final jsonString = jsonEncode(data);
     
-    // Obtém o diretório temporário do dispositivo
+    // Gets the device's temporary directory
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/pelada_backup_${DateTime.now().millisecondsSinceEpoch}.json');
     
@@ -164,7 +164,7 @@ class SyncService {
       if (result != null && result.files.single.path != null) {
         File file = File(result.files.single.path!);
         
-        // Lê o conteúdo
+        // Reads the content
         String jsonString = await file.readAsString();
         
         // Decodifica JSON
@@ -340,7 +340,7 @@ Future<void> _pushNormalizedDataToSupabase(
         final session = sessions[i];
         String oldId = session['id'].toString();
 
-        // Regex para detectar o formato antigo: session_ seguido de muitos dígitos (timestamp)
+        // Regex to detect the old format: session_ followed by many digits (timestamp)
         final oldFormat = RegExp(r'^session_\d{10,13}$');
         if (oldFormat.hasMatch(oldId)) {
           String name = (session['title'] ?? 'pelada')
@@ -350,7 +350,7 @@ Future<void> _pushNormalizedDataToSupabase(
           String random = const Uuid().v4().substring(0, 4);
           String newId = 'session_${name}_$random';
 
-          // Renomeia a chave do histórico de partidas se ela existir
+          // Renames the match history key if it exists
           final oldHistoryKey = 'match_history_$oldId';
           final newHistoryKey = 'match_history_$newId';
 

@@ -25,7 +25,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   Future<void> _loadSeasons() async {
     setState(() => _isLoading = true);
     try {
-      final fetched = await SupabaseService.instance.temporadas.getTemporadas(widget.groupId);
+      final fetched = await SupabaseService.instance.seasons.getSeasons(widget.groupId);
       setState(() => _seasons = fetched);
     } catch (e) {
       debugPrint('Error loading seasons: $e');
@@ -38,7 +38,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: season?.name);
     DateTime? startDate = season?.startDate;
     DateTime? endDate = season?.endDate;
-    bool isAtual = season?.isActive ?? false;
+    bool isActiveFlag = season?.isActive ?? false;
 
     showDialog(
       context: context,
@@ -119,11 +119,11 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                     CheckboxListTile(
                       title: const Text('Temporada atual?',
                           style: TextStyle(color: Colors.white)),
-                      value: isAtual,
+                      value: isActiveFlag,
                       activeColor: AppColors.accentBlue,
                       checkColor: Colors.white,
                       onChanged: (val) {
-                        setStateDialog(() => isAtual = val ?? false);
+                        setStateDialog(() => isActiveFlag = val ?? false);
                       },
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
@@ -160,14 +160,14 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                           name: nameCtrl.text.trim(),
                           startDate: startDate,
                           endDate: endDate,
-                          isActive: isAtual,
+                          isActive: isActiveFlag,
                         );
                       } else {
                         final updated = season.copyWith(
                           name: nameCtrl.text.trim(),
                           startDate: startDate,
                           endDate: endDate,
-                          isActive: isAtual,
+                          isActive: isActiveFlag,
                         );
                         await SupabaseService.instance.seasons.updateSeason(updated);
                       }
@@ -224,9 +224,9 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.instance.temporadas.deletarTemporada(
+      await SupabaseService.instance.seasons.deleteSeason(
         groupId: widget.groupId,
-        temporadaId: season.id,
+        seasonId: season.id,
       );
       await _loadSeasons();
     } catch (e) {

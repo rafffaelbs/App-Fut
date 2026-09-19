@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
@@ -7,18 +8,19 @@ import '../models/rating_history_model.dart';
 
 class MatchesRepository {
   final SupabaseClient _client;
+  static const _uuid = Uuid();
 
   MatchesRepository({SupabaseClient? client})
       : _client = client ?? supabase;
 
   /// Fetches all matches for a session with lineups (including players) and events
-  Future<List<MatchModel>> getPartidasPorSessao(String sessionId) async {
+  Future<List<MatchModel>> getMatchesBySession(String sessionId) async {
     try {
       final matchesResp = await _client
           .from("matches")
           .select("*, match_lineups(*, players(*)), match_events(*)")
           .eq("session_id", sessionId)
-          .order("start_time", ascending: true);
+          .order("played_at", ascending: true);
 
       return (matchesResp as List)
           .map((m) => MatchModel.fromMap(Map<String, dynamic>.from(m as Map)))
@@ -30,7 +32,7 @@ class MatchesRepository {
             .from("matches")
             .select()
             .eq("session_id", sessionId)
-            .order("start_time", ascending: true);
+            .order("played_at", ascending: true);
 
         final List<MatchModel> results = [];
         for (final m in (matchesResp as List)) {
@@ -58,25 +60,15 @@ class MatchesRepository {
     }
   }
 
-  /// Fetches all matches for all sessions belonging to a group
-  Future<List<MatchModel>> getPartidasPorGrupo(String groupId) async {
+  /// Fetches all matches belonging to a group. `matches` already carries its
+  /// own group_id column, so there's no need to go through sessions/seasons.
+  Future<List<MatchModel>> getMatchesByGroup(String groupId) async {
     try {
-      final sessions = await _client
-          .from("sessions")
-          .select("id, seasons!inner(group_id)")
-          .eq("seasons.group_id", groupId);
-
-      final sessionIds = (sessions as List)
-          .map((s) => s["id"]?.toString())
-          .whereType<String>()
-          .toList();
-      if (sessionIds.isEmpty) return [];
-
       final matchesResp = await _client
           .from("matches")
           .select("*, match_lineups(*, players(*)), match_events(*)")
-          .inFilter("session_id", sessionIds)
-          .order("start_time", ascending: false);
+          .eq("group_id", groupId)
+          .order("played_at", ascending: false);
 
       return (matchesResp as List)
           .map((m) => MatchModel.fromMap(Map<String, dynamic>.from(m as Map)))
@@ -87,24 +79,33 @@ class MatchesRepository {
   }
 
   /// Saves a complete match including lineups, events, and rating history
-  Future<MatchModel> salvarPartidaCompleta({
+  Future<MatchModel> saveFullMatch({
     required String sessionId,
+    required String groupId,
     required int teamAScore,
     required int teamBScore,
     DateTime? startTime,
     DateTime? endTime,
+    int? durationSeconds,
     String? status,
     required List<MatchLineupModel> lineups,
     required List<MatchEventModel> events,
     String? seasonId,
     List<RatingHistoryModel> ratingHistory = const [],
   }) async {
+    final effectiveStart = startTime ?? DateTime.now();
+    // Prefer the real elapsed time tracked by the match screen (already
+    // discounts pauses) over deriving it from start/end timestamps.
+    final effectiveDuration =
+        durationSeconds ?? (endTime != null ? endTime.difference(effectiveStart).inSeconds : null);
     final matchPayload = {
+      "id": _uuid.v4(),
       "session_id": sessionId,
-      "team_a_score": teamAScore,
-      "team_b_score": teamBScore,
-      "status": status ?? "finished",
-      if (startTime != null) "start_time": startTime.toIso8601String(),
+      "group_id": groupId,
+      "score_red": teamAScore,
+      "score_white": teamBScore,
+      "played_at": effectiveStart.toIso8601String(),
+      if (effectiveDuration != null) "duration_seconds": effectiveDuration,
     };
 
     final matchResp = await _client
@@ -137,7 +138,6 @@ class MatchesRepository {
       final ratingsBatch = ratingHistory.map((r) {
         final map = r.toMap(includeId: false);
         map["match_id"] = matchId;
-        if (seasonId != null) map["season_id"] = seasonId;
         return map;
       }).toList();
       await _client.from("rating_history").insert(ratingsBatch);
@@ -151,29 +151,35 @@ class MatchesRepository {
       status: status,
       teamAScore: teamAScore,
       teamBScore: teamBScore,
+      durationSeconds: effectiveDuration,
       lineups: lineups.map((e) => e.copyWith(matchId: matchId)).toList(),
       events: events.map((ev) => ev.copyWith(matchId: matchId)).toList(),
     );
   }
 
-  Future<MatchModel> atualizarPartidaCompleta({
+  Future<MatchModel> updateFullMatch({
     required String matchId,
     required String sessionId,
     required int teamAScore,
     required int teamBScore,
     DateTime? startTime,
     DateTime? endTime,
+    int? durationSeconds,
     String? status,
     required List<MatchLineupModel> lineups,
     required List<MatchEventModel> events,
     String? seasonId,
     List<RatingHistoryModel> ratingHistory = const [],
   }) async {
+    final effectiveDuration = durationSeconds ??
+        ((startTime != null && endTime != null)
+            ? endTime.difference(startTime).inSeconds
+            : null);
     final matchPayload = {
-      "team_a_score": teamAScore,
-      "team_b_score": teamBScore,
-      if (status != null) "status": status,
-      if (startTime != null) "start_time": startTime.toIso8601String(),
+      "score_red": teamAScore,
+      "score_white": teamBScore,
+      if (startTime != null) "played_at": startTime.toIso8601String(),
+      if (effectiveDuration != null) "duration_seconds": effectiveDuration,
     };
 
     final matchResp = await _client
@@ -213,7 +219,6 @@ class MatchesRepository {
       final ratingsBatch = ratingHistory.map((r) {
         final map = r.toMap(includeId: false);
         map["match_id"] = matchId;
-        if (seasonId != null) map["season_id"] = seasonId;
         return map;
       }).toList();
       await _client.from("rating_history").insert(ratingsBatch);
@@ -227,12 +232,13 @@ class MatchesRepository {
       status: status,
       teamAScore: teamAScore,
       teamBScore: teamBScore,
+      durationSeconds: effectiveDuration,
       lineups: lineups.map((e) => e.copyWith(matchId: matchId)).toList(),
       events: events.map((ev) => ev.copyWith(matchId: matchId)).toList(),
     );
   }
 
-  Future<MatchModel> atualizarPartidaParcial({
+  Future<MatchModel> updatePartialMatch({
     required String matchId,
     required int teamAScore,
     required int teamBScore,
@@ -240,7 +246,7 @@ class MatchesRepository {
   }) async {
     await _client
         .from("matches")
-        .update({"team_a_score": teamAScore, "team_b_score": teamBScore})
+        .update({"score_red": teamAScore, "score_white": teamBScore})
         .eq("id", matchId);
 
     await _client.from("match_events").delete().eq("match_id", matchId);
@@ -263,7 +269,7 @@ class MatchesRepository {
     return MatchModel.fromMap(Map<String, dynamic>.from(matchesResp));
   }
 
-  Future<void> deletarPartida(String matchId) async {
+  Future<void> deleteMatch(String matchId) async {
     await _client.from("match_events").delete().eq("match_id", matchId);
     await _client.from("match_lineups").delete().eq("match_id", matchId);
     await _client.from("rating_history").delete().eq("match_id", matchId);

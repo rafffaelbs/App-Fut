@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/models/player_model.dart';
 import 'package:app_do_fut/models/match_model.dart';
 import 'package:app_do_fut/models/season_model.dart';
@@ -10,20 +11,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // ─────────────────────────────────────────────────────────────────────────
-// Paleta "VS Code Dark" — espelha exatamente PlayerStats.tsx
+// Paleta da tela de Estatísticas — alinhada ao AppColors (padrão do app).
+// Mantém os mesmos nomes (_Vs.xxx) usados no resto do arquivo para não
+// precisar tocar em cada um dos usos individualmente.
 // ─────────────────────────────────────────────────────────────────────────
 class _Vs {
-  static const bg = Color(0xFF1E1E1E);
-  static const panel = Color(0xFF252526);
-  static const header = Color(0xFF2D2D30);
-  static const border = Color(0xFF3E3E42);
-  static const accent = Color(0xFF007ACC);
-  static const accentLight = Color(0xFF4FC3F7);
-  static const rowHover = Color(0xFF2A2D2E);
-  static const textMuted = Color(0xFF858585);
-  static const text = Color(0xFFD4D4D4);
-  static const textStrong = Color(0xFFCCCCCC);
-  static const good = Color(0xFF89D185);
+  static const bg = AppColors.deepBlue;
+  static const panel = AppColors.headerBlue;
+  static const header = AppColors.headerBlue;
+  static const border = Color(0xFF1E3A6E); // tom intermediário entre headerBlue e accentBlue
+  static const accent = AppColors.accentBlue;
+  static const accentLight = AppColors.highlightBlue;
+  static const rowHover = Color(0xFF072055); // headerBlue levemente mais claro
+  static const textMuted = Colors.white54;
+  static const text = AppColors.textWhite;
+  static const textStrong = Colors.white70;
+  static const good = AppColors.highlightGreen;
   static const warn = Color(0xFFFACC15);
   static const bad = Color(0xFFF48771);
   static const gold = Color(0xFFFFD700);
@@ -56,7 +59,7 @@ enum StatKey {
   gkWins,
   gkCleanSheets,
   gkGoalsConcededAvg,
-  gkNota,
+  gkRating,
   formLast10,
 }
 
@@ -79,10 +82,10 @@ const List<_ColDef> _cols = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
-// Estatísticas agregadas por jogador
+// Aggregated stats per player
 // ─────────────────────────────────────────────────────────────────────────
 class PlayerStatsAgg {
-  final PlayerModel jogador;
+  final PlayerModel player;
   int matches = 0;
   int goals = 0;
   int assists = 0;
@@ -95,16 +98,16 @@ class PlayerStatsAgg {
   int hatTricks = 0;
   int clutchGoals = 0;
 
-  // Goleiro
+  // Goalkeeper
   int gkGames = 0;
   int gkWins = 0;
   int gkCleanSheets = 0;
   int gkGoalsConceded = 0;
-  double gkNota = 0.0;
+  double gkRating = 0.0;
 
   final List<double> matchRatings = [];
 
-  PlayerStatsAgg(this.jogador);
+  PlayerStatsAgg(this.player);
 
   int get ga => goals + assists;
   int get cards => yellowCards + redCards;
@@ -112,7 +115,7 @@ class PlayerStatsAgg {
   double get gkGoalsConcededAvg => gkGames > 0 ? gkGoalsConceded / gkGames : 0.0;
 
   double get formLast10 {
-    if (matchRatings.isEmpty) return jogador.rating ?? 6.0;
+    if (matchRatings.isEmpty) return player.rating ?? 6.0;
     final last = matchRatings.length > 10
         ? matchRatings.sublist(matchRatings.length - 10)
         : matchRatings;
@@ -120,7 +123,7 @@ class PlayerStatsAgg {
   }
 
   double get overallRating {
-    if (matchRatings.isEmpty) return jogador.rating ?? 6.0;
+    if (matchRatings.isEmpty) return player.rating ?? 6.0;
     return matchRatings.reduce((a, b) => a + b) / matchRatings.length;
   }
 
@@ -148,8 +151,8 @@ class PlayerStatsAgg {
         return gkCleanSheets.toDouble();
       case StatKey.gkGoalsConcededAvg:
         return gkGoalsConcededAvg;
-      case StatKey.gkNota:
-        return gkNota;
+      case StatKey.gkRating:
+        return gkRating;
       case StatKey.formLast10:
         return formLast10;
     }
@@ -174,8 +177,8 @@ class SeasonStatsScreen extends StatefulWidget {
 
 class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   bool isLoading = true;
-  List<MatchModel> _allPartidas = [];
-  List<PlayerModel> _allJogadores = [];
+  List<MatchModel> _allMatches = [];
+  List<PlayerModel> _allPlayers = [];
   List<SeasonModel> _allSeasons = [];
   List<PlayerStatsAgg> stats = [];
   List<DuoStat> dynamicDuos = [];
@@ -207,24 +210,24 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   Future<void> _loadData() async {
     setState(() => isLoading = true);
     try {
-      final partidas =
-          await SupabaseService.instance.partidas.getPartidasPorGrupo(widget.groupId);
-      final jogadores =
-          await SupabaseService.instance.jogadores.getJogadoresDoGrupo(widget.groupId);
-      final temporadas =
-          await SupabaseService.instance.seasons.getTemporadas(widget.groupId);
+      final matchesList =
+          await SupabaseService.instance.matches.getMatchesByGroup(widget.groupId);
+      final playersList =
+          await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+      final seasonsList =
+          await SupabaseService.instance.seasons.getSeasons(widget.groupId);
 
-      partidas.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      matchesList.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      _allPartidas = partidas;
-      _allJogadores = jogadores;
-      _allSeasons = temporadas;
+      _allMatches = matchesList;
+      _allPlayers = playersList;
+      _allSeasons = seasonsList;
 
-      // Se houver uma temporada ativa, define ela como padrão
-      if (temporadas.isNotEmpty) {
-        final activeSeason = temporadas.firstWhere(
+      // If there's an active season, set it as the default
+      if (seasonsList.isNotEmpty) {
+        final activeSeason = seasonsList.firstWhere(
           (s) => s.isActive,
-          orElse: () => temporadas.first,
+          orElse: () => seasonsList.first,
         );
         _selectedPeriodKey = activeSeason.id;
       }
@@ -238,20 +241,20 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   }
 
   List<MatchModel> get _filteredPartidas {
-    if (_allPartidas.isEmpty) return [];
+    if (_allMatches.isEmpty) return [];
 
     if (_selectedPeriodKey == 'all') {
-      return _allPartidas;
+      return _allMatches;
     }
 
     if (_selectedPeriodKey == 'last') {
-      final lastSessionId = _allPartidas.last.sessaoId;
-      return _allPartidas.where((p) => p.sessaoId == lastSessionId).toList();
+      final lastSessionId = _allMatches.last.sessionId;
+      return _allMatches.where((p) => p.sessionId == lastSessionId).toList();
     }
 
     if (_selectedPeriodKey == 'month') {
       final now = DateTime.now();
-      return _allPartidas
+      return _allMatches
           .where((p) =>
               p.timestamp.year == now.year && p.timestamp.month == now.month)
           .toList();
@@ -259,11 +262,11 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
     if (_selectedPeriodKey == 'year') {
       final now = DateTime.now();
-      return _allPartidas.where((p) => p.timestamp.year == now.year).toList();
+      return _allMatches.where((p) => p.timestamp.year == now.year).toList();
     }
 
     if (_selectedPeriodKey == 'custom') {
-      if (_customFrom == null || _customTo == null) return _allPartidas;
+      if (_customFrom == null || _customTo == null) return _allMatches;
       final endInclusive = DateTime(
         _customTo!.year,
         _customTo!.month,
@@ -272,7 +275,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
         59,
         59,
       );
-      return _allPartidas
+      return _allMatches
           .where((p) =>
               !p.timestamp.isBefore(_customFrom!) &&
               !p.timestamp.isAfter(endInclusive))
@@ -289,18 +292,18 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       final to = season.endDate != null
           ? DateTime(season.endDate!.year, season.endDate!.month, season.endDate!.day, 23, 59, 59)
           : DateTime.now();
-      return _allPartidas
+      return _allMatches
           .where((p) => !p.timestamp.isBefore(from) && !p.timestamp.isAfter(to))
           .toList();
     }
 
-    return _allPartidas;
+    return _allMatches;
   }
 
   void _recomputeStats() {
     final map = <String, PlayerStatsAgg>{};
     final playersMap = <String, PlayerModel>{};
-    for (final j in _allJogadores) {
+    for (final j in _allPlayers) {
       map[j.id] = PlayerStatsAgg(j);
       playersMap[j.id] = j;
     }
@@ -320,9 +323,9 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
       int runningRed = 0;
       int runningWhite = 0;
-      final int durationMin = p.duracaoSegundos != null ? (p.duracaoSegundos! ~/ 60) : 7;
+      final int durationMin = p.resolvedDurationSeconds != null ? (p.resolvedDurationSeconds! ~/ 60) : 7;
 
-      for (final ev in p.eventos) {
+      for (final ev in p.events) {
         if (ev.isGoal && ev.playerId.isNotEmpty) {
           map.putIfAbsent(ev.playerId, () => PlayerStatsAgg(playersMap[ev.playerId] ?? PlayerModel(id: ev.playerId, name: ev.playerId)));
           map[ev.playerId]?.goals += 1;
@@ -383,7 +386,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
         if (count >= 3) map[id]?.hatTricks += 1;
       });
 
-      for (final e in p.escalacao) {
+      for (final e in p.lineups) {
         map.putIfAbsent(e.playerId, () => PlayerStatsAgg(e.player ?? playersMap[e.playerId] ?? PlayerModel(id: e.playerId, name: e.playerId)));
         final s = map[e.playerId]!;
 
@@ -393,7 +396,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           final conceded = e.isRed ? p.scoreWhite : p.scoreRed;
           s.gkGoalsConceded += conceded;
           if (conceded == 0) s.gkCleanSheets += 1;
-          s.gkNota = e.rating ?? s.gkNota;
+          s.gkRating = e.rating ?? s.gkRating;
         } else {
           s.matches += 1;
           final won = (e.isRed && redWin) || (e.isWhite && whiteWin);
@@ -473,16 +476,16 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       MaterialPageRoute(
         builder: (context) => PlayerDetailScreen(
           groupId: widget.groupId,
-          playerId: s.jogador.id,
-          initialPlayerName: s.jogador.name,
-          playerIcon: s.jogador.avatarUrl,
+          playerId: s.player.id,
+          initialPlayerName: s.player.name,
+          playerIcon: s.player.avatarUrl,
         ),
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FILTRO DE PERÍODO / TEMPORADA
+  // PERIOD / SEASON FILTER
   // ─────────────────────────────────────────────────────────────────────────
   Widget _buildFilterBar() {
     final standardOpts = [
@@ -644,13 +647,13 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     final sortedMatches = List<MatchModel>.from(_filteredPartidas)
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    if (sortedMatches.isEmpty || _allJogadores.isEmpty) return const SizedBox.shrink();
+    if (sortedMatches.isEmpty || _allPlayers.isEmpty) return const SizedBox.shrink();
 
-    // Calcula acumulado por jogador
+    // Calcula acumulado por player
     final Map<String, int> cumulativeGA = {};
     final Map<String, int> cumulativeGoals = {};
     final Map<String, int> cumulativeAssists = {};
-    for (final j in _allJogadores) {
+    for (final j in _allPlayers) {
       cumulativeGA[j.id] = 0;
       cumulativeGoals[j.id] = 0;
       cumulativeAssists[j.id] = 0;
@@ -659,7 +662,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     // Lista de pontos temporais
     final List<Map<String, dynamic>> points = [];
     final Map<String, dynamic> initialPoint = {'name': 'Início'};
-    for (final j in _allJogadores) initialPoint[j.id] = 0;
+    for (final j in _allPlayers) initialPoint[j.id] = 0;
     points.add(initialPoint);
 
     if (_chartGroupByDate) {
@@ -671,7 +674,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
       matchesByDate.forEach((dateStr, matchesOnDate) {
         for (final m in matchesOnDate) {
-          for (final ev in m.eventos) {
+          for (final ev in m.events) {
             if (ev.isGoal && ev.playerId.isNotEmpty) {
               cumulativeGoals[ev.playerId] = (cumulativeGoals[ev.playerId] ?? 0) + 1;
               cumulativeGA[ev.playerId] = (cumulativeGA[ev.playerId] ?? 0) + 1;
@@ -683,7 +686,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           }
         }
         final Map<String, dynamic> pt = {'name': dateStr};
-        for (final j in _allJogadores) {
+        for (final j in _allPlayers) {
           pt[j.id] = _chartMetric == 'ga'
               ? (cumulativeGA[j.id] ?? 0)
               : (_chartMetric == 'goals'
@@ -695,7 +698,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     } else {
       for (int i = 0; i < sortedMatches.length; i++) {
         final m = sortedMatches[i];
-        for (final ev in m.eventos) {
+        for (final ev in m.events) {
           if (ev.isGoal && ev.playerId.isNotEmpty) {
             cumulativeGoals[ev.playerId] = (cumulativeGoals[ev.playerId] ?? 0) + 1;
             cumulativeGA[ev.playerId] = (cumulativeGA[ev.playerId] ?? 0) + 1;
@@ -706,7 +709,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           }
         }
         final Map<String, dynamic> pt = {'name': 'P${i + 1}'};
-        for (final j in _allJogadores) {
+        for (final j in _allPlayers) {
           pt[j.id] = _chartMetric == 'ga'
               ? (cumulativeGA[j.id] ?? 0)
               : (_chartMetric == 'goals'
@@ -717,8 +720,8 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       }
     }
 
-    // Top 10 jogadores com pontuação > 0 na métrica selecionada
-    final topPlayers = _allJogadores.where((p) {
+    // Top 10 players with score > 0 on the selected metric
+    final topPlayers = _allPlayers.where((p) {
       final total = _chartMetric == 'ga'
           ? (cumulativeGA[p.id] ?? 0)
           : (_chartMetric == 'goals'
@@ -747,7 +750,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
         ? points.sublist(0, min(_animationIndex!, points.length))
         : points;
 
-    // Constrói LineChartBarData para cada jogador do Top 10
+    // Constrói LineChartBarData para cada player do Top 10
     double maxY = 1.0;
     final List<LineChartBarData> lineBars = [];
     for (int i = 0; i < displayTop.length; i++) {
@@ -1158,7 +1161,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          _initials(s.jogador.name),
+                          _initials(s.player.name),
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -1179,7 +1182,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    s.jogador.name,
+                    s.player.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -1270,7 +1273,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                   final p = entry.value;
                   return _buildTableRow(
                     index: i + 1,
-                    player: p.jogador.name,
+                    player: p.player.name,
                     values: [p.ownGoals.toString()],
                     onTap: () => _openPlayer(p),
                   );
@@ -1297,7 +1300,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                   final p = entry.value;
                   return _buildTableRow(
                     index: i + 1,
-                    player: p.jogador.name,
+                    player: p.player.name,
                     values: [p.formLast10.toStringAsFixed(2), p.matches.toString()],
                     onTap: () => _openPlayer(p),
                   );
@@ -1324,7 +1327,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                   final p = entry.value;
                   return _buildTableRow(
                     index: i + 1,
-                    player: p.jogador.name,
+                    player: p.player.name,
                     values: ['${p.winRate.toStringAsFixed(1)}%', p.wins.toString(), p.matches.toString()],
                     isHighlightFirst: true,
                     onTap: () => _openPlayer(p),
@@ -1585,7 +1588,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
             label: 'Decisivos',
           ),
 
-          // Goleiros (Paredões)
+          // Goalkeepers (Walls)
           if (hasGkData) ...[
             const SizedBox(height: 12),
             const Divider(color: _Vs.border),
@@ -1603,7 +1606,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
             const SizedBox(height: 16),
             _buildPodiumSection(
               title: 'Luva de Ouro (Nota)',
-              key: StatKey.gkNota,
+              key: StatKey.gkRating,
               label: 'Nota',
               isGoalkeeper: true,
               isFloat: true,
@@ -1792,14 +1795,14 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                                   ),
                                   alignment: Alignment.center,
                                   child: Text(
-                                    s.jogador.name.isNotEmpty
-                                        ? s.jogador.name[0].toUpperCase()
+                                    s.player.name.isNotEmpty
+                                        ? s.player.name[0].toUpperCase()
                                         : '?',
                                     style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Text(s.jogador.name, style: const TextStyle(color: _Vs.text, fontSize: 12)),
+                                Text(s.player.name, style: const TextStyle(color: _Vs.text, fontSize: 12)),
                               ],
                             ),
                           ),
@@ -1859,4 +1862,3 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
     );
   }
 }
-

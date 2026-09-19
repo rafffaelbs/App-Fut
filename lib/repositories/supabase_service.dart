@@ -7,6 +7,7 @@ import 'matches_repository.dart';
 import 'ratings_repository.dart';
 import 'sessions_repository.dart';
 import 'seasons_repository.dart';
+import 'session_arrivals_repository.dart';
 
 /// Central service for Supabase integration.
 class SupabaseService {
@@ -16,38 +17,26 @@ class SupabaseService {
 
   SupabaseService._internal() {
     client = SupabaseConfig.client;
-    
+
     // Initialize repositories
-    _membrosRepository = GroupMembersRepository(client: client);
-    jogadores = PlayersRepository(client: client);
-    _groupsRepository = GroupsRepository(client: client, membrosRepo: _membrosRepository);
-    _seasonsRepository = SeasonsRepository(client: client, membrosRepo: _membrosRepository);
-    sessoes = SessionsRepository(client: client);
+    groupMembers = GroupMembersRepository(client: client);
+    players = PlayersRepository(client: client);
+    groups = GroupsRepository(client: client, membersRepo: groupMembers);
+    seasons = SeasonsRepository(client: client, membersRepo: groupMembers);
+    sessions = SessionsRepository(client: client);
     matches = MatchesRepository(client: client);
     ratings = RatingsRepository(client: client);
+    sessionArrivals = SessionArrivalsRepository(client: client);
   }
 
   late final SupabaseClient client;
-  
-  late final GroupMembersRepository _membrosRepository;
-  late final GroupsRepository _groupsRepository;
-  late final SeasonsRepository _seasonsRepository;
 
-  // Backwards compat properties if needed by UI
-  late final PlayersRepository jogadores;
-  late final SessionsRepository sessoes;
+  late final GroupMembersRepository groupMembers;
+  late final GroupsRepository groups;
+  late final SeasonsRepository seasons;
+  late final PlayersRepository players;
+  late final SessionsRepository sessions;
   late final MatchesRepository matches;
   late final RatingsRepository ratings;
-
-  GroupsRepository get groups => _groupsRepository;
-  GroupMembersRepository get groupMembers => _membrosRepository;
-  SeasonsRepository get seasons => _seasonsRepository;
-  PlayersRepository get players => jogadores;
-  SessionsRepository get sessions => sessoes;
-
-  // Aliases for legacy code
-  GroupsRepository get grupos => _groupsRepository;
-  GroupMembersRepository get membros => _membrosRepository;
-  SeasonsRepository get temporadas => _seasonsRepository;
-  MatchesRepository get partidas => matches;
+  late final SessionArrivalsRepository sessionArrivals;
 }

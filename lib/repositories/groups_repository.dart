@@ -1,4 +1,6 @@
+import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 import '../models/group_model.dart';
 import '../models/player_model.dart';
@@ -8,16 +10,16 @@ import 'group_members_repository.dart';
 /// Groups repository integrated with Supabase PostgreSQL.
 class GroupsRepository {
   final SupabaseClient _client;
-  final GroupMembersRepository _membrosRepo;
+  final GroupMembersRepository _membersRepo;
 
   GroupsRepository({
     SupabaseClient? client,
-    GroupMembersRepository? membrosRepo,
+    GroupMembersRepository? membersRepo,
   })  : _client = client ?? supabase,
-        _membrosRepo = membrosRepo ?? GroupMembersRepository(client: client);
+        _membersRepo = membersRepo ?? GroupMembersRepository(client: client);
 
   /// Returns groups that the authenticated user is a part of or created.
-  Future<List<GroupModel>> getMeusGrupos() async {
+  Future<List<GroupModel>> getMyGroups() async {
     final currentUserId = SupabaseConfig.currentUserId;
 
     if (currentUserId == null) {
@@ -29,7 +31,7 @@ class GroupsRepository {
     }
 
     // 1. Groups created by the user
-    final criadorResponse = await _client
+    final creatorResponse = await _client
         .from('groups')
         .select()
         .eq('creator_id', currentUserId);
@@ -37,24 +39,24 @@ class GroupsRepository {
     final Set<String> groupIds = {};
     final List<GroupModel> result = [];
 
-    for (final item in (criadorResponse as List)) {
-      final grupo = GroupModel.fromMap(Map<String, dynamic>.from(item));
-      groupIds.add(grupo.id);
-      result.add(grupo);
+    for (final item in (creatorResponse as List)) {
+      final group = GroupModel.fromMap(Map<String, dynamic>.from(item));
+      groupIds.add(group.id);
+      result.add(group);
     }
 
-    // 2. Groups where user is a member
-    final membroResponse = await _client
+    // 2. Groups where the user is a member
+    final memberResponse = await _client
         .from('group_members')
         .select('groups(*), players!inner(creator_id)')
         .eq('players.creator_id', currentUserId);
 
-    for (final item in (membroResponse as List)) {
+    for (final item in (memberResponse as List)) {
       if (item is Map && item['groups'] is Map) {
-        final grupo = GroupModel.fromMap(Map<String, dynamic>.from(item['groups']));
-        if (!groupIds.contains(grupo.id)) {
-          groupIds.add(grupo.id);
-          result.add(grupo);
+        final group = GroupModel.fromMap(Map<String, dynamic>.from(item['groups']));
+        if (!groupIds.contains(group.id)) {
+          groupIds.add(group.id);
+          result.add(group);
         }
       }
     }
@@ -62,39 +64,52 @@ class GroupsRepository {
     return result;
   }
 
-  /// Creates a new group.
-  Future<GroupModel> criarGrupo({
-    required String nome,
+  /// Generates a short, human-friendly invite code (e.g. "K7QX2P").
+  String _generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
+    final rnd = Random.secure();
+    return List.generate(6, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+
+  /// Creates a new group. The creator automatically becomes its admin.
+  Future<GroupModel> createGroup({
+    required String name,
     String? adminPlayerName,
   }) async {
     final currentUserId = SupabaseConfig.currentUserId;
+    if (currentUserId == null) {
+      throw Exception('Você precisa estar logado para criar um grupo.');
+    }
 
     // 1. Insert group
-    final grupoResp = await _client
+    final groupResp = await _client
         .from('groups')
         .insert({
-          'name': nome.trim(),
+          'id': 'grupo_${DateTime.now().millisecondsSinceEpoch}',
+          'name': name.trim(),
           'creator_id': currentUserId,
+          'invite_code': _generateInviteCode(),
         })
         .select()
         .single();
 
-    final grupo = GroupModel.fromMap(Map<String, dynamic>.from(grupoResp));
+    final group = GroupModel.fromMap(Map<String, dynamic>.from(groupResp));
 
     if (currentUserId != null) {
-      final jogadorExistente = await _client
+      final existingPlayer = await _client
           .from('players')
           .select()
           .eq('creator_id', currentUserId)
           .maybeSingle();
 
-      String adminJogadorId;
-      if (jogadorExistente != null) {
-        adminJogadorId = jogadorExistente['id'].toString();
+      String adminPlayerId;
+      if (existingPlayer != null) {
+        adminPlayerId = existingPlayer['id'].toString();
       } else {
-        final novoJogadorResp = await _client
+        final newPlayerResp = await _client
             .from('players')
             .insert({
+              'id': const Uuid().v4(),
               'creator_id': currentUserId,
               'name': adminPlayerName?.trim().isNotEmpty == true
                   ? adminPlayerName!.trim()
@@ -102,38 +117,38 @@ class GroupsRepository {
             })
             .select()
             .single();
-        final novoJogador =
-            PlayerModel.fromMap(Map<String, dynamic>.from(novoJogadorResp));
-        adminJogadorId = novoJogador.id;
+        final newPlayer =
+            PlayerModel.fromMap(Map<String, dynamic>.from(newPlayerResp));
+        adminPlayerId = newPlayer.id;
       }
 
       await _client.from('group_members').insert({
-        'group_id': grupo.id,
-        'player_id': adminJogadorId,
+        'group_id': group.id,
+        'player_id': adminPlayerId,
         'role': GroupMemberModel.roleAdmin,
       });
     }
 
     await _client.from('seasons').insert({
-      'group_id': grupo.id,
+      'group_id': group.id,
       'name': 'Temporada 1',
       'is_active': true,
     });
 
-    return grupo;
+    return group;
   }
 
   /// Updates the group name
-  Future<GroupModel> atualizarGrupo(GroupModel grupo) async {
-    final isAdmin = await _membrosRepo.isCurrentUserAdmin(grupo.id);
+  Future<GroupModel> updateGroup(GroupModel group) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(group.id);
     if (!isAdmin) {
       throw Exception('Access denied: Only administrators can edit the group.');
     }
 
     final response = await _client
         .from('groups')
-        .update({'name': grupo.nome.trim()})
-        .eq('id', grupo.id)
+        .update({'name': group.name.trim()})
+        .eq('id', group.id)
         .select()
         .single();
 
@@ -141,8 +156,8 @@ class GroupsRepository {
   }
 
   /// Deletes a group
-  Future<void> deletarGrupo(String groupId) async {
-    final isAdmin = await _membrosRepo.isCurrentUserAdmin(groupId);
+  Future<void> deleteGroup(String groupId) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
     if (!isAdmin) {
       throw Exception('Access denied: Only administrators can delete the group.');
     }

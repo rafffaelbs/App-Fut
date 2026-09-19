@@ -8,7 +8,7 @@ class RatingsRepository {
   RatingsRepository({SupabaseClient? client})
       : _client = client ?? supabase;
 
-  Future<List<RatingHistoryModel>> getHistoricoJogadorPorTemporada({
+  Future<List<RatingHistoryModel>> getPlayerHistoryBySeason({
     required String playerId,
     required String seasonId,
   }) async {
@@ -26,7 +26,7 @@ class RatingsRepository {
         .toList();
   }
 
-  Future<List<RatingHistoryModel>> getHistoricoCompletoJogador(
+  Future<List<RatingHistoryModel>> getFullPlayerHistory(
       String playerId) async {
     final response = await _client
         .from('rating_history')
@@ -41,7 +41,7 @@ class RatingsRepository {
         .toList();
   }
 
-  Future<Map<String, double>> getUltimosRatingsPorTemporada(
+  Future<Map<String, double>> getLatestRatingsBySeason(
       String seasonId) async {
     final response = await _client
         .from('rating_history')
@@ -49,24 +49,24 @@ class RatingsRepository {
         .eq('matches.sessions.season_id', seasonId)
         .order('created_at', ascending: true);
 
-    final Map<String, double> ultimosRatings = {};
+    final Map<String, double> latestRatings = {};
     for (final item in (response as List)) {
       if (item is Map) {
         final pId = item['player_id']?.toString() ?? '';
         final rating = double.tryParse(item['new_rating'].toString()) ?? 6.0;
         if (pId.isNotEmpty) {
-          ultimosRatings[pId] = rating;
+          latestRatings[pId] = rating;
         }
       }
     }
-    return ultimosRatings;
+    return latestRatings;
   }
 
-  Future<void> registrarRatingsEmLote(
-      List<RatingHistoryModel> registros) async {
-    if (registros.isEmpty) return;
+  Future<void> recordRatingsBatch(
+      List<RatingHistoryModel> records) async {
+    if (records.isEmpty) return;
 
-    final batch = registros.map((r) => r.toMap(includeId: false)).toList();
+    final batch = records.map((r) => r.toMap(includeId: false)).toList();
     await _client.from('rating_history').insert(batch);
   }
 }

@@ -22,11 +22,24 @@ class _PlayersScreenState extends State<PlayersScreen> {
   List<Map<String, dynamic>> players = [];
   bool isLoading = true;
   String _groupBy = 'A-Z';
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _loadPlayers();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    if (mounted) setState(() => _isAdmin = isAdmin);
+  }
+
+  void _denyPermission() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Apenas administradores podem alterar o elenco.')),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -37,11 +50,11 @@ class _PlayersScreenState extends State<PlayersScreen> {
     setState(() => isLoading = true);
 
     try {
-      final fetchedJogadores = await SupabaseService.instance.jogadores.getJogadoresDoGrupo(widget.groupId);
+      final fetchedJogadores = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
       
       final List<Map<String, dynamic>> mappedPlayers = fetchedJogadores.map((j) => {
         'id': j.id,
-        'name': j.nome,
+        'name': j.name,
         'icon': j.avatarUrl,
         'rating': kRatingBase,
         'totalGames': 0,
@@ -99,9 +112,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _addNewPlayer(String name, double rating, String? iconPath) async {
     setState(() => isLoading = true);
     try {
-      await SupabaseService.instance.jogadores.criarJogadorFantasma(
+      await SupabaseService.instance.players.createGhostPlayer(
         groupId: widget.groupId,
-        nome: name,
+        name: name,
         avatarUrl: iconPath,
       );
       await _loadPlayers();
@@ -121,9 +134,9 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final player = players[index];
     setState(() => isLoading = true);
     try {
-      await SupabaseService.instance.jogadores.removerJogadorDoGrupo(
+      await SupabaseService.instance.players.removePlayerFromGroup(
         groupId: widget.groupId,
-        jogadorId: player['id'].toString(),
+        playerId: player['id'].toString(),
       );
       await _loadPlayers();
     } catch(e) {
@@ -214,7 +227,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
           ),
         );
       },
-      onRemove: () => _removePlayer(index),
+      onRemove: _isAdmin ? () => _removePlayer(index) : () => _denyPermission(),
     );
   }
 
@@ -474,11 +487,13 @@ class _PlayersScreenState extends State<PlayersScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   children: listItems,
                 ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accentBlue,
-        onPressed:       _showAddPlayerDialog,
-        child:           const Icon(Icons.person_add_rounded, color: Colors.white),
-      ),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              onPressed:       _showAddPlayerDialog,
+              child:           const Icon(Icons.person_add_rounded, color: Colors.white),
+            )
+          : null,
     );
   }
 }

@@ -4,7 +4,11 @@ import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/season_stats_screen.dart';
 import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
 import 'package:app_do_fut/screens/manage_seasons_screen.dart';
+import 'package:app_do_fut/screens/manage_join_requests_screen.dart';
 import 'package:app_do_fut/screens/admin_debug_screen.dart';
+import 'package:app_do_fut/screens/player_detail.dart';
+import 'package:app_do_fut/screens/manage_members_screen.dart';
+import 'package:app_do_fut/repositories/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +28,48 @@ class GroupDashboardScreen extends StatefulWidget {
 
 class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
   int _currentIndex = 0;
+  bool _isAdmin = false;
+  bool _checkingAdmin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    if (mounted) setState(() {
+      _isAdmin = isAdmin;
+      _checkingAdmin = false;
+    });
+  }
+
+  /// Abre a tela de perfil (a mesma usada no Elenco/Ranking) já com o
+  /// jogador do usuário logado, sem precisar passar pela lista do Elenco.
+  Future<void> _openMyProfile() async {
+    final membership = await SupabaseService.instance.groupMembers.getMyMembership(widget.groupId);
+    if (!mounted) return;
+
+    if (membership == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não encontramos seu perfil de jogador neste grupo.')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerDetailScreen(
+          groupId: widget.groupId,
+          playerId: membership.playerId,
+          initialPlayerName: membership.player?.name,
+          playerIcon: membership.player?.avatarUrl,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,47 +93,29 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle, color: Colors.white),
+            tooltip: 'Meu Perfil',
+            onPressed: _openMyProfile,
+          ),
+          // A checagem real de permissão é feita pelo RLS no Supabase; isso
+          // here it just avoids showing admin buttons to a regular member.
+          if (!_checkingAdmin && _isAdmin)
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings, color: Colors.white),
             color: AppColors.headerBlue,
             onSelected: (value) async {
-              // Exige senha 0101
-              final TextEditingController passCtrl = TextEditingController();
-              bool auth = false;
-              await showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: AppColors.headerBlue,
-                  title: const Text('Área Administrativa', style: TextStyle(color: Colors.white)),
-                  content: TextField(
-                    controller: passCtrl,
-                    obscureText: true,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Senha',
-                      labelStyle: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
-                    TextButton(
-                      onPressed: () {
-                        if (passCtrl.text == '0101') {
-                          auth = true;
-                          Navigator.pop(ctx);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Senha incorreta!')));
-                        }
-                      },
-                      child: const Text('Entrar', style: TextStyle(color: AppColors.accentBlue)),
-                    ),
-                  ],
-                ),
-              );
-
-              if (!auth || !context.mounted) return;
-
-              if (value == 'badges') {
+              if (value == 'requests') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManageJoinRequestsScreen(groupId: widget.groupId)),
+                );
+              } else if (value == 'members') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManageMembersScreen(groupId: widget.groupId)),
+                );
+              } else if (value == 'badges') {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => ManageBadgesScreen(groupId: widget.groupId)),
@@ -149,6 +177,14 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'requests',
+                child: Row(children: [Icon(Icons.how_to_reg, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Solicitações de Entrada', style: TextStyle(color: Colors.white))]),
+              ),
+              const PopupMenuItem(
+                value: 'members',
+                child: Row(children: [Icon(Icons.admin_panel_settings, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Gerenciar Membros', style: TextStyle(color: Colors.white))]),
+              ),
               const PopupMenuItem(
                 value: 'badges',
                 child: Row(children: [Icon(Icons.workspace_premium, color: Colors.amber, size: 20), SizedBox(width: 8), Text('Gerenciar Troféus', style: TextStyle(color: Colors.white))]),

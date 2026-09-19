@@ -32,6 +32,7 @@ class MatchModel {
   final DateTime? endTime;
   final int teamAScore;
   final int teamBScore;
+  final int? durationSeconds; // Real elapsed time, direct from DB column (pauses already discounted)
   
   // Legacy / Relational fields
   final List<MatchLineupModel> lineups;
@@ -48,6 +49,7 @@ class MatchModel {
     this.endTime,
     this.teamAScore = 0,
     this.teamBScore = 0,
+    this.durationSeconds,
     this.lineups = const [],
     this.events = const [],
     this.customPlayers,
@@ -62,25 +64,28 @@ class MatchModel {
   
   // Map legacy matchDuration
   String? get matchDuration {
-    if (startTime != null && endTime != null) {
-      final diff = endTime!.difference(startTime!);
-      return '${diff.inMinutes}:${(diff.inSeconds % 60).toString().padLeft(2, '0')}';
+    final secs = resolvedDurationSeconds;
+    if (secs != null) {
+      return '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
     }
     return null;
   }
   
   DateTime? get dateTime => startTime;
   DateTime get timestamp => startTime ?? DateTime.now(); // Backwards compatibility
-  String get sessaoId => sessionId;
-  int? get duracaoSegundos => startTime != null && endTime != null ? endTime!.difference(startTime!).inSeconds : null;
+  // Prefer the real duration column (accounts for pauses); fall back to
+  // start/end diff only for old rows that never had duration_seconds set.
+  int? get resolvedDurationSeconds =>
+      durationSeconds ??
+      (startTime != null && endTime != null
+          ? endTime!.difference(startTime!).inSeconds
+          : null);
   
   MatchPlayers get players {
     if (customPlayers != null) return customPlayers!;
     return MatchPlayers.fromLineups(lineups);
   }
   
-  List<MatchLineupModel> get escalacao => lineups;
-  List<MatchEventModel> get eventos => events;
 
   factory MatchModel.fromMap(Map<String, dynamic> map) {
     List<MatchLineupModel> parsedLineups = [];
@@ -105,13 +110,18 @@ class MatchModel {
       id: map['id']?.toString() ?? '',
       sessionId: map['session_id']?.toString() ?? map['sessao_id']?.toString() ?? '',
       status: map['status']?.toString(),
-      startTime: map['start_time'] != null
-          ? DateTime.tryParse(map['start_time'].toString())
-          : (map['timestamp'] != null
-              ? DateTime.tryParse(map['timestamp'].toString())
-              : null),
+      startTime: map['played_at'] != null
+          ? DateTime.tryParse(map['played_at'].toString())
+          : (map['start_time'] != null
+              ? DateTime.tryParse(map['start_time'].toString())
+              : (map['timestamp'] != null
+                  ? DateTime.tryParse(map['timestamp'].toString())
+                  : null)),
       endTime: map['end_time'] != null
           ? DateTime.tryParse(map['end_time'].toString())
+          : null,
+      durationSeconds: map['duration_seconds'] != null
+          ? int.tryParse(map['duration_seconds'].toString())
           : null,
       teamAScore: map['team_a_score'] != null
           ? int.tryParse(map['team_a_score'].toString()) ?? 0
@@ -135,6 +145,7 @@ class MatchModel {
       if (startTime != null) 'start_time': startTime!.toIso8601String(),
       'team_a_score': teamAScore,
       'team_b_score': teamBScore,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
     };
     if (includeId && id.isNotEmpty) {
       data['id'] = id;
@@ -150,6 +161,7 @@ class MatchModel {
     DateTime? endTime,
     int? teamAScore,
     int? teamBScore,
+    int? durationSeconds,
     List<MatchLineupModel>? lineups,
     List<MatchEventModel>? events,
     MatchPlayers? customPlayers,
@@ -162,6 +174,7 @@ class MatchModel {
       endTime: endTime ?? this.endTime,
       teamAScore: teamAScore ?? this.teamAScore,
       teamBScore: teamBScore ?? this.teamBScore,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
       lineups: lineups ?? this.lineups,
       events: events ?? this.events,
       customPlayers: customPlayers ?? this.customPlayers,

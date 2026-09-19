@@ -60,7 +60,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     }
     if (groupPlayers.isEmpty && widget.groupId.isNotEmpty) {
       try {
-        final fetched = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
         groupPlayers = fetched.map((p) => {'id': p.id, 'name': p.displayName}).toList();
       } catch (_) {}
     }
@@ -403,9 +403,9 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
   }
 
   Future<void> _saveChanges() async {
-    final partidaId = widget.matchData['id']?.toString();
+    final matchIdVar = widget.matchData['id']?.toString();
 
-    if (partidaId == null || partidaId.isEmpty) {
+    if (matchIdVar == null || matchIdVar.isEmpty) {
       debugPrint(
         'SALVAR falhou: matchData["id"] ausente — a partida não pode ser '
         'localizada no Supabase.',
@@ -422,9 +422,9 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     }
 
     try {
-      // Reconstrói os eventos como MatchEventModel, resolvendo o
-      // playerId sempre que possível (evento antigo já traz playerId/assistId;
-      // eventos criados/editados nesta tela usam o nameToId como fallback).
+      // Rebuilds the events as MatchEventModel, resolving the
+      // playerId whenever possible (old events already carry playerId/assistId;
+      // events created/edited on this screen use nameToId as a fallback).
       final eventosModels = events.map((ev) {
         final playerId =
             (ev['playerId'] ?? nameToId[ev['player']] ?? ev['player'])
@@ -435,7 +435,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
         final assistId = rawAssistId?.toString();
 
         return MatchEventModel(
-          matchId: partidaId,
+          matchId: matchIdVar,
           playerId: playerId,
           assistPlayerId: (assistId == null || assistId.isEmpty)
               ? null
@@ -445,10 +445,10 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
         );
       }).toList();
 
-      // Atualiza apenas placar + eventos. Escalação e histórico de ratings
+      // Updates only the score + events. Lineup and rating history
       // NÃO são tocados aqui de propósito (ver MatchesRepository).
-      await SupabaseService.instance.partidas.atualizarPartidaParcial(
-        matchId: partidaId,
+      await SupabaseService.instance.matches.updatePartialMatch(
+        matchId: matchIdVar,
         teamAScore: scoreRed,
         teamBScore: scoreWhite,
         events: eventosModels,

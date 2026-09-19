@@ -27,7 +27,6 @@ class MatchLineupModel {
 
   bool get isRed => isTeamA;
   bool get isWhite => isTeamB;
-  String get jogadorId => playerId;
 
   factory MatchLineupModel.fromMap(Map<String, dynamic> map) {
     PlayerModel? playerObj;
@@ -41,13 +40,15 @@ class MatchLineupModel {
       id: map["id"] != null ? int.tryParse(map["id"].toString()) : null,
       matchId: map["match_id"]?.toString() ?? map["partida_id"]?.toString() ?? "",
       playerId: map["player_id"]?.toString() ?? map["jogador_id"]?.toString() ?? "",
-      team: map["time"]?.toString() ?? map["team"]?.toString() ?? teamA,
+      team: map["team"]?.toString() ?? map["time"]?.toString() ?? teamA,
       isGoalkeeper: map["is_goalkeeper"] == true || map["is_goleiro"] == true,
-      rating: map["rating"] != null
-          ? double.tryParse(map["rating"].toString())
-          : (map["nota_partida"] != null
-              ? double.tryParse(map["nota_partida"].toString())
-              : null),
+      rating: map["rating_snapshot"] != null
+          ? double.tryParse(map["rating_snapshot"].toString())
+          : (map["rating"] != null
+              ? double.tryParse(map["rating"].toString())
+              : (map["nota_partida"] != null
+                  ? double.tryParse(map["nota_partida"].toString())
+                  : null)),
       player: playerObj,
     );
   }
@@ -56,9 +57,9 @@ class MatchLineupModel {
     final data = <String, dynamic>{
       "match_id": matchId,
       "player_id": playerId,
-      "time": isTeamA ? "red" : "white",
+      "team": isTeamA ? "red" : "white",
       "is_goalkeeper": isGoalkeeper,
-      if (rating != null) "rating": rating,
+      if (rating != null) "rating_snapshot": rating,
     };
     if (includeId && id != null) {
       data["id"] = id;

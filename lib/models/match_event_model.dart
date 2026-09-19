@@ -37,9 +37,6 @@ class MatchEventModel {
   String? get assistJogadorId => assistPlayerId;
 
   // Legacy compat getters
-  String get tipo => eventType;
-  String get jogadorId => playerId;
-  PlayerModel? get jogador => player;
   PlayerModel? get assistJogador => assistPlayer;
   String? get tempo => minute ?? timestamp;
   String? get time => team;
@@ -61,8 +58,8 @@ class MatchEventModel {
       assistObj = PlayerModel.fromJson(Map<String, dynamic>.from(map['assist_jogador']));
     }
 
-    final String? rawTime = map['time']?.toString();
-    final String? rawMinute = map['minute']?.toString() ?? map['tempo']?.toString() ?? map['timestamp']?.toString();
+    final String? rawTime = map['team']?.toString() ?? map['time']?.toString();
+    final String? rawMinute = map['event_time']?.toString() ?? map['minute']?.toString() ?? map['tempo']?.toString() ?? map['timestamp']?.toString();
     final String? teamVal = map['team']?.toString() ?? (rawTime == 'red' || rawTime == 'white' ? rawTime : null);
 
     return MatchEventModel(
@@ -85,8 +82,8 @@ class MatchEventModel {
       'player_id': playerId,
       'assist_player_id': assistPlayerId,
       'event_type': eventType,
-      'time': team ?? 'red',
-      if (minute != null || timestamp != null) 'minute': minute ?? timestamp,
+      'team': team ?? 'red',
+      if (minute != null || timestamp != null) 'event_time': minute ?? timestamp,
     };
     if (includeId && id != null) {
       data['id'] = id;

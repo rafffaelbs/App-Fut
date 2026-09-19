@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Configurações do Supabase para o projeto App-Fut.
+/// Supabase configuration for the App-Fut project.
 class SupabaseConfig {
   static const String projectId = 'hcjiqushursknfsdvavy';
   static const String url = 'https://hcjiqushursknfsdvavy.supabase.co';
@@ -14,15 +14,15 @@ class SupabaseConfig {
     );
   }
 
-  /// Instância do cliente Supabase ativo.
+  /// The active Supabase client instance.
   static SupabaseClient get client => Supabase.instance.client;
 
-  /// Usuário autenticado atual do Supabase Auth.
+  /// The currently authenticated Supabase Auth user.
   static User? get currentUser => client.auth.currentUser;
 
-  /// ID do usuário autenticado atual (UUID) ou nulo se não autenticado.
+  /// The current authenticated user's ID (UUID), or null if not authenticated.
   static String? get currentUserId => client.auth.currentUser?.id;
 }
 
-/// Acesso de conveniência ao cliente Supabase.
+/// Convenience accessor for the Supabase client.
 SupabaseClient get supabase => SupabaseConfig.client;

@@ -76,10 +76,10 @@ class _RankingScreenState extends State<RankingScreen> {
     final Map<String, String> nameToIdMap = {};
     final Map<String, String> idToNameMap = {};
 
-    // 1. Carrega jogadores do grupo
+    // 1. Load players from the group
     try {
       if (widget.groupId.isNotEmpty) {
-        final groupPlayers = await SupabaseService.instance.players.getJogadoresDoGrupo(widget.groupId);
+        final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
         for (final p in groupPlayers) {
           iconMap[p.id] = p.avatarUrl;
           if (p.name.isNotEmpty) {
@@ -109,12 +109,12 @@ class _RankingScreenState extends State<RankingScreen> {
       }
     }
 
-    // 2. Carrega partidas da sessão
+    // 2. Load matches for the session
     List<dynamic> history = [];
     try {
-      final partidas = await SupabaseService.instance.partidas.getPartidasPorSessao(widget.tournamentId);
-      if (partidas.isNotEmpty) {
-        history = partidas.map((p) => {
+      final matchList = await SupabaseService.instance.matches.getMatchesBySession(widget.tournamentId);
+      if (matchList.isNotEmpty) {
+        history = matchList.map((p) => {
           'id': p.id,
           'date': p.startTime?.toIso8601String() ?? p.timestamp.toIso8601String(),
           'scoreRed': p.teamAScore,
@@ -193,7 +193,7 @@ class _RankingScreenState extends State<RankingScreen> {
             eventPlayerNames[astId] = ev['assist'].toString();
           }
 
-          // Normalização de eventos (se o ID for o nome, tenta achar o ID real)
+          // Event normalization (if the ID is the name, try to find the real ID)
           if (nameToIdMap.containsKey(pid)) pid = nameToIdMap[pid]!;
           if (nameToIdMap.containsKey(astId)) astId = nameToIdMap[astId]!;
 
@@ -239,7 +239,7 @@ class _RankingScreenState extends State<RankingScreen> {
         String playerId = playerIdFromObject(playerObj);
         final String playerName = (playerObj['name'] ?? '').toString();
 
-        // Normalização: se o ID no histórico for igual ao nome, tenta ver se esse jogador agora tem um ID real
+        // Normalization: if the ID in the history equals the name, check if this player now has a real ID
         if (playerId == playerName && nameToIdMap.containsKey(playerName)) {
           playerId = nameToIdMap[playerName]!;
         }

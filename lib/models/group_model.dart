@@ -3,24 +3,25 @@ class GroupModel {
   final String id;
   final String name;
   final String? creatorId;
+  final String? inviteCode;
   final DateTime? createdAt;
 
   const GroupModel({
     required this.id,
     required this.name,
     this.creatorId,
+    this.inviteCode,
     this.createdAt,
   });
 
   /// Getter for legacy UI compatibility if needed.
-  String get nome => name;
-  String? get criadorId => creatorId;
 
   factory GroupModel.fromMap(Map<String, dynamic> map) {
     return GroupModel(
       id: map['id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
       creatorId: map['creator_id']?.toString(),
+      inviteCode: map['invite_code']?.toString(),
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'].toString())
           : null,
@@ -45,12 +46,14 @@ class GroupModel {
     String? id,
     String? name,
     String? creatorId,
+    String? inviteCode,
     DateTime? createdAt,
   }) {
     return GroupModel(
       id: id ?? this.id,
       name: name ?? this.name,
       creatorId: creatorId ?? this.creatorId,
+      inviteCode: inviteCode ?? this.inviteCode,
       createdAt: createdAt ?? this.createdAt,
     );
   }

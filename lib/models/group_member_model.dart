@@ -3,9 +3,7 @@ import 'player_model.dart';
 /// Model for the `group_members` table in Supabase PostgreSQL.
 class GroupMemberModel {
   static const String roleAdmin = 'admin';
-  // Must match the CHECK constraint on group_members.role in Supabase,
-  // which only accepts 'admin' or 'membro' (Portuguese).
-  static const String roleMember = 'membro';
+  static const String roleMember = 'member';
 
   final String id;
   final String groupId;
@@ -24,17 +22,13 @@ class GroupMemberModel {
   });
 
   /// Legacy compat getters
-  String get grupoId => groupId;
-  String get jogadorId => playerId;
-  String get papel => role;
   DateTime? get dataIngresso => joinedAt;
-  PlayerModel? get jogador => player;
 
   /// Indicates if the member has Admin privileges in the group.
   bool get isAdmin => role.trim().toLowerCase() == roleAdmin || role.trim().toLowerCase() == 'admin';
 
   /// Indicates if it's a common member.
-  bool get isMember => role.trim().toLowerCase() == roleMember || role.trim().toLowerCase() == 'membro';
+  bool get isMember => role.trim().toLowerCase() == roleMember;
 
   factory GroupMemberModel.fromMap(Map<String, dynamic> map) {
     PlayerModel? associatedPlayer;
@@ -51,7 +45,6 @@ class GroupMemberModel {
 
     // Role migration compat
     String mappedRole = map['role']?.toString().toLowerCase() ?? map['papel']?.toString().toLowerCase() ?? roleMember;
-    if (mappedRole == 'membro') mappedRole = roleMember;
 
     return GroupMemberModel(
       id: map['id']?.toString() ?? '',

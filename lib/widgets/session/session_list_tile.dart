@@ -78,7 +78,7 @@ class SessionListTile extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${session.jogadores}x${session.jogadores}',
+                      '${session.playerCount}x${session.playerCount}',
                       style: const TextStyle(color: Colors.grey),
                     ),
                   ],

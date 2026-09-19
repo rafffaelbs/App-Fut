@@ -4,13 +4,17 @@ import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/sync_screen.dart';
 import 'package:app_do_fut/screens/login_screen.dart';
+import 'package:app_do_fut/screens/complete_profile_screen.dart';
+import 'package:app_do_fut/screens/join_group_screen.dart';
 import 'package:app_do_fut/services/sync_service.dart';
 import 'package:app_do_fut/services/fix_event_times_service.dart';
 import 'package:app_do_fut/config/supabase_config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:app_do_fut/models/group_model.dart';
+import 'package:app_do_fut/models/player_model.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
 
 // Global route observer for tracking navigation
@@ -42,21 +46,113 @@ class MyApp extends StatelessWidget {
         ),
       ),
       navigatorObservers: [routeObserver],
-      home: const HomePage(),
+      home: const AuthGate(),
     );
   }
 }
 
+/// Decides what to show based on auth + profile-completion state:
+/// not logged in -> LoginScreen; logged in but no player profile linked ->
+/// CompleteProfileScreen; otherwise -> HomePage ("Meus Grupos").
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: SupabaseConfig.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = SupabaseConfig.client.auth.currentSession;
+        if (session == null) {
+          return const LoginScreen();
+        }
+        return _ProfileCheck(key: ValueKey(session.user.id));
+      },
+    );
+  }
+}
+
+/// Auto-claims any "ghost" player matching this user's e-mail, then routes
+/// to CompleteProfileScreen (no player yet) or HomePage.
+class _ProfileCheck extends StatefulWidget {
+  const _ProfileCheck({super.key});
+
+  @override
+  State<_ProfileCheck> createState() => _ProfileCheckState();
+}
+
+class _ProfileCheckState extends State<_ProfileCheck> {
+  bool _loading = true;
+  bool _hasProfile = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    try {
+      // Automatically links "ghost" players with the same email.
+      await SupabaseService.instance.players.claimGhostProfiles();
+      final myPlayers = await SupabaseService.instance.players.getMyPlayers();
+      if (mounted) setState(() => _hasProfile = myPlayers.isNotEmpty);
+    } catch (e) {
+      debugPrint('Error checking profile: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.deepBlue,
+        body: Center(child: CircularProgressIndicator(color: AppColors.accentBlue)),
+      );
+    }
+
+    if (!_hasProfile) {
+      final email = SupabaseConfig.currentUser?.email ?? '';
+      return CompleteProfileScreen(
+        initialEmail: email,
+        onDone: (name) {
+          // The player itself is only created when the person creates or joins
+          // a group (players needs to exist linked to a group_members).
+          // We store the chosen name and move on to Home, which uses that
+          // name as a suggestion in both flows.
+          setState(() {
+            _pendingName = name;
+            _hasProfile = true; // moves on to Home; the group will create the player
+          });
+        },
+      );
+    }
+
+    return HomePage(suggestedName: _pendingName);
+  }
+
+  String? _pendingName;
+}
+
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String? suggestedName;
+
+  const HomePage({super.key, this.suggestedName});
 
   @override
   State createState() => _HomePageState();
 }
 
-class _HomePageState extends State {
+class _HomePageState extends State<HomePage> {
   final SyncService _syncService = SyncService();
-  List groups = [];
+  List<GroupModel> groups = [];
   bool isLoading = true;
 
   @override
@@ -65,11 +161,21 @@ class _HomePageState extends State {
     _loadGroups();
   }
 
+  Future<void> _openJoinGroupScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JoinGroupScreen(defaultName: widget.suggestedName ?? ''),
+      ),
+    );
+    await _loadGroups();
+  }
+
   // --- PERSISTENCE: LOAD ---
   Future _loadGroups() async {
     setState(() => isLoading = true);
     try {
-      final fetchedGroups = await SupabaseService.instance.grupos.getMeusGrupos();
+      final fetchedGroups = await SupabaseService.instance.groups.getMyGroups();
       setState(() {
         groups = fetchedGroups;
       });
@@ -159,7 +265,7 @@ class _HomePageState extends State {
     final group = isEditing ? groups[index] : null;
 
     final TextEditingController nameController = TextEditingController(
-      text: isEditing ? group!.nome : '',
+      text: isEditing ? group!.name : '',
     );
 
     showModalBottomSheet(
@@ -235,10 +341,13 @@ class _HomePageState extends State {
 
                     try {
                       if (isEditing) {
-                        final updatedGroup = group!.copyWith(nome: nameController.text.trim());
-                        await SupabaseService.instance.grupos.atualizarGrupo(updatedGroup);
+                        final updatedGroup = group!.copyWith(name: nameController.text.trim());
+                        await SupabaseService.instance.groups.updateGroup(updatedGroup);
                       } else {
-                        await SupabaseService.instance.grupos.criarGrupo(nome: nameController.text.trim());
+                        await SupabaseService.instance.groups.createGroup(
+                          name: nameController.text.trim(),
+                          adminPlayerName: widget.suggestedName,
+                        );
                       }
                       await _loadGroups();
                     } catch (e) {
@@ -298,7 +407,7 @@ class _HomePageState extends State {
               Navigator.pop(ctx);
               setState(() => isLoading = true);
               try {
-                await SupabaseService.instance.grupos.deletarGrupo(groups[index].id);
+                await SupabaseService.instance.groups.deleteGroup(groups[index].id);
                 await _loadGroups();
               } catch (e) {
                 debugPrint('Error deleting group: $e');
@@ -462,6 +571,24 @@ class _HomePageState extends State {
                     subtitle: 'Restaurar horários dos eventos do backup',
                     onTap: () => _runFixEventTimes(),
                   ),
+                  _buildDrawerTile(
+                    icon: Icons.group_add_rounded,
+                    title: 'Entrar em um grupo',
+                    subtitle: 'Solicitar entrada com um código de convite',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openJoinGroupScreen();
+                    },
+                  ),
+                  _buildDrawerTile(
+                    icon: Icons.logout_rounded,
+                    title: 'Sair',
+                    subtitle: SupabaseConfig.currentUser?.email ?? '',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await SupabaseConfig.client.auth.signOut();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -511,10 +638,30 @@ class _HomePageState extends State {
               child: CircularProgressIndicator(color: AppColors.accentBlue),
             )
           : groups.isEmpty
-          ? const Center(
-              child: Text(
-                "Nenhum grupo criado ainda.",
-                style: TextStyle(color: Colors.white54),
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Nenhum grupo ainda.",
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _openJoinGroupScreen,
+                    icon: const Icon(Icons.group_add_rounded, color: Colors.white),
+                    label: const Text('Entrar com código de convite'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.headerBlue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "ou toque no + para criar seu próprio grupo",
+                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
+                  ),
+                ],
               ),
             )
           : ListView.builder(
@@ -537,7 +684,7 @@ class _HomePageState extends State {
                           MaterialPageRoute(
                             builder: (context) => GroupDashboardScreen(
                               groupId: group.id,
-                              groupName: group.nome,
+                              groupName: group.name,
                             ),
                           ),
                         );
@@ -552,7 +699,7 @@ class _HomePageState extends State {
                           child: Icon(Icons.groups, color: Colors.white),
                         ),
                         title: Text(
-                          group.nome,
+                          group.name,
                           style: const TextStyle(
                             color: AppColors.textWhite,
                             fontWeight: FontWeight.bold,

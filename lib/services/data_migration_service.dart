@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 
-/// Resultado detalhado da execução da migração de dados para o Supabase.
+/// Detailed result of running the data migration to Supabase.
 class MigrationResult {
   final bool success;
   final int groupsCount;
@@ -14,7 +14,7 @@ class MigrationResult {
   final int seasonsCount;
   final int sessionsCount;
   final int matchesCount;
-  final int escalacoesCount;
+  final int lineupsCount;
   final int eventsCount;
   final int ratingsCount;
   final List<String> logs;
@@ -27,7 +27,7 @@ class MigrationResult {
     this.seasonsCount = 0,
     this.sessionsCount = 0,
     this.matchesCount = 0,
-    this.escalacoesCount = 0,
+    this.lineupsCount = 0,
     this.eventsCount = 0,
     this.ratingsCount = 0,
     this.logs = const [],
@@ -36,12 +36,12 @@ class MigrationResult {
 
   @override
   String toString() {
-    return 'MigrationResult(success: $success, grupos: $groupsCount, jogadores: $playersCount, temporadas: $seasonsCount, sessoes: $sessionsCount, partidas: $matchesCount, escalacoes: $escalacoesCount, eventos: $eventsCount, ratings: $ratingsCount, erros: ${errors.length})';
+    return 'MigrationResult(success: $success, grupos: $groupsCount, jogadores: $playersCount, temporadas: $seasonsCount, sessoes: $sessionsCount, partidas: $matchesCount, escalacoes: $lineupsCount, eventos: $eventsCount, ratings: $ratingsCount, erros: ${errors.length})';
   }
 }
 
-/// Serviço responsável por orquestrar a migração dos dados locais (JSON/SharedPreferences)
-/// para as tabelas relacionais do Supabase PostgreSQL.
+/// Service responsible for orchestrating the migration of local data (JSON/SharedPreferences)
+/// into the relational tables of Supabase PostgreSQL.
 class DataMigrationService {
   static const Uuid _uuid = Uuid();
   final SupabaseClient _client;
@@ -49,10 +49,10 @@ class DataMigrationService {
   DataMigrationService({SupabaseClient? client})
       : _client = client ?? SupabaseConfig.client;
 
-  /// Função principal de migração.
+  /// Main migration function.
   ///
-  /// Pode receber [jsonContent] explicitamente (como string do backup), ou buscar do arquivo
-  /// `pelada_backup_1789226662128.json` local ou das chaves do [SharedPreferences].
+  /// Can receive [jsonContent] explicitly (as a backup string), or read it from the local
+  /// `pelada_backup_1789226662128.json` file, or from the [SharedPreferences] keys.
   Future<MigrationResult> migrateJsonToSupabase({
     String? jsonContent,
     void Function(String message)? onProgress,
@@ -73,25 +73,25 @@ class DataMigrationService {
     int totalSeasons = 0;
     int totalSessions = 0;
     int totalMatches = 0;
-    int totalEscalacoes = 0;
+    int totalLineups = 0;
     int totalEvents = 0;
     int totalRatings = 0;
 
     try {
-      // 1. Obtenção do Map de dados
+      // 1. Retrieve the data Map
       Map<String, dynamic> rawData = {};
       if (jsonContent != null && jsonContent.trim().isNotEmpty) {
         rawData = jsonDecode(jsonContent);
         log('Dados carregados a partir da string JSON fornecida.');
       } else {
-        // Tenta ler o arquivo de backup local no disco
+        // Try to read the local backup file from disk
         final backupFile = File('pelada_backup_1789226662128.json');
         if (await backupFile.exists()) {
           final content = await backupFile.readAsString();
           rawData = jsonDecode(content);
           log('Dados carregados do arquivo local pelada_backup_1789226662128.json.');
         } else {
-          // Fallback para SharedPreferences
+          // Fallback to SharedPreferences
           log('Arquivo local não encontrado. Carregando dados do SharedPreferences...');
           final prefs = await SharedPreferences.getInstance();
           for (final key in prefs.getKeys()) {
@@ -107,7 +107,7 @@ class DataMigrationService {
         throw Exception('Nenhum dado encontrado para migrar (backup vazio).');
       }
 
-      // 2. Extração de Grupos
+      // 2. Extract Groups
       List<dynamic> groupsList = [];
       if (rawData.containsKey('app_groups')) {
         final gData = rawData['app_groups'];
@@ -115,7 +115,7 @@ class DataMigrationService {
       }
 
       if (groupsList.isEmpty) {
-        // Fallback: Grupo padrão
+        // Fallback: default group
         groupsList = [
           {
             'id': 'grupo_1773427387405',
@@ -127,7 +127,7 @@ class DataMigrationService {
 
       log('Encontrados ${groupsList.length} grupo(s) para migração.');
 
-      // Map para converter legacyGroupId -> newGroupUuid
+      // Map to convert legacyGroupId -> newGroupUuid
       final Map<String, String> groupMapping = {};
 
       for (final g in groupsList) {
@@ -146,10 +146,10 @@ class DataMigrationService {
         totalGroups++;
       }
 
-      // Grupo primário para associar dados caso não haja chave específica
+      // Primary group to associate data with when there's no specific key
       final String primaryGroupUuid = groupMapping.values.first;
 
-      // 3. Extração e Inserção de Jogadores
+      // 3. Extract and Insert Players
       final Set<String> registeredPlayerIds = {};
       final List<Map<String, dynamic>> playersToInsert = [];
       final List<Map<String, dynamic>> membersToInsert = [];
@@ -182,13 +182,13 @@ class DataMigrationService {
               'id': _uuid.v4(),
               'group_id': targetGroupUuid,
               'player_id': pId,
-              'role': 'membro',
+              'role': 'member',
             });
           }
         }
       }
 
-      // 4. Varrer Partidas para identificar jogadores não listados na lista base (para evitar quebra de FK)
+      // 4. Scan Matches to identify players not listed in the base list (to avoid breaking FKs)
       final Set<String> matchPlayerIds = {};
       final Map<String, String> missingPlayerNames = {};
 
@@ -248,7 +248,7 @@ class DataMigrationService {
         }
       }
 
-      // Adiciona jogadores recuperados das partidas
+      // Add players recovered from matches
       for (final entry in missingPlayerNames.entries) {
         if (!registeredPlayerIds.contains(entry.key)) {
           registeredPlayerIds.add(entry.key);
@@ -263,26 +263,26 @@ class DataMigrationService {
             'id': _uuid.v4(),
             'group_id': primaryGroupUuid,
             'player_id': entry.key,
-            'role': 'membro',
+            'role': 'member',
           });
           log('Jogador recuperado de partidas: "${entry.value}" (${entry.key})');
         }
       }
 
-      // Inserção em lote de jogadores
+      // Batch insert of players
       if (playersToInsert.isNotEmpty) {
         log('Inserindo ${playersToInsert.length} jogadores em lote na tabela "players"...');
         await _insertInBatches('players', playersToInsert);
         totalPlayers = playersToInsert.length;
       }
 
-      // Inserção em lote de group_members
+      // Batch insert of group_members
       if (membersToInsert.isNotEmpty) {
         log('Inserindo ${membersToInsert.length} registros em "group_members"...');
         await _insertInBatches('group_members', membersToInsert);
       }
 
-      // 5. Extração e Inserção de Temporadas
+      // 5. Extract and Insert Seasons
       final List<Map<String, dynamic>> seasonsToInsert = [];
       final List<Map<String, dynamic>> parsedSeasons = [];
 
@@ -323,7 +323,7 @@ class DataMigrationService {
       }
 
       if (seasonsToInsert.isEmpty) {
-        // Cria temporada padrão caso não haja no backup
+        // Create a default season in case the backup has none
         final defaultSeasonId = _uuid.v4();
         seasonsToInsert.add({
           'id': defaultSeasonId,
@@ -345,7 +345,7 @@ class DataMigrationService {
       await _insertInBatches('seasons', seasonsToInsert);
       totalSeasons = seasonsToInsert.length;
 
-      // 6. Extração e Inserção de Sessões (Peladas)
+      // 6. Extract and Insert Sessions (pickup games)
       final Map<String, String> sessionMapping = {}; // legacySessionId -> newSessionUuid
       final Map<String, String> sessionSeasonMap = {}; // legacySessionId -> seasonId
       final List<Map<String, dynamic>> sessionsToInsert = [];
@@ -362,7 +362,7 @@ class DataMigrationService {
             final String newSessUuid = _uuid.v4();
             sessionMapping[legacySessId] = newSessUuid;
 
-            // Determina a data e a temporada correspondente
+            // Determine the date and the matching season
             DateTime? sessDate;
             if (sess['timestamp'] != null) {
               sessDate = DateTime.tryParse(sess['timestamp'].toString());
@@ -408,10 +408,10 @@ class DataMigrationService {
       await _insertInBatches('sessions', sessionsToInsert);
       totalSessions = sessionsToInsert.length;
 
-      // 7. Extração e Inserção de Partidas, Escalações, Eventos e Histórico de Ratings
+      // 7. Extract and Insert Matches, Lineups, Events and Rating History
       final List<Map<String, dynamic>> matchesToInsert = [];
-      final List<Map<String, dynamic>> escalacoesToInsert = [];
-      final List<Map<String, dynamic>> eventosToInsert = [];
+      final List<Map<String, dynamic>> lineupsToInsert = [];
+      final List<Map<String, dynamic>> eventsToInsert = [];
       final List<Map<String, dynamic>> ratingsToInsert = [];
 
       for (final key in rawData.keys) {
@@ -434,13 +434,13 @@ class DataMigrationService {
                 ? DateTime.tryParse(m['date'].toString()) ?? DateTime.now()
                 : DateTime.now();
 
-            int duracaoSeg = 480;
+            int durationSec = 480;
             if (m['match_duration'] != null) {
               final parts = m['match_duration'].toString().split(':');
               if (parts.length == 2) {
                 final min = int.tryParse(parts[0]) ?? 8;
                 final sec = int.tryParse(parts[1]) ?? 0;
-                duracaoSeg = min * 60 + sec;
+                durationSec = min * 60 + sec;
               }
             }
 
@@ -450,10 +450,10 @@ class DataMigrationService {
               'start_time': matchDate.toIso8601String(),
               'team_a_score': int.tryParse(m['scoreRed']?.toString() ?? '0') ?? 0,
               'team_b_score': int.tryParse(m['scoreWhite']?.toString() ?? '0') ?? 0,
-              'duration_seconds': duracaoSeg,
+              'duration_seconds': durationSec,
             });
 
-            // Escalação e Ratings
+            // Lineup and Ratings
             final pObj = m['players'] as Map<String, dynamic>? ?? {};
 
             void processTeamPlayers(String side, bool isGk, dynamic playerOrList) {
@@ -465,7 +465,7 @@ class DataMigrationService {
                   if (pId != null && registeredPlayerIds.contains(pId)) {
                     final double rating = double.tryParse(pl['rating']?.toString() ?? '6.0') ?? 6.0;
 
-                    escalacoesToInsert.add({
+                    lineupsToInsert.add({
                       'match_id': matchUuid,
                       'player_id': pId,
                       'time': side,
@@ -491,7 +491,7 @@ class DataMigrationService {
             processTeamPlayers('red', true, pObj['gk_red']);
             processTeamPlayers('white', true, pObj['gk_white']);
 
-            // Eventos
+            // Events
             final events = m['events'] as List<dynamic>? ?? [];
             for (final ev in events) {
               if (ev is Map) {
@@ -505,7 +505,7 @@ class DataMigrationService {
                     astId = null;
                   }
 
-                  eventosToInsert.add({
+                  eventsToInsert.add({
                     'match_id': matchUuid,
                     'player_id': pId,
                     'assist_player_id': astId,
@@ -520,22 +520,22 @@ class DataMigrationService {
         }
       }
 
-      // Inserção em lote de Partidas
+      // Batch insert of Matches
       log('Inserindo ${matchesToInsert.length} partidas...');
       await _insertInBatches('matches', matchesToInsert);
       totalMatches = matchesToInsert.length;
 
-      // Inserção em lote de Escalações
-      log('Inserindo ${escalacoesToInsert.length} escalações de atletas...');
-      await _insertInBatches('match_lineups', escalacoesToInsert);
-      totalEscalacoes = escalacoesToInsert.length;
+      // Batch insert of Lineups
+      log('Inserindo ${lineupsToInsert.length} escalações de atletas...');
+      await _insertInBatches('match_lineups', lineupsToInsert);
+      totalLineups = lineupsToInsert.length;
 
-      // Inserção em lote de Eventos
-      log('Inserindo ${eventosToInsert.length} eventos de partida (gols, assistências, cartões)...');
-      await _insertInBatches('match_events', eventosToInsert);
-      totalEvents = eventosToInsert.length;
+      // Batch insert of Events
+      log('Inserindo ${eventsToInsert.length} eventos de partida (gols, assistências, cartões)...');
+      await _insertInBatches('match_events', eventsToInsert);
+      totalEvents = eventsToInsert.length;
 
-      // Inserção em lote de Histórico de Ratings
+      // Batch insert of Rating History
       log('Inserindo ${ratingsToInsert.length} registros no histórico de ratings...');
       await _insertInBatches('rating_history', ratingsToInsert);
       totalRatings = ratingsToInsert.length;
@@ -549,7 +549,7 @@ class DataMigrationService {
         seasonsCount: totalSeasons,
         sessionsCount: totalSessions,
         matchesCount: totalMatches,
-        escalacoesCount: totalEscalacoes,
+        lineupsCount: totalLineups,
         eventsCount: totalEvents,
         ratingsCount: totalRatings,
         logs: logs,
@@ -568,7 +568,7 @@ class DataMigrationService {
         seasonsCount: totalSeasons,
         sessionsCount: totalSessions,
         matchesCount: totalMatches,
-        escalacoesCount: totalEscalacoes,
+        lineupsCount: totalLineups,
         eventsCount: totalEvents,
         ratingsCount: totalRatings,
         logs: logs,
@@ -577,7 +577,7 @@ class DataMigrationService {
     }
   }
 
-  /// Insere registros em lote respeitando limites de tamanho de requisição.
+  /// Inserts records in batches, respecting request size limits.
   Future<void> _insertInBatches(
     String table,
     List<Map<String, dynamic>> items, {
