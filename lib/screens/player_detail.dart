@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../models/season_model.dart';
 import '../repositories/supabase_service.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
@@ -37,8 +40,16 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   String playerName = '';
   String? resolvedIcon;
 
+  // ── Filtro de período ────────────────────────────────────────
+  // Afeta TODOS os dados da tela (nota, ranking, stats, gráfico, avançadas).
+  List<dynamic> _rawHistory = []; // histórico completo, sem filtro
+  List<SeasonModel> _allSeasons = [];
+  String _selectedPeriodKey = 'all'; // 'all'|'last'|'month'|'year'|'custom'|seasonId
+  DateTime? _customFrom;
+  DateTime? _customTo;
+
   // ── Gráfico ──────────────────────────────────────────────────
-  List<dynamic> _allHistory = [];
+  List<dynamic> _allHistory = []; // histórico já filtrado (usado na tela toda)
   String _chartMetric = 'Nota'; // 'Nota' ou 'G+A' (Gols/Assistências)
   String _chartPeriod = 'Sessão';
   bool _chartAccumulated = false; // dia a dia (false) ou acumulado (true)
@@ -121,8 +132,124 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
     }
 
-    final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
-    final globalStats = calculateGlobalStats(allHistory);
+    final List<dynamic> rawHistory = await getAllGroupMatches(widget.groupId);
+
+    List<SeasonModel> seasons = [];
+    try {
+      seasons = await SupabaseService.instance.seasons.getSeasons(
+        widget.groupId,
+      );
+    } catch (_) {}
+
+    // Filtro padrão: temporada ativa (igual à tela de estatísticas do grupo).
+    // Se não houver temporadas cadastradas, mostra o histórico completo.
+    String defaultPeriodKey = 'all';
+    if (seasons.isNotEmpty) {
+      final activeSeason = seasons.firstWhereOrNull((s) => s.isActive) ??
+          seasons.first;
+      defaultPeriodKey = activeSeason.id;
+    }
+
+    _rawHistory = rawHistory;
+    _allSeasons = seasons;
+    _allPlayers = players;
+    resolvedIcon = icon;
+    playerName = resolvedName;
+    _selectedPeriodKey = defaultPeriodKey;
+
+    _applyFilter();
+    setState(() => isLoading = false);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // FILTRO DE PERÍODO — recalcula TODOS os dados da tela
+  // ─────────────────────────────────────────────────────────────
+  List<dynamic> _computeFilteredHistory() {
+    if (_rawHistory.isEmpty) return [];
+
+    DateTime? parseDate(dynamic m) {
+      if (m is! Map) return null;
+      final raw = m['session_date'] ?? m['date'];
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString());
+    }
+
+    if (_selectedPeriodKey == 'all') return _rawHistory;
+
+    if (_selectedPeriodKey == 'last') {
+      final sorted = List<dynamic>.from(_rawHistory)
+        ..sort(
+          (a, b) =>
+              (parseDate(a) ?? DateTime(0)).compareTo(parseDate(b) ?? DateTime(0)),
+        );
+      final dynamic lastMatch = sorted.last;
+      final dynamic lastSessionId = (lastMatch as Map)['sessionId'];
+      if (lastSessionId == null) return [lastMatch];
+      return sorted.where((m) => (m as Map)['sessionId'] == lastSessionId).toList();
+    }
+
+    if (_selectedPeriodKey == 'month') {
+      final now = DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && d.year == now.year && d.month == now.month;
+      }).toList();
+    }
+
+    if (_selectedPeriodKey == 'year') {
+      final now = DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && d.year == now.year;
+      }).toList();
+    }
+
+    if (_selectedPeriodKey == 'custom') {
+      if (_customFrom == null || _customTo == null) return _rawHistory;
+      final endInclusive = DateTime(
+        _customTo!.year,
+        _customTo!.month,
+        _customTo!.day,
+        23,
+        59,
+        59,
+      );
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null &&
+            !d.isBefore(_customFrom!) &&
+            !d.isAfter(endInclusive);
+      }).toList();
+    }
+
+    // Filtro por temporada
+    final season = _allSeasons.firstWhereOrNull(
+      (s) => s.id == _selectedPeriodKey,
+    );
+    if (season != null && season.startDate != null) {
+      final from = season.startDate!;
+      final to = season.endDate != null
+          ? DateTime(
+              season.endDate!.year,
+              season.endDate!.month,
+              season.endDate!.day,
+              23,
+              59,
+              59,
+            )
+          : DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && !d.isBefore(from) && !d.isAfter(to);
+      }).toList();
+    }
+
+    return _rawHistory;
+  }
+
+  void _applyFilter() {
+    final List<dynamic> filtered = _computeFilteredHistory();
+    final globalStats = calculateGlobalStats(filtered);
 
     final List<Map<String, dynamic>> leaderboard = globalStats.values
         .where((data) => (data['games'] as int) >= kMinGamesForGlobalRanking)
@@ -134,32 +261,227 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final int index = leaderboard.indexWhere(
       (p) => (p['id'] as String) == widget.playerId,
     );
-    final Map<String, dynamic> advStats = _calculateAdvancedStats(allHistory);
+    final Map<String, dynamic> advStats = _calculateAdvancedStats(filtered);
 
     setState(() {
-      _allHistory = allHistory;
-      _allPlayers = players;
-      resolvedIcon = icon;
-      playerName = resolvedName;
+      _allHistory = filtered;
       totalPlayers = leaderboard.length;
       advancedStats = advStats;
 
       if (index >= 0) {
         rankPosition = index + 1;
         playerStats = leaderboard[index];
+      } else if (globalStats.containsKey(widget.playerId)) {
+        rankPosition = null;
+        playerStats = globalStats[widget.playerId]!;
       } else {
-        if (globalStats.containsKey(widget.playerId)) {
-          playerStats = globalStats[widget.playerId]!;
-        } else {
-          playerStats['id'] = widget.playerId;
-          playerStats['name'] = resolvedName;
-          playerStats['nota'] = kRatingBase;
-        }
+        rankPosition = null;
+        playerStats = {
+          'id': widget.playerId,
+          'name': playerName,
+          'nota': kRatingBase,
+          'goals': 0,
+          'assists': 0,
+          'ga': 0,
+          'games': 0,
+          'wins': 0,
+          'draws': 0,
+          'losses': 0,
+          'yellow': 0,
+          'red': 0,
+        };
       }
     });
 
     _calculateChartData();
-    setState(() => isLoading = false);
+  }
+
+  void _onFilterChanged(String key) {
+    setState(() => _selectedPeriodKey = key);
+    _applyFilter();
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: (_customFrom != null && _customTo != null)
+          ? DateTimeRange(start: _customFrom!, end: _customTo!)
+          : null,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.accentBlue,
+              surface: AppColors.headerBlue,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range != null) {
+      _customFrom = range.start;
+      _customTo = range.end;
+      _onFilterChanged('custom');
+    }
+  }
+
+  Widget _buildFilterBar() {
+    final standardOpts = [
+      {'id': 'last', 'label': 'Última Pelada'},
+      {'id': 'month', 'label': 'Mês'},
+      {'id': 'year', 'label': 'Ano'},
+      {'id': 'all', 'label': 'Tudo'},
+      {'id': 'custom', 'label': 'Personalizado'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.headerBlue,
+            border: Border.all(color: Colors.white10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (_allSeasons.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.deepBlue,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _allSeasons.any((s) => s.id == _selectedPeriodKey)
+                          ? _selectedPeriodKey
+                          : null,
+                      hint: const Text(
+                        'Temporadas',
+                        style: TextStyle(
+                          color: AppColors.accentBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      dropdownColor: AppColors.deepBlue,
+                      icon: const Icon(
+                        Icons.arrow_drop_down,
+                        color: AppColors.accentBlue,
+                        size: 18,
+                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      items: _allSeasons.map((s) {
+                        return DropdownMenuItem<String>(
+                          value: s.id,
+                          child: Text('Temporada: ${s.name}'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) _onFilterChanged(val);
+                      },
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 20, color: Colors.white10),
+              ],
+              ...standardOpts.map((o) {
+                final bool isSelected = _selectedPeriodKey == o['id'];
+                return GestureDetector(
+                  onTap: () async {
+                    if (o['id'] == 'custom') {
+                      await _pickCustomRange();
+                    } else {
+                      _onFilterChanged(o['id']!);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.accentBlue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      o['label']!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : Colors.white70,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        if (_selectedPeriodKey == 'custom') ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.headerBlue,
+              border: Border.all(color: Colors.white10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'PERÍODO: ',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  _customFrom != null
+                      ? DateFormat('dd/MM/yyyy').format(_customFrom!)
+                      : 'Início',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                const Text(
+                  ' até ',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                Text(
+                  _customTo != null
+                      ? DateFormat('dd/MM/yyyy').format(_customTo!)
+                      : 'Fim',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _pickCustomRange,
+                  child: const Icon(
+                    Icons.edit_calendar,
+                    size: 16,
+                    color: AppColors.accentBlue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -322,6 +644,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     int hatTricks = 0;
     int cleanSheets = 0;
     int ownGoals = 0;
+    int clutchGoals = 0; // gols decisivos nos minutos finais (ver rating_calculator)
+    int comebackGoals = 0; // gols da virada
     int currentUnbeatenStreak = 0;
     int maxUnbeatenStreak = 0;
     int biggestWinMargin = 0;
@@ -437,6 +761,34 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         if (myTeamResult == 0) drawsAgainst[oId] = (drawsAgainst[oId] ?? 0) + 1;
       }
 
+      // Gols decisivos (clutch) e gols da virada, usando a mesma detecção
+      // do rating_calculator. O histórico salva o time do evento no campo
+      // 'time' (legado) e o horário real no campo 'minute'.
+      if (match['events'] != null) {
+        final List<dynamic> rawEvents = match['events'];
+        final List<Map<String, dynamic>> feEvents = rawEvents
+            .map<Map<String, dynamic>>((ev) {
+              final String teamCode = (ev['time'] ?? '').toString();
+              return {
+                'type': ev['type'],
+                'team': teamCode == 'red' ? 'Vermelho' : 'Branco',
+                'time': (ev['minute'] ?? '00:00').toString(),
+              };
+            })
+            .toList();
+        final GoalContext special = findSpecialGoals(feEvents);
+        if (special.clutchGoalIndex >= 0 &&
+            eventPlayerId(rawEvents[special.clutchGoalIndex], 'player') ==
+                myId) {
+          clutchGoals++;
+        }
+        if (special.comebackGoalIndex >= 0 &&
+            eventPlayerId(rawEvents[special.comebackGoalIndex], 'player') ==
+                myId) {
+          comebackGoals++;
+        }
+      }
+
       int goalsInThisMatch = 0;
       if (match['events'] != null) {
         for (final ev in match['events']) {
@@ -519,9 +871,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       'hatTricks': hatTricks,
       'cleanSheets': cleanSheets,
       'ownGoals': ownGoals,
+      'clutchGoals': clutchGoals,
+      'comebackGoals': comebackGoals,
       'biggestWinScore': biggestWinScore,
       'biggestLossScore': biggestLossScore,
       'maxUnbeatenStreak': maxUnbeatenStreak,
+      'currentUnbeatenStreak': currentUnbeatenStreak,
       'totalTeamGoals': totalTeamGoalsWhenPlaying,
     };
   }
@@ -2335,6 +2690,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   ),
 
                   const SizedBox(height: 16),
+                  _buildFilterBar(),
+
+                  const SizedBox(height: 16),
                   _buildBadgesSection(),
 
                   const SizedBox(height: 16),
@@ -2473,6 +2831,24 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           '${advancedStats['hatTricks'] ?? 0} marcados',
                           Icons.whatshot,
                           Colors.orangeAccent,
+                        ),
+                        _buildAdvStatRow(
+                          'Gols Clutch (Decisivos)',
+                          '${advancedStats['clutchGoals'] ?? 0} nos minutos finais',
+                          Icons.bolt,
+                          Colors.amberAccent,
+                        ),
+                        _buildAdvStatRow(
+                          'Gols da Virada',
+                          '${advancedStats['comebackGoals'] ?? 0} colocaram o time na frente',
+                          Icons.trending_up,
+                          AppColors.highlightGreen,
+                        ),
+                        _buildAdvStatRow(
+                          'Sequência Atual Sem Perder',
+                          '${advancedStats['currentUnbeatenStreak'] ?? 0} jogos',
+                          Icons.local_fire_department,
+                          Colors.deepOrangeAccent,
                         ),
                         _buildAdvStatRow(
                           'Faltas Graves',
