@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../models/season_model.dart';
+import '../repositories/supabase_service.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
@@ -36,10 +40,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   String playerName = '';
   String? resolvedIcon;
 
+  // ── Filtro de período ────────────────────────────────────────
+  // Afeta TODOS os dados da tela (nota, ranking, stats, gráfico, avançadas).
+  List<dynamic> _rawHistory = []; // histórico completo, sem filtro
+  List<SeasonModel> _allSeasons = [];
+  String _selectedPeriodKey = 'all'; // 'all'|'last'|'month'|'year'|'custom'|seasonId
+  DateTime? _customFrom;
+  DateTime? _customTo;
+
   // ── Gráfico ──────────────────────────────────────────────────
-  List<dynamic> _allHistory = [];
-  String _chartMetric = 'Nota';
+  List<dynamic> _allHistory = []; // histórico já filtrado (usado na tela toda)
+  String _chartMetric = 'Nota'; // 'Nota' ou 'G+A' (Gols/Assistências)
   String _chartPeriod = 'Sessão';
+  bool _chartAccumulated = false; // dia a dia (false) ou acumulado (true)
   List<Map<String, dynamic>> _chartData = [];
 
   Map<String, dynamic> playerStats = {
@@ -83,17 +96,27 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPlayerDetails() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Load all players to find specific player and check taken icons
-    final String playersKey = 'players_${widget.groupId}';
     List<Map<String, dynamic>> players = [];
-    if (prefs.containsKey(playersKey)) {
-      players = ensurePlayerIds(
-        List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString(playersKey)!),
-        ),
-      );
+    try {
+      final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+      players = fetched.map((j) => {
+        'id': j.id,
+        'name': j.name,
+        'icon': j.avatarUrl,
+        'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
+      }).toList();
+    } catch (_) {}
+
+    if (players.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final String playersKey = 'players_${widget.groupId}';
+      if (prefs.containsKey(playersKey)) {
+        players = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString(playersKey)!),
+          ),
+        );
+      }
     }
 
     final Map<String, dynamic>? player = players.firstWhere(
@@ -109,8 +132,124 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
     }
 
-    final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
-    final globalStats = calculateGlobalStats(allHistory);
+    final List<dynamic> rawHistory = await getAllGroupMatches(widget.groupId);
+
+    List<SeasonModel> seasons = [];
+    try {
+      seasons = await SupabaseService.instance.seasons.getSeasons(
+        widget.groupId,
+      );
+    } catch (_) {}
+
+    // Filtro padrão: temporada ativa (igual à tela de estatísticas do grupo).
+    // Se não houver temporadas cadastradas, mostra o histórico completo.
+    String defaultPeriodKey = 'all';
+    if (seasons.isNotEmpty) {
+      final activeSeason = seasons.firstWhereOrNull((s) => s.isActive) ??
+          seasons.first;
+      defaultPeriodKey = activeSeason.id;
+    }
+
+    _rawHistory = rawHistory;
+    _allSeasons = seasons;
+    _allPlayers = players;
+    resolvedIcon = icon;
+    playerName = resolvedName;
+    _selectedPeriodKey = defaultPeriodKey;
+
+    _applyFilter();
+    setState(() => isLoading = false);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // FILTRO DE PERÍODO — recalcula TODOS os dados da tela
+  // ─────────────────────────────────────────────────────────────
+  List<dynamic> _computeFilteredHistory() {
+    if (_rawHistory.isEmpty) return [];
+
+    DateTime? parseDate(dynamic m) {
+      if (m is! Map) return null;
+      final raw = m['session_date'] ?? m['date'];
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString());
+    }
+
+    if (_selectedPeriodKey == 'all') return _rawHistory;
+
+    if (_selectedPeriodKey == 'last') {
+      final sorted = List<dynamic>.from(_rawHistory)
+        ..sort(
+          (a, b) =>
+              (parseDate(a) ?? DateTime(0)).compareTo(parseDate(b) ?? DateTime(0)),
+        );
+      final dynamic lastMatch = sorted.last;
+      final dynamic lastSessionId = (lastMatch as Map)['sessionId'];
+      if (lastSessionId == null) return [lastMatch];
+      return sorted.where((m) => (m as Map)['sessionId'] == lastSessionId).toList();
+    }
+
+    if (_selectedPeriodKey == 'month') {
+      final now = DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && d.year == now.year && d.month == now.month;
+      }).toList();
+    }
+
+    if (_selectedPeriodKey == 'year') {
+      final now = DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && d.year == now.year;
+      }).toList();
+    }
+
+    if (_selectedPeriodKey == 'custom') {
+      if (_customFrom == null || _customTo == null) return _rawHistory;
+      final endInclusive = DateTime(
+        _customTo!.year,
+        _customTo!.month,
+        _customTo!.day,
+        23,
+        59,
+        59,
+      );
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null &&
+            !d.isBefore(_customFrom!) &&
+            !d.isAfter(endInclusive);
+      }).toList();
+    }
+
+    // Filtro por temporada
+    final season = _allSeasons.firstWhereOrNull(
+      (s) => s.id == _selectedPeriodKey,
+    );
+    if (season != null && season.startDate != null) {
+      final from = season.startDate!;
+      final to = season.endDate != null
+          ? DateTime(
+              season.endDate!.year,
+              season.endDate!.month,
+              season.endDate!.day,
+              23,
+              59,
+              59,
+            )
+          : DateTime.now();
+      return _rawHistory.where((m) {
+        final d = parseDate(m);
+        return d != null && !d.isBefore(from) && !d.isAfter(to);
+      }).toList();
+    }
+
+    return _rawHistory;
+  }
+
+  void _applyFilter() {
+    final List<dynamic> filtered = _computeFilteredHistory();
+    final globalStats = calculateGlobalStats(filtered);
 
     final List<Map<String, dynamic>> leaderboard = globalStats.values
         .where((data) => (data['games'] as int) >= kMinGamesForGlobalRanking)
@@ -122,32 +261,227 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final int index = leaderboard.indexWhere(
       (p) => (p['id'] as String) == widget.playerId,
     );
-    final Map<String, dynamic> advStats = _calculateAdvancedStats(allHistory);
+    final Map<String, dynamic> advStats = _calculateAdvancedStats(filtered);
 
     setState(() {
-      _allHistory = allHistory;
-      _allPlayers = players;
-      resolvedIcon = icon;
-      playerName = resolvedName;
+      _allHistory = filtered;
       totalPlayers = leaderboard.length;
       advancedStats = advStats;
 
       if (index >= 0) {
         rankPosition = index + 1;
         playerStats = leaderboard[index];
+      } else if (globalStats.containsKey(widget.playerId)) {
+        rankPosition = null;
+        playerStats = globalStats[widget.playerId]!;
       } else {
-        if (globalStats.containsKey(widget.playerId)) {
-          playerStats = globalStats[widget.playerId]!;
-        } else {
-          playerStats['id'] = widget.playerId;
-          playerStats['name'] = resolvedName;
-          playerStats['nota'] = kRatingBase;
-        }
+        rankPosition = null;
+        playerStats = {
+          'id': widget.playerId,
+          'name': playerName,
+          'nota': kRatingBase,
+          'goals': 0,
+          'assists': 0,
+          'ga': 0,
+          'games': 0,
+          'wins': 0,
+          'draws': 0,
+          'losses': 0,
+          'yellow': 0,
+          'red': 0,
+        };
       }
     });
 
     _calculateChartData();
-    setState(() => isLoading = false);
+  }
+
+  void _onFilterChanged(String key) {
+    setState(() => _selectedPeriodKey = key);
+    _applyFilter();
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: (_customFrom != null && _customTo != null)
+          ? DateTimeRange(start: _customFrom!, end: _customTo!)
+          : null,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.accentBlue,
+              surface: AppColors.headerBlue,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range != null) {
+      _customFrom = range.start;
+      _customTo = range.end;
+      _onFilterChanged('custom');
+    }
+  }
+
+  Widget _buildFilterBar() {
+    final standardOpts = [
+      {'id': 'last', 'label': 'Última Pelada'},
+      {'id': 'month', 'label': 'Mês'},
+      {'id': 'year', 'label': 'Ano'},
+      {'id': 'all', 'label': 'Tudo'},
+      {'id': 'custom', 'label': 'Personalizado'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.headerBlue,
+            border: Border.all(color: Colors.white10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (_allSeasons.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.deepBlue,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _allSeasons.any((s) => s.id == _selectedPeriodKey)
+                          ? _selectedPeriodKey
+                          : null,
+                      hint: const Text(
+                        'Temporadas',
+                        style: TextStyle(
+                          color: AppColors.accentBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      dropdownColor: AppColors.deepBlue,
+                      icon: const Icon(
+                        Icons.arrow_drop_down,
+                        color: AppColors.accentBlue,
+                        size: 18,
+                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      items: _allSeasons.map((s) {
+                        return DropdownMenuItem<String>(
+                          value: s.id,
+                          child: Text('Temporada: ${s.name}'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) _onFilterChanged(val);
+                      },
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 20, color: Colors.white10),
+              ],
+              ...standardOpts.map((o) {
+                final bool isSelected = _selectedPeriodKey == o['id'];
+                return GestureDetector(
+                  onTap: () async {
+                    if (o['id'] == 'custom') {
+                      await _pickCustomRange();
+                    } else {
+                      _onFilterChanged(o['id']!);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.accentBlue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      o['label']!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : Colors.white70,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        if (_selectedPeriodKey == 'custom') ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.headerBlue,
+              border: Border.all(color: Colors.white10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'PERÍODO: ',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  _customFrom != null
+                      ? DateFormat('dd/MM/yyyy').format(_customFrom!)
+                      : 'Início',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                const Text(
+                  ' até ',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                Text(
+                  _customTo != null
+                      ? DateFormat('dd/MM/yyyy').format(_customTo!)
+                      : 'Fim',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _pickCustomRange,
+                  child: const Icon(
+                    Icons.edit_calendar,
+                    size: 16,
+                    color: AppColors.accentBlue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -192,7 +526,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             : -1;
       }
 
-      // Chave de agrupamento (sessão ou mês)
+      // Grouping key (session or month)
       final String rawDate =
           match['session_date'] ??
           match['date'] ??
@@ -277,6 +611,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       chartList.add({
         'label': key,
         'date': data['date'],
+        'games': games,
         'Nota': avgNota,
         'Gols': data['goals'],
         'Assistências': data['assists'],
@@ -309,6 +644,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     int hatTricks = 0;
     int cleanSheets = 0;
     int ownGoals = 0;
+    int clutchGoals = 0; // gols decisivos nos minutos finais (ver rating_calculator)
+    int comebackGoals = 0; // gols da virada
     int currentUnbeatenStreak = 0;
     int maxUnbeatenStreak = 0;
     int biggestWinMargin = 0;
@@ -424,6 +761,34 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         if (myTeamResult == 0) drawsAgainst[oId] = (drawsAgainst[oId] ?? 0) + 1;
       }
 
+      // Gols decisivos (clutch) e gols da virada, usando a mesma detecção
+      // do rating_calculator. O histórico salva o time do evento no campo
+      // 'time' (legado) e o horário real no campo 'minute'.
+      if (match['events'] != null) {
+        final List<dynamic> rawEvents = match['events'];
+        final List<Map<String, dynamic>> feEvents = rawEvents
+            .map<Map<String, dynamic>>((ev) {
+              final String teamCode = (ev['time'] ?? '').toString();
+              return {
+                'type': ev['type'],
+                'team': teamCode == 'red' ? 'Vermelho' : 'Branco',
+                'time': (ev['minute'] ?? '00:00').toString(),
+              };
+            })
+            .toList();
+        final GoalContext special = findSpecialGoals(feEvents);
+        if (special.clutchGoalIndex >= 0 &&
+            eventPlayerId(rawEvents[special.clutchGoalIndex], 'player') ==
+                myId) {
+          clutchGoals++;
+        }
+        if (special.comebackGoalIndex >= 0 &&
+            eventPlayerId(rawEvents[special.comebackGoalIndex], 'player') ==
+                myId) {
+          comebackGoals++;
+        }
+      }
+
       int goalsInThisMatch = 0;
       if (match['events'] != null) {
         for (final ev in match['events']) {
@@ -506,9 +871,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       'hatTricks': hatTricks,
       'cleanSheets': cleanSheets,
       'ownGoals': ownGoals,
+      'clutchGoals': clutchGoals,
+      'comebackGoals': comebackGoals,
       'biggestWinScore': biggestWinScore,
       'biggestLossScore': biggestLossScore,
       'maxUnbeatenStreak': maxUnbeatenStreak,
+      'currentUnbeatenStreak': currentUnbeatenStreak,
       'totalTeamGoals': totalTeamGoalsWhenPlaying,
     };
   }
@@ -1120,6 +1488,38 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // WIDGETS DE CONTEÚDO
   // ─────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────
+  // Transforma _chartData em série "dia a dia" ou "acumulada"
+  // ─────────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _seriesFor(List<String> keys) {
+    if (!_chartAccumulated) return _chartData;
+
+    final List<Map<String, dynamic>> result = [];
+    final Map<String, num> running = {for (final k in keys) k: 0};
+    int runningGames = 0;
+    double runningRatingSum = 0; // soma ponderada por jogos (para Nota)
+
+    for (final item in _chartData) {
+      final Map<String, dynamic> acc = Map<String, dynamic>.from(item);
+      for (final k in keys) {
+        if (k == 'Nota') continue; // tratado à parte abaixo
+        running[k] = (running[k] ?? 0) + (item[k] as num);
+        acc[k] = running[k];
+      }
+      if (keys.contains('Nota')) {
+        final int games = (item['games'] as int?) ?? 1;
+        final double nota = (item['Nota'] as num).toDouble();
+        runningRatingSum += nota * games;
+        runningGames += games;
+        acc['Nota'] = runningGames == 0
+            ? nota
+            : (runningRatingSum / runningGames);
+      }
+      result.add(acc);
+    }
+    return result;
+  }
+
   Widget _buildEvolutionChart() {
     if (_chartData.isEmpty) {
       return const Padding(
@@ -1133,32 +1533,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       );
     }
 
-    final List<FlSpot> spots = [];
-    double maxY = 0;
-    double minY = _chartMetric == 'Nota' ? kMaxRating : 0;
-
-    for (int i = 0; i < _chartData.length; i++) {
-      final double value = (_chartData[i][_chartMetric] as num).toDouble();
-      spots.add(FlSpot(i.toDouble(), value));
-      if (value > maxY) maxY = value;
-      if (value < minY) minY = value;
-    }
-
-    if (_chartMetric == 'Nota') {
-      maxY = kMaxRating;
-      minY = minY < kMinRating ? minY : kMinRating;
-    } else {
-      maxY = (maxY + 2).ceilToDouble();
-      minY = 0;
-    }
-
-    final Color lineColor = _chartMetric == 'Nota'
-        ? Colors.amber
-        : _chartMetric == 'Gols'
-        ? AppColors.textWhite
-        : _chartMetric == 'G+A'
-        ? AppColors.highlightGreen
-        : AppColors.accentBlue;
+    final bool isNota = _chartMetric == 'Nota';
+    final List<String> keys = isNota
+        ? ['Nota']
+        : ['G+A', 'Gols', 'Assistências'];
+    final List<Map<String, dynamic>> series = _seriesFor(keys);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1220,165 +1599,388 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Seletor de métrica
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['Nota', 'G+A', 'Gols', 'Assistências'].map((metric) {
-                final bool isSelected = _chartMetric == metric;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() => _chartMetric = metric);
-                      _calculateChartData();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.accentBlue.withOpacity(0.2)
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.accentBlue
-                              : Colors.white24,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        metric,
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.accentBlue
-                              : Colors.white54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Linha do gráfico
-          SizedBox(
-            height: 200,
-            child: LineChart(
-              LineChartData(
-                minY: minY,
-                maxY: maxY,
-                minX: 0,
-                maxX: (spots.length - 1).toDouble(),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: _chartMetric == 'Nota' ? 2.0 : 1.0,
-                  getDrawingHorizontalLine: (_) =>
-                      const FlLine(color: Colors.white10, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      getTitlesWidget: (value, _) => Text(
-                        _chartMetric == 'Nota'
-                            ? value.toStringAsFixed(1)
-                            : value.toInt().toString(),
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      interval: 1,
-                      getTitlesWidget: (value, _) {
-                        final int i = value.toInt();
-                        if (i < 0 || i >= _chartData.length)
-                          return const SizedBox();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            _chartData[i]['label'],
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 9,
+          // Seletor de métrica + toggle acumulado
+          Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['Nota', 'G+A'].map((metric) {
+                      final bool isSelected = _chartMetric == metric;
+                      final String label = metric == 'G+A'
+                          ? 'Gols e Assistências'
+                          : metric;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _chartMetric = metric);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.accentBlue.withOpacity(0.2)
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.accentBlue
+                                    : Colors.white24,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? AppColors.accentBlue
+                                    : Colors.white54,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: lineColor,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                        radius: 4,
-                        color: lineColor,
-                        strokeWidth: 1.5,
-                        strokeColor: AppColors.headerBlue,
-                      ),
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: lineColor.withOpacity(0.15),
-                    ),
-                  ),
-                ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
-                      return LineTooltipItem(
-                        '${_chartData[spot.x.toInt()]['label']}\n',
-                        const TextStyle(color: Colors.white70, fontSize: 10),
-                        children: [
-                          TextSpan(
-                            text: _chartMetric == 'Nota'
-                                ? spot.y.toStringAsFixed(1)
-                                : spot.y.toInt().toString(),
-                            style: TextStyle(
-                              color: lineColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                        ),
                       );
                     }).toList(),
                   ),
                 ),
               ),
+              GestureDetector(
+                onTap: () =>
+                    setState(() => _chartAccumulated = !_chartAccumulated),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: Checkbox(
+                        value: _chartAccumulated,
+                        activeColor: AppColors.accentBlue,
+                        checkColor: Colors.white,
+                        side: const BorderSide(color: Colors.white38),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) =>
+                            setState(() => _chartAccumulated = v ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Acumulado',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Gráfico
+          SizedBox(
+            height: 220,
+            child: isNota
+                ? _buildSingleLineChart(series)
+                : _buildGoalsAssistsChart(series),
+          ),
+
+          if (!isNota) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLegendDot('G+A', AppColors.highlightBlue),
+                const SizedBox(width: 16),
+                _buildLegendDot('Gols', AppColors.highlightGreen),
+                const SizedBox(width: 16),
+                _buildLegendDot('Assistências', Colors.amberAccent),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSingleLineChart(List<Map<String, dynamic>> series) {
+    final List<FlSpot> spots = [];
+    double maxY = kMaxRating;
+    double minY = kMinRating;
+
+    for (int i = 0; i < series.length; i++) {
+      final double value = (series[i]['Nota'] as num).toDouble();
+      spots.add(FlSpot(i.toDouble(), value));
+    }
+
+    const Color lineColor = Colors.amber;
+
+    return LineChart(
+      LineChartData(
+        minY: minY,
+        maxY: maxY,
+        minX: 0,
+        maxX: (spots.length - 1).toDouble(),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 2.0,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: Colors.white10, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 32,
+              getTitlesWidget: (value, _) => Text(
+                value.toStringAsFixed(1),
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: 1,
+              getTitlesWidget: (value, _) {
+                final int i = value.toInt();
+                if (i < 0 || i >= series.length) return const SizedBox();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    series[i]['label'],
+                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: lineColor,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 4,
+                color: lineColor,
+                strokeWidth: 1.5,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: lineColor.withOpacity(0.15),
             ),
           ),
         ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+              return LineTooltipItem(
+                '${series[spot.x.toInt()]['label']}\n',
+                const TextStyle(color: Colors.white70, fontSize: 10),
+                children: [
+                  TextSpan(
+                    text: spot.y.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: lineColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGoalsAssistsChart(List<Map<String, dynamic>> series) {
+    List<FlSpot> spotsFor(String key) => [
+      for (int i = 0; i < series.length; i++)
+        FlSpot(i.toDouble(), (series[i][key] as num).toDouble()),
+    ];
+
+    final List<FlSpot> gaSpots = spotsFor('G+A');
+    final List<FlSpot> golsSpots = spotsFor('Gols');
+    final List<FlSpot> assistSpots = spotsFor('Assistências');
+
+    double maxY = 0;
+    for (final s in [...gaSpots, ...golsSpots, ...assistSpots]) {
+      if (s.y > maxY) maxY = s.y;
+    }
+    maxY = (maxY + 2).ceilToDouble();
+
+    Widget label(double value) => Text(
+      value.toInt().toString(),
+      style: const TextStyle(color: Colors.white54, fontSize: 10),
+      textAlign: TextAlign.right,
+    );
+
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: maxY,
+        minX: 0,
+        maxX: (series.length - 1).toDouble(),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 1.0,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: Colors.white10, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, _) => label(value),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: 1,
+              getTitlesWidget: (value, _) {
+                final int i = value.toInt();
+                if (i < 0 || i >= series.length) return const SizedBox();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    series[i]['label'],
+                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: golsSpots,
+            isCurved: true,
+            color: AppColors.highlightGreen,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 3,
+                color: AppColors.highlightGreen,
+                strokeWidth: 1,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: assistSpots,
+            isCurved: true,
+            color: Colors.amberAccent,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 3,
+                color: Colors.amberAccent,
+                strokeWidth: 1,
+                strokeColor: AppColors.headerBlue,
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: gaSpots,
+            isCurved: true,
+            color: AppColors.highlightBlue,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: AppColors.highlightBlue.withOpacity(0.10),
+            ),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+              final String key = spot.barIndex == 0
+                  ? 'Gols'
+                  : spot.barIndex == 1
+                  ? 'Assistências'
+                  : 'G+A';
+              final Color color = spot.barIndex == 0
+                  ? AppColors.highlightGreen
+                  : spot.barIndex == 1
+                  ? Colors.amberAccent
+                  : AppColors.highlightBlue;
+              return LineTooltipItem(
+                '${series[spot.x.toInt()]['label']}\n',
+                const TextStyle(color: Colors.white70, fontSize: 10),
+                children: [
+                  TextSpan(
+                    text: '$key: ${spot.y.toInt()}',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -1946,7 +2548,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Cartão do jogador ─────────────────────────────────
+                  // ── Player card ─────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -2088,6 +2690,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   ),
 
                   const SizedBox(height: 16),
+                  _buildFilterBar(),
+
+                  const SizedBox(height: 16),
                   _buildBadgesSection(),
 
                   const SizedBox(height: 16),
@@ -2226,6 +2831,24 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           '${advancedStats['hatTricks'] ?? 0} marcados',
                           Icons.whatshot,
                           Colors.orangeAccent,
+                        ),
+                        _buildAdvStatRow(
+                          'Gols Clutch (Decisivos)',
+                          '${advancedStats['clutchGoals'] ?? 0} nos minutos finais',
+                          Icons.bolt,
+                          Colors.amberAccent,
+                        ),
+                        _buildAdvStatRow(
+                          'Gols da Virada',
+                          '${advancedStats['comebackGoals'] ?? 0} colocaram o time na frente',
+                          Icons.trending_up,
+                          AppColors.highlightGreen,
+                        ),
+                        _buildAdvStatRow(
+                          'Sequência Atual Sem Perder',
+                          '${advancedStats['currentUnbeatenStreak'] ?? 0} jogos',
+                          Icons.local_fire_department,
+                          Colors.deepOrangeAccent,
                         ),
                         _buildAdvStatRow(
                           'Faltas Graves',

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../utils/player_identity.dart';
+import '../repositories/supabase_service.dart';
+import '../models/match_event_model.dart';
 
 class EditMatchScreen extends StatefulWidget {
   final String tournamentId;
@@ -46,21 +48,29 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
   Future<void> _loadAllPlayers() async {
     final prefs = await SharedPreferences.getInstance();
     Set<String> playerSet = {};
+    final uuidRegex = RegExp(r'^[0-9a-fA-F-]{20,}$');
 
     // 1. Load the ENTIRE Group Roster
     final String? dbData = prefs.getString('players_${widget.groupId}');
+    List<Map<String, dynamic>> groupPlayers = [];
     if (dbData != null) {
-      final List<Map<String, dynamic>> groupPlayers = ensurePlayerIds(
+      groupPlayers = ensurePlayerIds(
         List<Map<String, dynamic>>.from(jsonDecode(dbData)),
       );
-      for (final p in groupPlayers) {
-        final name = (p['name'] ?? '').toString();
-        final id = (p['id'] ?? name).toString();
-        if (name.isEmpty) continue;
-        playerSet.add(name);
-        nameToId[name] = id;
-        idToName[id] = name;
-      }
+    }
+    if (groupPlayers.isEmpty && widget.groupId.isNotEmpty) {
+      try {
+        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        groupPlayers = fetched.map((p) => {'id': p.id, 'name': p.displayName}).toList();
+      } catch (_) {}
+    }
+    for (final p in groupPlayers) {
+      final name = (p['name'] ?? '').toString();
+      final id = (p['id'] ?? name).toString();
+      if (name.isEmpty || uuidRegex.hasMatch(name)) continue;
+      playerSet.add(name);
+      nameToId[name] = id;
+      idToName[id] = name;
     }
 
     // 2. Load players who were present in this session/tournament
@@ -74,53 +84,62 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
       for (final p in presentPlayers) {
         final name = (p['name'] ?? '').toString();
         final id = (p['id'] ?? name).toString();
-        if (name.isEmpty) continue;
+        if (name.isEmpty || uuidRegex.hasMatch(name)) continue;
         playerSet.add(name);
         nameToId.putIfAbsent(name, () => id);
         idToName.putIfAbsent(id, () => name);
       }
     }
 
-    // 3. Fallback: Add players from the match data (just in case someone played but was later deleted from the group!)
-    if (widget.matchData['players']['red'] != null) {
-      playerSet.addAll(
-        (widget.matchData['players']['red'] as List).map(
-          (p) {
-            final name = p['name'].toString();
-            final id = (p['id'] ?? name).toString();
-            nameToId.putIfAbsent(name, () => id);
-            idToName.putIfAbsent(id, () => name);
-            return name;
-          },
-        ),
-      );
+    // 3. Fallback: Add players from the match data
+    if (widget.matchData['players'] != null) {
+      if (widget.matchData['players']['red'] != null) {
+        for (final p in (widget.matchData['players']['red'] as List)) {
+          final rawName = p['name']?.toString() ?? '';
+          final id = (p['id'] ?? rawName).toString();
+          final resolvedName = uuidRegex.hasMatch(rawName) ? (idToName[id] ?? '') : rawName;
+          if (resolvedName.isNotEmpty && !uuidRegex.hasMatch(resolvedName)) {
+            playerSet.add(resolvedName);
+            nameToId.putIfAbsent(resolvedName, () => id);
+            idToName.putIfAbsent(id, () => resolvedName);
+          }
+        }
+      }
+      if (widget.matchData['players']['white'] != null) {
+        for (final p in (widget.matchData['players']['white'] as List)) {
+          final rawName = p['name']?.toString() ?? '';
+          final id = (p['id'] ?? rawName).toString();
+          final resolvedName = uuidRegex.hasMatch(rawName) ? (idToName[id] ?? '') : rawName;
+          if (resolvedName.isNotEmpty && !uuidRegex.hasMatch(resolvedName)) {
+            playerSet.add(resolvedName);
+            nameToId.putIfAbsent(resolvedName, () => id);
+            idToName.putIfAbsent(id, () => resolvedName);
+          }
+        }
+      }
     }
-    if (widget.matchData['players']['white'] != null) {
-      playerSet.addAll(
-        (widget.matchData['players']['white'] as List).map(
-          (p) {
-            final name = p['name'].toString();
-            final id = (p['id'] ?? name).toString();
-            nameToId.putIfAbsent(name, () => id);
-            idToName.putIfAbsent(id, () => name);
-            return name;
-          },
-        ),
-      );
-    }
+
     for (var ev in events) {
       final playerId = eventPlayerId(ev, 'player');
       final assistId = eventPlayerId(ev, 'assist');
-      final playerName = (ev['player'] ?? '').toString();
-      final assistName = (ev['assist'] ?? '').toString();
-      if (playerName.isNotEmpty) {
+      var playerName = (ev['player'] ?? '').toString();
+      var assistName = (ev['assist'] ?? '').toString();
+
+      if (uuidRegex.hasMatch(playerName)) {
+        playerName = idToName[playerId] ?? idToName[playerName] ?? '';
+      }
+      if (uuidRegex.hasMatch(assistName)) {
+        assistName = idToName[assistId] ?? idToName[assistName] ?? '';
+      }
+
+      if (playerName.isNotEmpty && !uuidRegex.hasMatch(playerName)) {
         playerSet.add(playerName);
         if (playerId.isNotEmpty) {
           nameToId.putIfAbsent(playerName, () => playerId);
           idToName.putIfAbsent(playerId, () => playerName);
         }
       }
-      if (assistName.isNotEmpty) {
+      if (assistName.isNotEmpty && !uuidRegex.hasMatch(assistName)) {
         playerSet.add(assistName);
         if (assistId.isNotEmpty) {
           nameToId.putIfAbsent(assistName, () => assistId);
@@ -170,7 +189,10 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
           };
 
     String selectedType = currentEvent['type'];
-    String selectedTeam = currentEvent['team'];
+    String rawTeam = currentEvent['team'] ?? 'Vermelho';
+    String selectedTeam = rawTeam;
+    if (rawTeam.toLowerCase() == 'red') selectedTeam = 'Vermelho';
+    if (rawTeam.toLowerCase() == 'white') selectedTeam = 'Branco';
 
     // --- FIX FOR THE RED SCREEN CRASH ---
     // Safely verify the player exists in the list, otherwise default to the first player
@@ -381,18 +403,56 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
   }
 
   Future<void> _saveChanges() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
+    final matchIdVar = widget.matchData['id']?.toString();
 
-    if (prefs.containsKey(historyKey)) {
-      List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
-      int actualIndex = (history.length - 1) - widget.matchIndex;
+    if (matchIdVar == null || matchIdVar.isEmpty) {
+      debugPrint(
+        'SALVAR falhou: matchData["id"] ausente — a partida não pode ser '
+        'localizada no Supabase.',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Erro: ID da partida não encontrado."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
-      history[actualIndex]['scoreRed'] = scoreRed;
-      history[actualIndex]['scoreWhite'] = scoreWhite;
-      history[actualIndex]['events'] = events;
+    try {
+      // Rebuilds the events as MatchEventModel, resolving the
+      // playerId whenever possible (old events already carry playerId/assistId;
+      // events created/edited on this screen use nameToId as a fallback).
+      final eventosModels = events.map((ev) {
+        final playerId =
+            (ev['playerId'] ?? nameToId[ev['player']] ?? ev['player'])
+                .toString();
 
-      await prefs.setString(historyKey, jsonEncode(history));
+        final rawAssistId = ev['assistId'] ??
+            (ev['assist'] != null ? nameToId[ev['assist']] : null);
+        final assistId = rawAssistId?.toString();
+
+        return MatchEventModel(
+          matchId: matchIdVar,
+          playerId: playerId,
+          assistPlayerId: (assistId == null || assistId.isEmpty)
+              ? null
+              : assistId,
+          eventType: ev['type'].toString(),
+          timestamp: ev['time']?.toString(),
+        );
+      }).toList();
+
+      // Updates only the score + events. Lineup and rating history
+      // NÃO são tocados aqui de propósito (ver MatchesRepository).
+      await SupabaseService.instance.matches.updatePartialMatch(
+        matchId: matchIdVar,
+        teamAScore: scoreRed,
+        teamBScore: scoreWhite,
+        events: eventosModels,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -402,6 +462,16 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
           ),
         );
         Navigator.pop(context, true);
+      }
+    } catch (e, st) {
+      debugPrint('Erro ao salvar partida no Supabase: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao salvar: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

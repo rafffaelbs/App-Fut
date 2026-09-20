@@ -4,12 +4,12 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import '../repositories/supabase_service.dart';
 
 class HistoryScreen extends StatefulWidget {
-  final String tournamentId; 
-  final String groupId; 
+  final String tournamentId;
+  final String groupId;
 
   const HistoryScreen({
     super.key,
@@ -23,6 +23,8 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> history = [];
+  bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -30,22 +32,115 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
-  Future<void> _loadHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
+  Map<String, String> _idToName = {};
 
-    if (prefs.containsKey(historyKey)) {
-      setState(() {
-        history = jsonDecode(prefs.getString(historyKey)!);
-        // Ordena pela data mais recente
-        history.sort((a, b) {
-          final dateA = DateTime.parse(a['date'] ?? '1970-01-01');
-          final dateB = DateTime.parse(b['date'] ?? '1970-01-01');
-          return dateB.compareTo(dateA); 
-        });
+  /// Converts MatchModel into the dynamic map the UI already consumes.
+  Map<String, dynamic> _toLegacyMatch(dynamic match) {
+    final redPlayers = match.lineups
+        .where((e) => e.isRed || e.isTeamA || e.team.toLowerCase() == 'red')
+        .map((e) => {
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.name ?? e.playerId,
+              'id': e.playerId
+            })
+        .toList();
+    final whitePlayers = match.lineups
+        .where((e) => e.isWhite || e.isTeamB || e.team.toLowerCase() == 'white')
+        .map((e) => {
+              'name': _idToName[e.playerId] ?? e.player?.name ?? e.player?.name ?? e.playerId,
+              'id': e.playerId
+            })
+        .toList();
+
+    final events = match.events.map<Map<String, dynamic>>((ev) {
+      final playerName = _idToName[ev.playerId] ?? ev.player?.name ?? ev.player?.name ?? ev.playerId;
+      final assistName = ev.assistPlayerId != null
+          ? (_idToName[ev.assistPlayerId!] ?? ev.assistPlayer?.name ?? ev.assistPlayer?.name)
+          : null;
+
+      return {
+        'type': ev.eventType,
+        'playerId': ev.playerId,
+        'player': playerName,
+        'assistId': ev.assistPlayerId,
+        'assist': assistName,
+        'team': ev.team ?? 'red',
+        'time': ev.minute ?? ev.timestamp ?? '',
+      };
+    }).toList();
+
+    String durationMin;
+    if (match.resolvedDurationSeconds != null) {
+      final secs = match.resolvedDurationSeconds!;
+      durationMin = '${(secs ~/ 60).toString().padLeft(2, '0')}:${(secs % 60).toString().padLeft(2, '0')}';
+    } else if (match.matchDuration != null && match.matchDuration!.isNotEmpty) {
+      durationMin = match.matchDuration!;
+    } else {
+      durationMin = '—';
+    }
+
+    return {
+      'id': match.id,
+      'session_id': match.sessionId,
+      'start_time': match.startTime?.toIso8601String(),
+      'end_time': match.endTime?.toIso8601String(),
+      'date': match.timestamp.toIso8601String(),
+      'scoreRed': match.scoreRed,
+      'scoreWhite': match.scoreWhite,
+      'match_duration': durationMin,
+      'players': {'red': redPlayers, 'white': whitePlayers},
+      'events': events,
+    };
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+    try {
+      if (widget.groupId.isNotEmpty) {
+        final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        for (final p in groupPlayers) {
+          _idToName[p.id] = p.displayName;
+        }
+      }
+
+      // Default duration: comes from the session itself (duration_minutes), no longer
+      // de uma chave solta em SharedPreferences.
+      String defaultDuration = '08:00';
+      final session = await SupabaseService.instance.sessions.getSessionById(widget.tournamentId);
+      if (session?.durationMinutes != null) {
+        defaultDuration = '${session!.durationMinutes.toString().padLeft(2, '0')}:00';
+      }
+
+      final matchList = await SupabaseService.instance.matches
+          .getMatchesBySession(widget.tournamentId);
+
+      final List<dynamic> mapped = matchList.map(_toLegacyMatch).toList();
+
+      for (final match in mapped) {
+        if (match['match_duration'] == '—' || match['match_duration'] == null) {
+          match['match_duration'] = defaultDuration;
+        }
+      }
+
+      mapped.sort((a, b) {
+        final dateA = DateTime.parse(a['date'] ?? '1970-01-01');
+        final dateB = DateTime.parse(b['date'] ?? '1970-01-01');
+        return dateB.compareTo(dateA);
       });
+
+      setState(() => history = mapped);
+    } catch (e) {
+      debugPrint('Error loading history: $e');
+      setState(() {
+        errorMessage = 'Não foi possível carregar o histórico. Verifique sua conexão.';
+      });
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
+
 
   Future<void> _exportHistory() async {
     if (history.isEmpty) {
@@ -70,12 +165,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _clearHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
-    await prefs.remove(historyKey);
-    setState(() {
-      history = [];
-    });
+    setState(() => isLoading = true);
+    try {
+      // Deletes each match individually to ensure the repository cascades
+      // the deletion to the associated events, lineups, and rating history.
+      for (final match in history) {
+        if (match['id'] != null) {
+          await SupabaseService.instance.matches.deleteMatch(match['id']);
+        }
+      }
+      await _loadHistory();
+    } catch (e) {
+      debugPrint('Error clearing history: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao limpar histórico: ${e.toString()}')),
+        );
+      }
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
@@ -168,7 +276,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
-      body: history.isEmpty
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
+          : errorMessage != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off, color: Colors.white38, size: 40),
+                    const SizedBox(height: 12),
+                    Text(errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white38)),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _loadHistory,
+                      child: const Text("Tentar novamente", style: TextStyle(color: AppColors.accentBlue)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : history.isEmpty
           ? const Center(child: Text("Sem partidas.", style: TextStyle(color: Colors.white38)))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -177,11 +306,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final match = history[index];
                 final String duration = match['match_duration'] ?? 'N/A';
                 
-                // Extraindo as listas de jogadores 
+                // Extracting the player lists 
                 final List<dynamic> redTeam = match['players']?['red'] ?? [];
                 final List<dynamic> whiteTeam = match['players']?['white'] ?? [];
 
-                return Card(
+                return GestureDetector(
+                  onLongPress: () => _showDebugInfo(match),
+                  child: Card(
                   color: AppColors.headerBlue,
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ExpansionTile(
@@ -219,7 +350,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     children: [
                       const Divider(color: Colors.white12),
                       
-                      // --- NOVA SEÇÃO: ESCALAÇÃO DA PARTIDA ---
+                      // --- NEW SECTION: MATCH LINEUP ---
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                         child: Row(
@@ -257,7 +388,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       
                       const Divider(color: Colors.white12),
                       
-                      // --- SEÇÃO ORIGINAL: EVENTOS (GOLS/CARTÕES) ---
+                      // --- ORIGINAL SECTION: EVENTS (GOALS/CARDS) ---
                       if (match['events'] != null && (match['events'] as List).isNotEmpty)
                         ...((match['events'] as List).map((event) {
                           return ListTile(
@@ -275,9 +406,71 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                     ],
                   ),
-                );
+                ));
               },
             ),
+    );
+  }
+
+  void _showDebugInfo(Map<String, dynamic> match) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0D1B2A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final rows = <_DebugRow>[
+          _DebugRow('match_id', match['id']?.toString() ?? '—'),
+          _DebugRow('session_id', match['session_id']?.toString() ?? '—'),
+          _DebugRow('start_time', match['start_time']?.toString() ?? '—'),
+          _DebugRow('end_time', match['end_time']?.toString() ?? '—'),
+          _DebugRow('date', match['date']?.toString() ?? '—'),
+          _DebugRow('duration', match['match_duration']?.toString() ?? '—'),
+          _DebugRow('score', '${match['scoreRed']} x ${match['scoreWhite']}'),
+        ];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Debug Info',
+                style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 1.2),
+              ),
+              const SizedBox(height: 10),
+              ...rows.map((r) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      child: Text(r.label,
+                        style: const TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'monospace')),
+                    ),
+                    Expanded(
+                      child: SelectableText(r.value,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace')),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -301,4 +494,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (type == 'red_card') return const Icon(Icons.style, color: Colors.red, size: 18);
     return const Icon(Icons.circle, color: Colors.grey, size: 10);
   }
+}
+
+class _DebugRow {
+  final String label;
+  final String value;
+  const _DebugRow(this.label, this.value);
 }

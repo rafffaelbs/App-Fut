@@ -1,8 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
-import '../models/session.dart';
+import '../models/session_model.dart';
+import '../repositories/supabase_service.dart';
 import '../widgets/session/session_delete_dialog.dart';
 import '../widgets/session/session_form_sheet.dart';
 import '../widgets/session/session_list_tile.dart';
@@ -18,74 +17,100 @@ class SessionsScreen extends StatefulWidget {
 }
 
 class _SessionsScreenState extends State<SessionsScreen> {
-  List<Session> sessions = [];
+  List<SessionModel> sessions = [];
   bool isLoading = true;
-
-  String get _storageKey => 'sessions_${widget.groupId}';
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _loadSessions();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
   Future<void> _loadSessions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? raw = prefs.getString(_storageKey);
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw) as List;
-        final loaded = decoded
-            .whereType<Map>()
-            .map((item) => Session.fromJson(Map<String, dynamic>.from(item)))
-            .toList();
-        loaded.sort((Session a, Session b) {
-          final DateTime dateA = a.dateTime ?? DateTime(1970);
-          final DateTime dateB = b.dateTime ?? DateTime(1970);
-          return dateB.compareTo(dateA);
-        });
-        setState(() => sessions = loaded);
-      } catch (_) {
-        // Dados corrompidos: ignora e mantém lista vazia.
-      }
+    setState(() => isLoading = true);
+    try {
+      final fetched = await SupabaseService.instance.sessions
+          .getSessionsByGroup(widget.groupId);
+      if (!mounted) return;
+      setState(() {
+        sessions = fetched;
+      });
+    } catch (e) {
+      debugPrint('Error loading sessions: $e');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-    setState(() => isLoading = false);
   }
 
-  Future<void> _saveSessions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<Map<String, dynamic>> data =
-        sessions.map((Session s) => s.toJson()).toList();
-    await prefs.setString(_storageKey, jsonEncode(data));
-  }
-
-  Future<void> _openSessionForm({Session? existing}) async {
+  Future<void> _openSessionForm({SessionModel? existing}) async {
     await showSessionFormSheet(
       context,
       existing: existing,
-      onSubmit: (Session session) {
-        setState(() {
-          final List<Session> updated = [...sessions];
-          final int index = updated.indexWhere((s) => s.id == session.id);
-          if (index >= 0) {
-            updated[index] = session;
+      onSubmit: (SessionModel session) async {
+        // Gets the current season to link to the session
+        final currentSeason = await SupabaseService.instance.seasons
+            .getCurrentSeason(widget.groupId);
+
+        final model = SessionModel(
+          id: existing?.id ?? session.id,
+          groupId: widget.groupId,
+          seasonId: currentSeason?.id,
+          title: session.title,
+          sessionDate: session.dateTime ?? DateTime.now(),
+          status: session.isLive
+              ? SessionModel.statusInProgress
+              : SessionModel.statusFinished,
+          durationMinutes: session.durationMinutes,
+          winLimit: (session.winLimit ?? 0) > 0 ? session.winLimit : null,
+          playerCount: session.playerCount,
+          streakAction: session.streakAction,
+          draftMode: session.draftMode,
+        );
+
+        try {
+          if (existing == null) {
+            await SupabaseService.instance.sessions.createSession(model);
           } else {
-            updated.insert(0, session);
+            await SupabaseService.instance.sessions.updateSession(model.copyWith(id: existing.id));
           }
-          sessions = updated;
-        });
-        _saveSessions();
+          await _loadSessions();
+        } catch (e) {
+          debugPrint('Error saving session: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Erro ao salvar: ${e.toString()}')),
+            );
+          }
+        }
       },
     );
   }
 
-  Future<void> _confirmDeleteSession(Session session) async {
+  Future<void> _confirmDeleteSession(SessionModel session) async {
     final bool confirmed = await showSessionDeleteDialog(context);
     if (!confirmed) return;
-    setState(() {
-      sessions = sessions.where((s) => s.id != session.id).toList();
-    });
-    _saveSessions();
+
+    setState(() => isLoading = true);
+    try {
+      await SupabaseService.instance.sessions.deleteSession(session.id);
+      await _loadSessions();
+    } catch (e) {
+      debugPrint('Error deleting session: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   @override
@@ -93,7 +118,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accentBlue))
           : sessions.isEmpty
               ? const Center(
                   child: Text(
@@ -105,7 +131,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: sessions.length,
                   itemBuilder: (BuildContext context, int index) {
-                    final Session item = sessions[index];
+                    final SessionModel item = sessions[index];
                     return SessionListTile(
                       session: item,
                       onOpen: () {
@@ -116,21 +142,33 @@ class _SessionsScreenState extends State<SessionsScreen> {
                               groupId: widget.groupId,
                               tournamentId: item.id,
                               tournamentName: item.title,
-                              totalPlayers: item.jogadores,
+                              totalPlayers: item.playerCount,
                             ),
                           ),
                         );
                       },
-                      onEdit: () => _openSessionForm(existing: item),
-                      onDelete: () => _confirmDeleteSession(item),
+                      onEdit: _isAdmin
+                          ? () => _openSessionForm(existing: item)
+                          : () => _denyPermission(),
+                      onDelete: _isAdmin
+                          ? () => _confirmDeleteSession(item)
+                          : () => _denyPermission(),
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accentBlue,
-        onPressed: () => _openSessionForm(),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              onPressed: () => _openSessionForm(),
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
+    );
+  }
+
+  void _denyPermission() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Apenas administradores podem alterar as peladas.')),
     );
   }
 }

@@ -9,19 +9,19 @@ import '../utils/player_identity.dart';
 /// Tela de Draft com Capitães.
 ///
 /// Fluxo:
-///  1. Os [numTeams] jogadores com maior nota histórica viram capitães.
+///  1. The [numTeams] players with the highest historical rating become captains.
 ///  2. Os capitães escolhem em ordem CRESCENTE de nota (pior capitão escolhe
 ///     primeiro), alternando em snake draft até que todos os times estejam
 ///     completos.
-///  3. Ao finalizar, retorna List<List<Map<String,dynamic>>> (os times).
+///  3. When finished, returns List<List<Map<String,dynamic>>> (the teams).
 /// ============================================================
 
 class DraftScreen extends StatefulWidget {
-  /// Todos os jogadores presentes (já ordenados por chegada, mas serão
+  /// All present players (already ordered by arrival, but will be
   /// reordenados internamente).
   final List<Map<String, dynamic>> presentPlayers;
 
-  /// Quantos jogadores por time.
+  /// How many players per team.
   final int playersPerTeam;
 
   const DraftScreen({
@@ -80,10 +80,10 @@ class _DraftScreenState extends State<DraftScreen> {
         return ra.compareTo(rb); // ascendente
       });
 
-    // Cria os times com os capitães já incluídos
+    // Creates the teams with the captains already included
     teams = List.generate(numTeams, (i) => [captains[i]]);
 
-    // Jogadores disponíveis = todos menos os capitães
+    // Available players = everyone except the captains
     final captainIds = captains.map(_pid).toSet();
     available = sorted.where((p) => !captainIds.contains(_pid(p))).toList();
 
@@ -140,7 +140,7 @@ class _DraftScreenState extends State<DraftScreen> {
   }
 
   void _confirmDraft() {
-    // Retorna a lista de times: [time0, time1, ...]
+    // Returns the list of teams: [team0, team1, ...]
     Navigator.pop(context, teams);
   }
 
@@ -190,7 +190,7 @@ class _DraftScreenState extends State<DraftScreen> {
           // ── Times formados ───────────────────────────────
           _buildTeamsSummary(),
           const Divider(color: Colors.white12, height: 1),
-          // ── Jogadores disponíveis ────────────────────────
+          // ── Available players ────────────────────────
           Expanded(child: _phase == 'picking' ? _buildAvailablePlayers() : _buildDoneView()),
         ],
       ),

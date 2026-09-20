@@ -66,7 +66,7 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
   List<Map<String, dynamic>> _topGkConceded = [];
   List<Map<String, dynamic>> _topGkGames = [];
 
-  // Gráfico de Evolução (Média geral por sessão)
+  // Evolution Chart (Overall average per session)
   List<Map<String, dynamic>> _chartData = [];
 
   @override

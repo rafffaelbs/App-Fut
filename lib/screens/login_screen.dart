@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,8 +14,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isSignUp = false;
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleSubmit() async {
     if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, preencha todos os campos.')),
@@ -25,20 +26,32 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      if (mounted) Navigator.pop(context, true); // Retorna true se logou com sucesso
-    } on FirebaseAuthException catch (e) {
-      String message = 'Ocorreu um erro ao fazer login.';
-      if (e.code == 'user-not-found') message = 'Usuário não encontrado.';
-      if (e.code == 'wrong-password') message = 'Senha incorreta.';
-      if (e.code == 'invalid-email') message = 'E-mail inválido.';
-      
+      if (_isSignUp) {
+        await Supabase.instance.client.auth.signUp(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      } else {
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      }
+      // AuthGate (main.dart) escuta onAuthStateChange e navega sozinho;
+      // se essa tela tiver sido aberta como um push (ex: fluxo de sync),
+      // fechamos ela também.
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context, true);
+    } on AuthException catch (e) {
+      String message = e.message;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ocorreu um erro: $e'), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -76,18 +89,20 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 40),
-            const Text(
-              'Acesso Restrito',
-              style: TextStyle(
+            Text(
+              _isSignUp ? 'Criar Conta' : 'Entrar',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Faça login para gerenciar a sincronização em nuvem.',
-              style: TextStyle(
+            Text(
+              _isSignUp
+                  ? 'Crie sua conta para participar ou administrar um grupo.'
+                  : 'Faça login para ver seus grupos.',
+              style: const TextStyle(
                 color: Colors.white54,
                 fontSize: 15,
               ),
@@ -152,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
+                onPressed: _isLoading ? null : _handleSubmit,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentBlue,
                   foregroundColor: Colors.white,
@@ -163,9 +178,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'ENTRAR',
-                        style: TextStyle(
+                    : Text(
+                        _isSignUp ? 'CRIAR CONTA' : 'ENTRAR',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.2,
@@ -173,12 +188,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
               ),
             ),
-            const SizedBox(height: 20),
-            const Center(
-              child: Text(
-                'Apenas pessoal autorizado tem acesso a estas funções.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white24, fontSize: 12),
+            const SizedBox(height: 16),
+            Center(
+              child: TextButton(
+                onPressed: _isLoading ? null : () => setState(() => _isSignUp = !_isSignUp),
+                child: Text(
+                  _isSignUp
+                      ? 'Já tem conta? Entrar'
+                      : 'Não tem conta? Criar agora',
+                  style: const TextStyle(color: AppColors.accentBlue),
+                ),
               ),
             ),
           ],

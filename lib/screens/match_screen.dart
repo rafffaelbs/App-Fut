@@ -7,7 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../utils/stats_calculator.dart';
 import '../services/sync_service.dart';
+import '../repositories/supabase_service.dart';
+import '../models/session_model.dart';
+import '../models/match_lineup_model.dart';
+import '../models/match_event_model.dart';
 
 import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_pitch_player.dart';
@@ -41,6 +46,10 @@ class _MatchScreenState extends State<MatchScreen>
   List<Map<String, dynamic>> presentPlayers = [];
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
+
+  // Guarda uma "chave" do último sorteio (times, sem levar a cor em conta)
+  // pra garantir que o próximo sorteio nunca saia idêntico a ele.
+  String? _lastDrawKey;
 
   Map<String, dynamic>? activeGkRed;
   Map<String, dynamic>? activeGkWhite;
@@ -86,6 +95,7 @@ class _MatchScreenState extends State<MatchScreen>
   @override
   void dispose() {
     _matchTimer?.cancel();
+    _cloudSyncDebounce?.cancel();
     _tabController.dispose();
     _audioPlayer.dispose();
     super.dispose();
@@ -105,10 +115,12 @@ class _MatchScreenState extends State<MatchScreen>
   double _calculateTeamRating(List<Map<String, dynamic>> team) {
     if (team.isEmpty) return 0.0;
     double totalStars = 0.0;
-    for (var player in team)
-      totalStars += player['rating'] != null
+    for (var player in team) {
+      final double r = player['rating'] != null
           ? (player['rating'] as num).toDouble()
-          : 0.0;
+          : kRatingBase;
+      totalStars += r;
+    }
     return totalStars / team.length;
   }
 
@@ -148,6 +160,66 @@ class _MatchScreenState extends State<MatchScreen>
     else await prefs.remove('first_gk_red_$id');
     if (firstGkWhite != null) await prefs.setString('first_gk_white_$id', jsonEncode(firstGkWhite));
     else await prefs.remove('first_gk_white_$id');
+
+    _scheduleCloudSync();
+  }
+
+  Timer? _cloudSyncDebounce;
+
+  /// Agenda um envio pro Supabase da presença/placar/cronômetro atuais,
+  /// com debounce -- várias chamadas seguidas (arrastar jogador, tick do
+  /// timer, gol) resultam em um único request depois que as mudanças
+  /// pararem por um instante, em vez de martelar a rede a cada setState.
+  void _scheduleCloudSync() {
+    if (widget.groupId.isEmpty) return;
+    _cloudSyncDebounce?.cancel();
+    _cloudSyncDebounce = Timer(const Duration(seconds: 2), _syncToCloud);
+  }
+
+  /// Envia o estado "rascunho" da pelada (quem chegou, times, goleiros,
+  /// placar, cronômetro) pro Supabase, pra sobreviver a troca de
+  /// aparelho/reinstalação antes de "Encerrar Partida". Falha
+  /// silenciosamente (fica só local) se estiver offline -- o cache local
+  /// via SharedPreferences continua sendo a fonte imediata de verdade.
+  Future<void> _syncToCloud() async {
+    if (widget.groupId.isEmpty || presentPlayers.isEmpty) return;
+    try {
+      final redIds = teamRed.map((p) => _pid(p)).toSet();
+      final whiteIds = teamWhite.map((p) => _pid(p)).toSet();
+      final gkRedId = activeGkRed != null ? _pid(activeGkRed!) : null;
+      final gkWhiteId = activeGkWhite != null ? _pid(activeGkWhite!) : null;
+
+      final draft = presentPlayers.map((p) {
+        final pid = _pid(p);
+        String? team;
+        if (redIds.contains(pid)) team = 'red';
+        if (whiteIds.contains(pid)) team = 'white';
+        return {
+          'id': pid,
+          'desistiu': p['desistiu'] == true,
+          if (team != null) 'team': team,
+          if (pid == gkRedId || pid == gkWhiteId) 'is_goalkeeper': true,
+        };
+      }).toList();
+
+      await SupabaseService.instance.sessionArrivals
+          .replaceArrivals(widget.tournamentId, draft);
+
+      await SupabaseService.instance.sessions.updateRuntimeState(
+        widget.tournamentId,
+        isRunning: isMatchRunning,
+        secondsPlayed: _secondsPlayedBeforePause,
+        scoreRed: scoreRed,
+        scoreWhite: scoreWhite,
+        redStreak: redWinStreak,
+        whiteStreak: whiteWinStreak,
+        isOvertime: isOvertime,
+        startedAt: _lastStartTime,
+        status: SessionModel.statusInProgress,
+      );
+    } catch (e) {
+      debugPrint('Error syncing session draft to Supabase: $e');
+    }
   }
 
   Future<void> _loadMatchState() async {
@@ -158,11 +230,116 @@ class _MatchScreenState extends State<MatchScreen>
     _requireGk = prefs.getBool('require_gk') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null)
+    if (dbData != null) {
       allSavedPlayers = ensurePlayerIds(
         List<Map<String, dynamic>>.from(jsonDecode(dbData)),
       );
+    }
+    if (widget.groupId.isNotEmpty) {
+      try {
+        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        if (fetched.isNotEmpty) {
+          allSavedPlayers = fetched.map((p) => {
+            'id': p.id,
+            'name': p.displayName,
+            'icon': p.icon,
+            'rating': p.rating,
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('Error fetching players from Supabase: $e');
+      }
 
+      try {
+        final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
+        final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
+        for (var p in allSavedPlayers) {
+          final pid = _pid(p);
+          if (globalStats.containsKey(pid)) {
+            p['rating'] = globalStats[pid]!['nota'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
+        }
+        await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+      } catch (e) {
+        debugPrint('Error calculating dynamic ratings in MatchScreen: $e');
+      }
+    }
+
+    // Se não existe nada localmente (app reinstalado, storage limpo, ou
+    // pelada aberta em outro aparelho), tenta recuperar o "rascunho" salvo
+    // no Supabase (session_arrivals + colunas de runtime da session) antes
+    // de cair pra listas vazias.
+    if (!prefs.containsKey('present_players_$id') && widget.groupId.isNotEmpty) {
+      try {
+        final arrivals = await SupabaseService.instance.sessionArrivals
+            .getArrivals(id);
+        if (arrivals.isNotEmpty) {
+          Map<String, dynamic> hydrate(Map<String, dynamic> arrival) {
+            final pid = arrival['player_id']?.toString() ?? '';
+            final base = allSavedPlayers.firstWhere(
+              (p) => _pid(p) == pid,
+              orElse: () => {'id': pid, 'name': pid},
+            );
+            final player = Map<String, dynamic>.from(base);
+            if (arrival['desistiu'] == true) player['desistiu'] = true;
+            return player;
+          }
+
+          final recoveredPresent = arrivals.map(hydrate).toList();
+          final recoveredRed = arrivals
+              .where((a) => a['team'] == 'red')
+              .map(hydrate)
+              .toList();
+          final recoveredWhite = arrivals
+              .where((a) => a['team'] == 'white')
+              .map(hydrate)
+              .toList();
+
+          await prefs.setString(
+              'present_players_$id', jsonEncode(recoveredPresent));
+          await prefs.setString('team_red_$id', jsonEncode(recoveredRed));
+          await prefs.setString('team_white_$id', jsonEncode(recoveredWhite));
+
+          // As colunas de runtime (score/timer/streak) não fazem parte do
+          // SessionModel, então busca direto pra não perder esse estado.
+          try {
+            final raw = await SupabaseService.instance.client
+                .from('sessions')
+                .select(
+                    'seconds_played,is_running,score_red,score_white,red_streak,white_streak,is_overtime,started_at')
+                .eq('id', id)
+                .maybeSingle();
+            if (raw != null) {
+              await prefs.setInt(
+                  'seconds_played_$id', (raw['seconds_played'] as num?)?.toInt() ?? 0);
+              await prefs.setBool('is_running_$id', false);
+              await prefs.setInt(
+                  'score_red_$id', (raw['score_red'] as num?)?.toInt() ?? 0);
+              await prefs.setInt('score_white_$id',
+                  (raw['score_white'] as num?)?.toInt() ?? 0);
+              await prefs.setInt(
+                  'red_streak_$id', (raw['red_streak'] as num?)?.toInt() ?? 0);
+              await prefs.setInt('white_streak_$id',
+                  (raw['white_streak'] as num?)?.toInt() ?? 0);
+              await prefs.setBool(
+                  'is_overtime_$id', raw['is_overtime'] == true);
+              // O cronômetro nunca volta rodando automaticamente após uma
+              // recuperação -- o usuário aperta o play de novo, evitando
+              // um `_lastStartTime` de outro aparelho/sessão desatualizado.
+              await prefs.remove('start_timestamp_$id');
+            }
+          } catch (e) {
+            debugPrint('Error recovering session runtime state: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('Error recovering session draft from Supabase: $e');
+      }
+    }
+
+    if (!mounted) return; // usuário já saiu da tela enquanto isso carregava
     setState(() {
       if (prefs.containsKey('present_players_$id'))
         presentPlayers = ensurePlayerIds(
@@ -215,8 +392,11 @@ class _MatchScreenState extends State<MatchScreen>
             (dbP) => _pid(dbP) == _pid(p),
             orElse: () => {},
           );
-          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null)
+          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
             p['rating'] = dbPlayer['rating'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
         }
       }
 
@@ -240,6 +420,15 @@ class _MatchScreenState extends State<MatchScreen>
       if (prefs.containsKey('first_gk_red_$id')) firstGkRed = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_red_$id')!));
       if (prefs.containsKey('first_gk_white_$id')) firstGkWhite = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_white_$id')!));
 
+      if (activeGkRed != null && activeGkRed!['rating'] == null) {
+        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkRed!), orElse: () => {});
+        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkRed!['rating'] = dbP['rating'];
+      }
+      if (activeGkWhite != null && activeGkWhite!['rating'] == null) {
+        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkWhite!), orElse: () => {});
+        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkWhite!['rating'] = dbP['rating'];
+      }
+
       if (isMatchRunning && _lastStartTime != null) {
         _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           setState(() {
@@ -253,6 +442,62 @@ class _MatchScreenState extends State<MatchScreen>
         });
       }
     });
+  }
+
+  Future<void> _calculateDynamicRatings() async {
+    if (widget.groupId.isEmpty) return;
+    try {
+      final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
+      final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
+
+      for (var p in allSavedPlayers) {
+        final pid = _pid(p);
+        if (globalStats.containsKey(pid)) {
+          p['rating'] = globalStats[pid]!['nota'];
+        } else if (p['rating'] == null) {
+          p['rating'] = kRatingBase;
+        }
+      }
+
+      void syncList(List<Map<String, dynamic>> list) {
+        for (var p in list) {
+          final pid = _pid(p);
+          final dbPlayer = allSavedPlayers.firstWhere(
+            (dbP) => _pid(dbP) == pid,
+            orElse: () => {},
+          );
+          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
+            p['rating'] = dbPlayer['rating'];
+          } else if (globalStats.containsKey(pid)) {
+            p['rating'] = globalStats[pid]!['nota'];
+          } else if (p['rating'] == null) {
+            p['rating'] = kRatingBase;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          syncList(presentPlayers);
+          syncList(teamRed);
+          syncList(teamWhite);
+          if (activeGkRed != null) {
+            final pid = _pid(activeGkRed!);
+            if (globalStats.containsKey(pid)) activeGkRed!['rating'] = globalStats[pid]!['nota'];
+          }
+          if (activeGkWhite != null) {
+            final pid = _pid(activeGkWhite!);
+            if (globalStats.containsKey(pid)) activeGkWhite!['rating'] = globalStats[pid]!['nota'];
+          }
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+      await _saveMatchState();
+    } catch (e) {
+      debugPrint("Error in _calculateDynamicRatings: $e");
+    }
   }
 
   void _startMatch() async {
@@ -665,73 +910,144 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _sortearTeams({bool useAllPlayers = false}) {
-    if (presentPlayers.length < 2) return;
+    final eligible = presentPlayers.where((p) => p['desistiu'] != true).toList();
+    if (eligible.length < 2) return;
     setState(() {
       int needed = widget.totalPlayers * 2;
       final random = Random();
 
-      List<Map<String, dynamic>> pool;
-
+      List<Map<String, dynamic>> basePool;
       if (useAllPlayers) {
-        // Shuffle all players randomly and select n players
         List<Map<String, dynamic>> shuffledPlayers =
-            List<Map<String, dynamic>>.from(presentPlayers);
+            List<Map<String, dynamic>>.from(eligible);
         shuffledPlayers.shuffle(random);
-        pool = shuffledPlayers.take(needed).toList();
+        basePool = shuffledPlayers.take(needed).toList();
       } else {
         // Take the first n players in arrival order (no shuffling)
-        pool = presentPlayers.take(needed).toList();
+        basePool = eligible.take(needed).toList();
       }
 
-      // Sort selected players by rating (highest first) for balanced distribution
-      pool.sort(
-        (a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo(
-          (a['rating'] ?? kRatingBase) as num,
-        ),
-      );
-
-      teamRed.clear();
-      teamWhite.clear();
-      double sumRed = 0;
-      double sumWhite = 0;
-
-      // Balance with some randomness: 70% chance to pick "correct" team, 30% random
-      for (var p in pool) {
-        if (teamRed.length < widget.totalPlayers &&
-            teamWhite.length < widget.totalPlayers) {
-          bool shouldPickRed = sumRed <= sumWhite;
-          // Add randomness: 30% chance to invert the decision
-          if (random.nextDouble() < 0.3) {
-            shouldPickRed = !shouldPickRed;
-          }
-          if (shouldPickRed) {
-            teamRed.add(p);
-            sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-          } else {
-            teamWhite.add(p);
-            sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
-          }
-        } else if (teamRed.length < widget.totalPlayers) {
-          teamRed.add(p);
-          sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-        } else if (teamWhite.length < widget.totalPlayers) {
-          teamWhite.add(p);
-          sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
+      // Sorteia até sair diferente do último sorteio (ignorando cor -- times
+      // trocados de lado contam como repetição). Tenta algumas vezes; se não
+      // conseguir (grupos muito pequenos), força uma troca de 1 jogador no
+      // fim pra garantir que nunca saia igual ao anterior.
+      List<Map<String, dynamic>> redResult = [];
+      List<Map<String, dynamic>> whiteResult = [];
+      const maxAttempts = 15;
+      for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        final split = _draftOneSplit(basePool, random);
+        redResult = split.$1;
+        whiteResult = split.$2;
+        if (_lastDrawKey == null || _splitKey(redResult, whiteResult) != _lastDrawKey) {
+          break;
         }
-        // If both teams are full, stop adding players
       }
+
+      // Garantia final: se mesmo assim saiu igual ao anterior, troca um par
+      // de jogadores de nota parecida entre os dois times pra forçar diferença.
+      if (_lastDrawKey != null &&
+          _splitKey(redResult, whiteResult) == _lastDrawKey &&
+          redResult.isNotEmpty &&
+          whiteResult.isNotEmpty) {
+        final tmp = redResult[0];
+        redResult[0] = whiteResult[0];
+        whiteResult[0] = tmp;
+      }
+
+      teamRed
+        ..clear()
+        ..addAll(redResult);
+      teamWhite
+        ..clear()
+        ..addAll(whiteResult);
+
+      _lastDrawKey = _splitKey(teamRed, teamWhite);
     });
     _saveMatchState();
   }
 
+  /// Sorteia uma divisão dos jogadores em dois times, com aleatoriedade real:
+  /// jogadores são agrupados em faixas próximas de nota (não em ranking
+  /// estritamente ordenado) e embaralhados dentro de cada faixa antes de
+  /// serem distribuídos, ao invés de reordenados por nota (o que antes
+  /// anulava qualquer shuffle anterior).
+  (List<Map<String, dynamic>>, List<Map<String, dynamic>>) _draftOneSplit(
+    List<Map<String, dynamic>> basePool,
+    Random random,
+  ) {
+    final pool = List<Map<String, dynamic>>.from(basePool);
+
+    // Agrupa em faixas de ~0.5 pontos de nota e embaralha dentro de cada
+    // faixa, mantendo as faixas em ordem decrescente (melhores primeiro).
+    const bandWidth = 0.5;
+    final byBand = <int, List<Map<String, dynamic>>>{};
+    for (final p in pool) {
+      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
+      final band = (rating / bandWidth).floor();
+      byBand.putIfAbsent(band, () => []).add(p);
+    }
+    final bands = byBand.keys.toList()..sort((a, b) => b.compareTo(a));
+    final shuffledPool = <Map<String, dynamic>>[];
+    for (final band in bands) {
+      final group = byBand[band]!;
+      group.shuffle(random);
+      shuffledPool.addAll(group);
+    }
+
+    final teamRedDraft = <Map<String, dynamic>>[];
+    final teamWhiteDraft = <Map<String, dynamic>>[];
+    double sumRed = 0;
+    double sumWhite = 0;
+
+    for (var p in shuffledPool) {
+      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
+      if (teamRedDraft.length < widget.totalPlayers &&
+          teamWhiteDraft.length < widget.totalPlayers) {
+        bool shouldPickRed = sumRed <= sumWhite;
+        // 40% de chance de inverter a escolha "ideal" -- suficiente pra dar
+        // variedade real, já que agora a ordem de entrada dos jogadores de
+        // nota parecida também é aleatória (antes só isso já não bastava
+        // porque o pool inteiro era reordenado por nota logo depois).
+        if (random.nextDouble() < 0.4) {
+          shouldPickRed = !shouldPickRed;
+        }
+        if (shouldPickRed) {
+          teamRedDraft.add(p);
+          sumRed += rating;
+        } else {
+          teamWhiteDraft.add(p);
+          sumWhite += rating;
+        }
+      } else if (teamRedDraft.length < widget.totalPlayers) {
+        teamRedDraft.add(p);
+        sumRed += rating;
+      } else if (teamWhiteDraft.length < widget.totalPlayers) {
+        teamWhiteDraft.add(p);
+        sumWhite += rating;
+      }
+    }
+
+    return (teamRedDraft, teamWhiteDraft);
+  }
+
+  /// Chave única de uma divisão de times, ignorando qual lado é vermelho ou
+  /// branco -- duas divisões com os mesmos jogadores só de lado trocado
+  /// geram a mesma chave (contam como repetição).
+  String _splitKey(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    final keyA = (a.map(_pid).toList()..sort()).join(',');
+    final keyB = (b.map(_pid).toList()..sort()).join(',');
+    return keyA.compareTo(keyB) <= 0 ? '$keyA|$keyB' : '$keyB|$keyA';
+  }
+
   void _iniciarTimesDraft() async {
-    if (presentPlayers.length < 2) return;
+    final eligible = presentPlayers.where((p) => p['desistiu'] != true).toList();
+    if (eligible.length < 2) return;
 
     final List<List<Map<String, dynamic>>>? result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => DraftScreen(
-          presentPlayers: List<Map<String, dynamic>>.from(presentPlayers),
+          presentPlayers: List<Map<String, dynamic>>.from(eligible),
           playersPerTeam: widget.totalPlayers,
         ),
       ),
@@ -751,6 +1067,12 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _addToTeam(Map<String, dynamic> player, bool isRedTeam) {
+    if (player['desistiu'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("${player['name']} desistiu e não pode ser escalado.")),
+      );
+      return;
+    }
     List<Map<String, dynamic>> target = isRedTeam ? teamRed : teamWhite;
     List<Map<String, dynamic>> other = isRedTeam ? teamWhite : teamRed;
     setState(() {
@@ -825,7 +1147,8 @@ class _MatchScreenState extends State<MatchScreen>
   ) {
     final waiting = presentPlayers.where((p) {
       final id = _pid(p);
-      return !teamRed.any((t) => _pid(t) == id) &&
+      return p['desistiu'] != true &&
+          !teamRed.any((t) => _pid(t) == id) &&
           !teamWhite.any((t) => _pid(t) == id);
     }).toList();
     if (waiting.isEmpty) {
@@ -892,6 +1215,14 @@ class _MatchScreenState extends State<MatchScreen>
     int status = myScore > oppScore ? 1 : (myScore < oppScore ? -1 : 0);
     int streak = isRedTeam ? redWinStreak : whiteWinStreak;
 
+    // Gol da virada / gol decisivo do fim de jogo -- derivados dos
+    // próprios eventos da partida (minuto + placar), sem pedir nada novo.
+    final specialGoals = findSpecialGoals(matchEvents);
+    final bool scoredComeback = specialGoals.comebackGoalIndex != -1 &&
+        matchEvents[specialGoals.comebackGoalIndex]['playerId'] == _pid(player);
+    final bool scoredClutch = specialGoals.clutchGoalIndex != -1 &&
+        matchEvents[specialGoals.clutchGoalIndex]['playerId'] == _pid(player);
+
     // USANDO O RATING CALCULATOR AQUI!
     double matchRating = calculateMatchRating(
       status: status,
@@ -903,6 +1234,8 @@ class _MatchScreenState extends State<MatchScreen>
       yellow: yellow,
       red: red,
       teamWinStreak: streak,
+      scoredComebackGoal: scoredComeback,
+      scoredClutchGoal: scoredClutch,
     );
 
     return {
@@ -1167,7 +1500,12 @@ class _MatchScreenState extends State<MatchScreen>
       return const Center(
         child: Text("Lista vazia.", style: TextStyle(color: Colors.white38)),
       );
-    int total = presentPlayers.length;
+    final activePlayers =
+        presentPlayers.where((p) => p['desistiu'] != true).toList();
+    final desistPlayers =
+        presentPlayers.where((p) => p['desistiu'] == true).toList();
+    final displayList = [...activePlayers, ...desistPlayers];
+    int total = activePlayers.length;
     int times = total ~/ widget.totalPlayers;
     int sobram = total % widget.totalPlayers;
     String resumoText = "👥 $total Presentes | $times Times";
@@ -1196,99 +1534,173 @@ class _MatchScreenState extends State<MatchScreen>
       onReorder: (oldIndex, newIndex) {
         setState(() {
           if (newIndex > oldIndex) newIndex -= 1;
-          final item = presentPlayers.removeAt(oldIndex);
-          presentPlayers.insert(newIndex, item);
+          // Jogadores que desistiram ficam fixos na seção final;
+          // arrastar não se aplica a eles.
+          if (oldIndex >= activePlayers.length) return;
+          if (newIndex >= activePlayers.length) {
+            newIndex = activePlayers.length - 1;
+          }
+          final item = activePlayers.removeAt(oldIndex);
+          activePlayers.insert(newIndex, item);
+          presentPlayers = [...activePlayers, ...desistPlayers];
         });
         _saveMatchState();
       },
       children: [
-        for (int i = 0; i < presentPlayers.length; i++)
-          Container(
-            key: ValueKey(_pid(presentPlayers[i])),
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: AppColors.headerBlue,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withOpacity(0.05)),
-            ),
-            child: ListTile(
-              leading: Stack(
-                alignment: Alignment.bottomRight,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: AppColors.deepBlue,
-                    backgroundImage: presentPlayers[i]['icon'] != null
-                        ? AssetImage(presentPlayers[i]['icon'])
-                        : null,
-                    child: presentPlayers[i]['icon'] == null
-                        ? Text(
-                            presentPlayers[i]['name'][0].toUpperCase(),
+        for (int i = 0, activeCount = 0; i < displayList.length; i++)
+          Builder(
+            key: ValueKey(_pid(displayList[i])), // ✅ Mova a key para o filho direto (Builder)
+            builder: (context) {
+            final bool desistiu = displayList[i]['desistiu'] == true;
+            final bool isFirstDesistente =
+                desistiu && i == activePlayers.length;
+            if (!desistiu) activeCount++;
+            final int displayOrder = activeCount;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isFirstDesistente)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, top: 4),
+                    child: Row(
+                      children: [
+                        const Expanded(child: Divider(color: Colors.white24)),
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            "DESISTIRAM (${desistPlayers.length})",
                             style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const Expanded(child: Divider(color: Colors.white24)),
+                      ],
+                    ),
+                  ),
+                Opacity(
+              opacity: desistiu ? 0.45 : 1.0,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.headerBlue,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                ),
+                child: ListTile(
+                  leading: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: AppColors.deepBlue,
+                        backgroundImage: displayList[i]['icon'] != null
+                            ? AssetImage(displayList[i]['icon'])
+                            : null,
+                        child: displayList[i]['icon'] == null
+                            ? Text(
+                                displayList[i]['name'][0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
+                      if (!desistiu)
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: AppColors.accentBlue,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            "$displayOrder",
+                            style: const TextStyle(
+                              fontSize: 9,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
-                          )
-                        : null,
+                          ),
+                        ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(
-                      color: AppColors.accentBlue,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      "${i + 1}",
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      presentPlayers[i]['name'],
-                      style: const TextStyle(
-                        color: AppColors.textWhite,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (presentPlayers[i]['rating'] != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Colors.green.withOpacity(0.3),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayList[i]['name'],
+                          style: TextStyle(
+                            color: desistiu
+                                ? Colors.white54
+                                : AppColors.textWhite,
+                            fontWeight: FontWeight.bold,
+                            decoration: desistiu
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      child: Text(
-                        (presentPlayers[i]['rating'] as num)
-                            .toDouble()
-                            .toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                      if (desistiu)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            "Desistiu",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        )
+                      else if (displayList[i]['rating'] != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.green.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Text(
+                            (displayList[i]['rating'] as num)
+                                .toDouble()
+                                .toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                ],
+                    ],
+                  ),
+                  trailing: Icon(
+                    desistiu ? Icons.undo : Icons.more_vert,
+                    color: desistiu ? Colors.white38 : Colors.white24,
+                  ),
+                  onTap: () => _showChegadaOptions(displayList[i]),
+                ),
               ),
-              trailing: const Icon(Icons.more_vert, color: Colors.white24),
-              onTap: () => _showChegadaOptions(presentPlayers[i]),
             ),
-          ),
+              ],
+            );
+          }),
       ],
     );
   }
@@ -1588,7 +2000,8 @@ class _MatchScreenState extends State<MatchScreen>
   Widget _buildNextTeamsTab() {
     final waiting = presentPlayers.where((p) {
       final id = _pid(p);
-      return !teamRed.any((t) => _pid(t) == id) &&
+      return p['desistiu'] != true &&
+          !teamRed.any((t) => _pid(t) == id) &&
           !teamWhite.any((t) => _pid(t) == id);
     }).toList();
     if (waiting.isEmpty)
@@ -1788,43 +2201,58 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _showChegadaOptions(Map<String, dynamic> player) {
+    final bool desistiu = player['desistiu'] == true;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.deepBlue,
       builder: (ctx) => Wrap(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.shield, color: Colors.redAccent),
-            title: const Text(
-              "Add Vermelho",
-              style: TextStyle(color: AppColors.textWhite),
-            ),
-            onTap: () {
-              Navigator.pop(ctx);
-              _addToTeam(player, true);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.shield, color: Colors.white),
-            title: const Text(
-              "Add Branco",
-              style: TextStyle(color: AppColors.textWhite),
-            ),
-            onTap: () {
-              Navigator.pop(ctx);
-              _addToTeam(player, false);
-            },
-          ),
-          const Divider(color: Colors.white24),
-          ListTile(
-            leading: const Icon(Icons.exit_to_app, color: Colors.red),
-            title: const Text(
-              "Desistiu (Remover)",
-              style: TextStyle(color: Colors.red),
-            ),
-            onTap: () => _confirmGiveUp(player),
-          ),
-        ],
+        children: desistiu
+            ? [
+                ListTile(
+                  leading: const Icon(Icons.undo, color: Colors.greenAccent),
+                  title: const Text(
+                    "Reativar (voltou a jogar)",
+                    style: TextStyle(color: Colors.greenAccent),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _reactivatePlayer(player);
+                  },
+                ),
+              ]
+            : [
+                ListTile(
+                  leading: const Icon(Icons.shield, color: Colors.redAccent),
+                  title: const Text(
+                    "Add Vermelho",
+                    style: TextStyle(color: AppColors.textWhite),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _addToTeam(player, true);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.shield, color: Colors.white),
+                  title: const Text(
+                    "Add Branco",
+                    style: TextStyle(color: AppColors.textWhite),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _addToTeam(player, false);
+                  },
+                ),
+                const Divider(color: Colors.white24),
+                ListTile(
+                  leading: const Icon(Icons.exit_to_app, color: Colors.red),
+                  title: const Text(
+                    "Desistiu (Remover)",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  onTap: () => _confirmGiveUp(player),
+                ),
+              ],
       ),
     );
   }
@@ -1875,7 +2303,7 @@ class _MatchScreenState extends State<MatchScreen>
           style: TextStyle(color: AppColors.textWhite),
         ),
         content: const Text(
-          "Vai sair da lista?",
+          "Ele sai dos times/fila, mas continua na lista (marcado como inativo). Confirmar?",
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1893,8 +2321,17 @@ class _MatchScreenState extends State<MatchScreen>
             ),
             onPressed: () {
               setState(() {
-                presentPlayers.removeWhere((p) => _pid(p) == _pid(player));
-                _removePlayerFromMatch(player);
+                teamRed.removeWhere((p) => _pid(p) == _pid(player));
+                teamWhite.removeWhere((p) => _pid(p) == _pid(player));
+                final idx = presentPlayers.indexWhere(
+                  (p) => _pid(p) == _pid(player),
+                );
+                if (idx != -1) {
+                  presentPlayers[idx] = {
+                    ...presentPlayers[idx],
+                    'desistiu': true,
+                  };
+                }
               });
               _saveMatchState();
               Navigator.pop(c);
@@ -1906,13 +2343,40 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
+  void _reactivatePlayer(Map<String, dynamic> player) {
+    setState(() {
+      final idx = presentPlayers.indexWhere((p) => _pid(p) == _pid(player));
+      if (idx != -1) {
+        presentPlayers[idx] = {...presentPlayers[idx]}..remove('desistiu');
+      }
+    });
+    _saveMatchState();
+  }
+
   void _showMultiSelectDialog() async {
     final prefs = await SharedPreferences.getInstance();
     final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null)
+    if (dbData != null) {
       setState(() {
         allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
       });
+    }
+    if (allSavedPlayers.isEmpty && widget.groupId.isNotEmpty) {
+      try {
+        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        if (fetched.isNotEmpty) {
+          setState(() {
+            allSavedPlayers = fetched.map((p) => {
+              'id': p.id,
+              'name': p.displayName,
+              'icon': p.icon,
+              'rating': p.rating,
+            }).toList();
+          });
+          await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+        }
+      } catch (_) {}
+    }
     if (allSavedPlayers.isEmpty) {
       if (!mounted) return;
       showDialog(
@@ -2431,14 +2895,82 @@ class _MatchScreenState extends State<MatchScreen>
     history.add(matchRecord);
     await prefs.setString(historyKey, jsonEncode(history));
 
-    if (mounted)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Partida salva no Histórico!"),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+    // Persist direct to Supabase
+    try {
+      final List<MatchLineupModel> lineups = [];
+      for (final p in teamRed) {
+        final pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          lineups.add(MatchLineupModel(
+            matchId: '',
+            playerId: pid,
+            team: 'red',
+            isGoalkeeper: pid == playerIdFromObject(firstGkRed),
+          ));
+        }
+      }
+      for (final p in teamWhite) {
+        final pid = playerIdFromObject(p);
+        if (pid.isNotEmpty) {
+          lineups.add(MatchLineupModel(
+            matchId: '',
+            playerId: pid,
+            team: 'white',
+            isGoalkeeper: pid == playerIdFromObject(firstGkWhite),
+          ));
+        }
+      }
+
+      final List<MatchEventModel> events = matchEvents.map((ev) {
+        final pid = eventPlayerId(ev, 'player');
+        final astId = eventPlayerId(ev, 'assist');
+        // matchEvents stores "Vermelho"/"Branco" for on-screen display; the
+        // DB constraint only accepts 'red'/'white', so normalize here.
+        final rawTeam = ev['team']?.toString() ?? '';
+        final normalizedTeam = rawTeam == 'Branco' ? 'white' : 'red';
+        return MatchEventModel(
+          matchId: '',
+          playerId: pid,
+          assistPlayerId: astId.isNotEmpty ? astId : null,
+          eventType: ev['type']?.toString() ?? 'goal',
+          team: normalizedTeam,
+          minute: ev['time']?.toString(),
+        );
+      }).toList();
+
+      await SupabaseService.instance.matches.saveFullMatch(
+        sessionId: widget.tournamentId,
+        groupId: widget.groupId,
+        teamAScore: scoreRed,
+        teamBScore: scoreWhite,
+        startTime: _lastStartTime ?? DateTime.now().subtract(Duration(seconds: totalSecondsElapsed)),
+        durationSeconds: totalSecondsElapsed,
+        lineups: lineups,
+        events: events,
       );
+      debugPrint("Match saved to Supabase successfully. session_id=${widget.tournamentId}");
+      _calculateDynamicRatings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Partida salva no Histórico!"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error saving match to Supabase: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao salvar partida no servidor: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
 
     bool isTie = scoreRed == scoreWhite;
     bool redWon = scoreRed > scoreWhite;
@@ -2619,12 +3151,12 @@ class _MatchScreenState extends State<MatchScreen>
           half2.add(winners[i]);
       }
 
-      // Calcula quantos jogadores faltam em cada time
+      // Calculates how many players are missing on each team
       int neededRed = widget.totalPlayers - half1.length;
       int neededWhite = widget.totalPlayers - half2.length;
       int totalNeeded = neededRed + neededWhite;
 
-      // Pega jogadores de fora (fila de espera)
+      // Gets the players outside (waiting queue)
       final Set<String> winnerIds = winners.map(_pid).toSet();
       final List<Map<String, dynamic>> bench = presentPlayers
           .where((p) {
@@ -2986,7 +3518,7 @@ class _MatchScreenState extends State<MatchScreen>
     try {
       final syncService = SyncService();
       final String code = await syncService.getOrCreateSyncCode();
-      syncService.exportDataToFirebase(code).then((_) async {
+      syncService.exportDataToSupabase(code).then((_) async {
         _recordSyncHistory(true);
       }).catchError((e) {
         _recordSyncHistory(false, e.toString());

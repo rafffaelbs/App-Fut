@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
-import '../../models/session.dart';
+import '../../models/session_model.dart';
 
 class SessionListTile extends StatelessWidget {
-  final Session session;
+  final SessionModel session;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -78,7 +78,7 @@ class SessionListTile extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${session.jogadores}x${session.jogadores}',
+                      '${session.playerCount}x${session.playerCount}',
                       style: const TextStyle(color: Colors.grey),
                     ),
                   ],

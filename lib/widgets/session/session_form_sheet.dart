@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../constants/app_colors.dart';
-import '../../models/session.dart';
+import '../../models/session_model.dart';
 
-/// Abre a bottom sheet de criação/edição de uma [Session].
+/// Opens the create/edit bottom sheet for a [SessionModel].
 ///
-/// Não acessa SharedPreferences — apenas monta/atualiza a [Session] e a entrega
-/// via [onSubmit]. Quando [existing] é informado, edita a pelada; caso contrário,
+/// Doesn't touch SharedPreferences -- it only builds/updates the [SessionModel] and hands it
+/// over via [onSubmit]. When [existing] is provided, it edits the session; otherwise,
 /// cria uma nova (mantendo `id`, `status` e demais chaves legadas).
 Future<void> showSessionFormSheet(
   BuildContext context, {
-  Session? existing,
-  required ValueChanged<Session> onSubmit,
+  SessionModel? existing,
+  required ValueChanged<SessionModel> onSubmit,
 }) async {
   final bool isEditing = existing != null;
 
@@ -19,7 +19,7 @@ Future<void> showSessionFormSheet(
     text: existing?.title ?? '',
   );
   final TextEditingController playersController = TextEditingController(
-    text: isEditing ? '${existing.jogadores}' : '4',
+    text: isEditing ? '${existing.playerCount}' : '4',
   );
   final TextEditingController timeController = TextEditingController(
     text: isEditing ? '${existing.duration}' : '8',
@@ -211,7 +211,7 @@ Future<void> showSessionFormSheet(
                         title: nameController.text.trim(),
                         date: dateController.text.trim(),
                         selectedDate: selectedDate,
-                        jogadores: int.tryParse(playersController.text) ?? 5,
+                        playerCount: int.tryParse(playersController.text) ?? 5,
                         duration: int.tryParse(timeController.text) ?? 8,
                         winLimit: isInfiniteLimit
                             ? 0
@@ -241,28 +241,28 @@ Future<void> showSessionFormSheet(
   );
 }
 
-Session _buildSession({
-  required Session? existing,
+SessionModel _buildSession({
+  required SessionModel? existing,
   required String title,
   required String date,
   required DateTime selectedDate,
-  required int jogadores,
+  required int playerCount,
   required int duration,
   required int winLimit,
   required String streakAction,
   required bool draftMode,
 }) {
   final bool isEditing = existing != null;
-  return Session(
+  return SessionModel(
     id: isEditing
         ? existing.id
         : 'session_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${const Uuid().v4().substring(0, 4)}',
+    groupId: existing?.groupId ?? '', // actually filled in sessions_screen.dart before saving
     title: title,
-    date: date,
-    timestamp: selectedDate.toIso8601String(),
-    status: isEditing ? existing.status : Session.statusEmAndamento,
-    jogadores: jogadores,
-    duration: duration,
+    sessionDate: selectedDate,
+    status: isEditing ? existing.status : SessionModel.statusInProgress,
+    playerCount: playerCount,
+    durationMinutes: duration,
     winLimit: winLimit,
     streakAction: streakAction,
     draftMode: draftMode,

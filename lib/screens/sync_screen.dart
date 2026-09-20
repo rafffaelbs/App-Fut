@@ -39,7 +39,7 @@ class _SyncScreenState extends State<SyncScreen> {
     setState(() => _isLoading = true);
     
     try {
-      await _syncService.exportDataToFirebase(_mySyncCode!);
+      await _syncService.exportDataToSupabase(_mySyncCode!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -104,7 +104,7 @@ class _SyncScreenState extends State<SyncScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _syncService.importDataFromFirebase(codeToImport);
+      await _syncService.importDataFromSupabase(codeToImport);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

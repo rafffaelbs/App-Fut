@@ -5,10 +5,10 @@ import 'rating_calculator.dart';
 import 'stats_calculator.dart';
 
 class SiteDataGenerator {
-  /// Gera o pacote de dados `site_data` contendo estatísticas pré-calculadas
+  /// Generates the `site_data` data package containing pre-calculated statistics
   /// para o site society.
   static Future<Map<String, dynamic>> generate(SharedPreferences prefs) async {
-    // 1. Encontrar o groupId (pega o primeiro disponível se houver vários)
+    // 1. Find the groupId (takes the first available one if there are several)
     final keys = prefs.getKeys();
     String? groupId;
     for (String key in keys) {
@@ -33,7 +33,7 @@ class SiteDataGenerator {
 
     if (groupId == null) return {};
 
-    // 2. Carregar sessões e seasons config
+    // 2. Load sessions and seasons config
     List<dynamic> sessions = [];
     final String sessionsKey = 'sessions_$groupId';
     if (prefs.containsKey(sessionsKey)) {
@@ -46,7 +46,7 @@ class SiteDataGenerator {
       seasonsConfig = jsonDecode(prefs.getString(seasonsConfigKey)!);
     }
 
-    // 3. Carregar Histórico de todas as partidas
+    // 3. Load the history of every match
     List<dynamic> allHistory = [];
     Map<String, List<dynamic>> historyBySession = {};
     for (final session in sessions) {
@@ -80,13 +80,13 @@ class SiteDataGenerator {
       playersMap[p['id'].toString()] = p;
     }
 
-    // 5. Calcular estatísticas globais e avançadas para cada jogador
+    // 5. Calculate global and advanced stats for each player
     List<dynamic> filteredHistory = await getAllGroupMatches(groupId);
 
     Map<String, Map<String, dynamic>> sitePlayers = {};
     _calculateGlobalAndAdvancedStats(filteredHistory, sitePlayers, playersMap, seasonsConfig);
 
-    // 6. Resumo das Sessões (Dias de pelada)
+    // 6. Session summary (pickup game days)
     List<Map<String, dynamic>> siteSessions = [];
     for (final session in sessions) {
       final String? tId = session['id'];
@@ -274,9 +274,9 @@ class SiteDataGenerator {
     List<dynamic> seasonsConfig
   ) {
     // Aqui fazemos uma varredura parecida com a do player_detail.dart
-    // Mas para TODOS os jogadores de uma vez para otimização
+    // But for ALL players at once for optimization
     
-    // Auxiliares por jogador
+    // Per-player helpers
     Map<String, Map<String, int>> assistsGiven = {};
     Map<String, Map<String, int>> assistsReceived = {};
     Map<String, Map<String, int>> gamesWith = {};
@@ -490,7 +490,7 @@ class SiteDataGenerator {
         }
         
         if (!isGk) {
-          // Atualiza a nota ativa (Bayesiana) a cada jogo para manter o histórico correto
+          // Updates the active (Bayesian) rating on every game to keep the history correct
           stats['active_temporada_rating'] = calculateFinalRating(ratings: stats['ratings'] as List<double>);
         }
 
@@ -584,7 +584,7 @@ class SiteDataGenerator {
       };
     }
 
-    // Finalizar cálculos para cada jogador
+    // Finalize calculations for each player
     sitePlayers.forEach((id, stats) {
       stats['nota'] = calculateFinalRating(ratings: stats['ratings'] as List<double>);
       stats['gk_stats']['nota'] = calculateFinalRating(ratings: stats['gk_stats']['ratings'] as List<double>);
@@ -613,7 +613,7 @@ class SiteDataGenerator {
       chart.sort((a, b) => a['date'].compareTo(b['date']));
       stats['evolution_chart'] = chart;
       
-      // Limpar campos pesados ou não necessários no JSON final
+      // Strip heavy or unnecessary fields from the final JSON
       stats.remove('session_chart_data');
       stats.remove('ratings');
     });
