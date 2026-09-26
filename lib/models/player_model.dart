@@ -13,6 +13,15 @@ class PlayerModel {
   final double? rating;
   final int? totalGames;
   final List<PlayerBadgeModel> manualBadges;
+  /// URL (Supabase Storage, bucket `goal-sounds`) do áudio customizado de gol
+  /// deste jogador. Null = usa o som genérico padrão do app.
+  final String? goalSoundUrl;
+  /// Efeito visual aplicado ao nome do jogador em qualquer lugar que ele
+  /// apareça. Mutuamente exclusivo: 'gold' | 'silver' | 'bronze' | null.
+  final String? nameEffect;
+  /// Selo/anel de destaque de "craque do mês", exibido só no pódio do
+  /// ranking (top posições).
+  final bool monthlyHighlight;
 
   const PlayerModel({
     required this.id,
@@ -24,6 +33,9 @@ class PlayerModel {
     this.rating,
     this.totalGames,
     this.manualBadges = const [],
+    this.goalSoundUrl,
+    this.nameEffect,
+    this.monthlyHighlight = false,
   });
 
   /// Indicates whether this is a "Ghost Player" (created by a user, without their own login).
@@ -60,6 +72,10 @@ class PlayerModel {
       rating: map['rating'] != null ? double.tryParse(map['rating'].toString()) : null,
       totalGames: map['totalGames'] != null ? int.tryParse(map['totalGames'].toString()) : null,
       manualBadges: parsedBadges,
+      goalSoundUrl: map['goal_sound_url']?.toString(),
+      nameEffect: map['name_effect']?.toString(),
+      monthlyHighlight: map['monthly_highlight'] == true ||
+          map['monthly_highlight']?.toString() == 'true',
     );
   }
 
@@ -68,7 +84,10 @@ class PlayerModel {
       'creator_id': creatorId,
       'name': name,
       'icon': icon,
-      'badges': manualBadges.map((b) => b.toMap()).toList(),
+      'manual_badges': manualBadges.map((b) => b.toMap()).toList(),
+      'goal_sound_url': goalSoundUrl,
+      'name_effect': nameEffect,
+      'monthly_highlight': monthlyHighlight,
     };
     if (includeId && id.isNotEmpty) {
       data['id'] = id;
@@ -88,6 +107,11 @@ class PlayerModel {
     double? rating,
     int? totalGames,
     List<PlayerBadgeModel>? manualBadges,
+    String? goalSoundUrl,
+    bool clearGoalSoundUrl = false,
+    String? nameEffect,
+    bool clearNameEffect = false,
+    bool? monthlyHighlight,
   }) {
     return PlayerModel(
       id: id ?? this.id,
@@ -98,6 +122,9 @@ class PlayerModel {
       rating: rating ?? this.rating,
       totalGames: totalGames ?? this.totalGames,
       manualBadges: manualBadges ?? this.manualBadges,
+      goalSoundUrl: clearGoalSoundUrl ? null : (goalSoundUrl ?? this.goalSoundUrl),
+      nameEffect: clearNameEffect ? null : (nameEffect ?? this.nameEffect),
+      monthlyHighlight: monthlyHighlight ?? this.monthlyHighlight,
     );
   }
 

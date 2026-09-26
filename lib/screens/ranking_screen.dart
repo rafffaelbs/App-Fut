@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../widgets/shared/player_name_text.dart';
 import '../repositories/supabase_service.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -876,8 +877,9 @@ class _RankingScreenState extends State<RankingScreen> {
                                   _playerAvatar(player, radius: 16),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      player['name'],
+                                    child: PlayerNameText(
+                                      name: player['name'].toString(),
+                                      nameEffect: player['name_effect']?.toString(),
                                       style: const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 13,
@@ -1183,8 +1185,9 @@ class _RankingScreenState extends State<RankingScreen> {
                                   _playerAvatar(player, radius: 14),
                                 ],
                               ),
-                              title: Text(
-                                player['name'],
+                              title: PlayerNameText(
+                                name: player['name'].toString(),
+                                nameEffect: player['name_effect']?.toString(),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600,
@@ -1334,9 +1337,9 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  Widget _playerAvatar(Map<String, dynamic> p, {double radius = 24}) {
+  Widget _playerAvatar(Map<String, dynamic> p, {double radius = 24, bool highlight = false}) {
     final String? icon = p['icon'] as String?;
-    return CircleAvatar(
+    final avatar = CircleAvatar(
       radius: radius,
       backgroundColor: AppColors.headerBlue,
       backgroundImage: icon != null && icon.isNotEmpty
@@ -1354,6 +1357,13 @@ class _RankingScreenState extends State<RankingScreen> {
               ),
             )
           : null,
+    );
+    // Ring/selo de craque do mês: só aplicado quando `highlight` é passado
+    // explicitamente (pódio, top 3) -- nunca nas listas compactas.
+    if (!highlight) return avatar;
+    return MonthlyHighlightAvatarRing(
+      avatar: avatar,
+      highlighted: p['monthly_highlight'] == true,
     );
   }
 
@@ -1408,11 +1418,12 @@ class _RankingScreenState extends State<RankingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _playerAvatar(player, radius: position == 1 ? 28 : 22),
+          _playerAvatar(player, radius: position == 1 ? 28 : 22, highlight: true),
           const SizedBox(height: 4),
           // Nome
-          Text(
-            player['name'],
+          PlayerNameText(
+            name: player['name'].toString(),
+            nameEffect: player['name_effect']?.toString(),
             style: TextStyle(
               color: Colors.white,
               fontSize: position == 1 ? 13 : 11,
@@ -1593,10 +1604,11 @@ class _RankingScreenState extends State<RankingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _playerAvatar(player, radius: position == 1 ? 28 : 22),
+          _playerAvatar(player, radius: position == 1 ? 28 : 22, highlight: true),
           const SizedBox(height: 4),
-          Text(
-            player['name'],
+          PlayerNameText(
+            name: player['name'].toString(),
+            nameEffect: player['name_effect']?.toString(),
             style: TextStyle(
               color: Colors.white,
               fontSize: position == 1 ? 13 : 11,
@@ -1770,8 +1782,9 @@ class _RankingScreenState extends State<RankingScreen> {
                 _playerAvatar(player, radius: 18),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    player['name'],
+                  child: PlayerNameText(
+                    name: player['name'].toString(),
+                    nameEffect: player['name_effect']?.toString(),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,

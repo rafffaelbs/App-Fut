@@ -8,6 +8,7 @@ import 'ratings_repository.dart';
 import 'sessions_repository.dart';
 import 'seasons_repository.dart';
 import 'session_arrivals_repository.dart';
+import 'action_logs_repository.dart';
 
 /// Central service for Supabase integration.
 class SupabaseService {
@@ -20,7 +21,8 @@ class SupabaseService {
 
     // Initialize repositories
     groupMembers = GroupMembersRepository(client: client);
-    players = PlayersRepository(client: client);
+    actionLogs = ActionLogsRepository(client: client);
+    players = PlayersRepository(client: client, membersRepo: groupMembers, logsRepo: actionLogs);
     groups = GroupsRepository(client: client, membersRepo: groupMembers);
     seasons = SeasonsRepository(client: client, membersRepo: groupMembers);
     sessions = SessionsRepository(client: client);
@@ -39,4 +41,5 @@ class SupabaseService {
   late final MatchesRepository matches;
   late final RatingsRepository ratings;
   late final SessionArrivalsRepository sessionArrivals;
+  late final ActionLogsRepository actionLogs;
 }

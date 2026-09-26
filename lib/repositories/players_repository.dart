@@ -1,19 +1,35 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 import '../models/player_model.dart';
 import '../models/player_badge_model.dart';
 import '../services/cache_store.dart';
+import 'group_members_repository.dart';
+import 'action_logs_repository.dart';
+
+/// Nome do bucket público no Supabase Storage usado para os áudios
+/// customizados de comemoração de gol. Precisa existir e ser público
+/// para leitura (ver migração 005_goal_audio_and_action_logs.sql).
+const String goalSoundsBucket = 'goal-sounds';
 
 /// Players repository integrated with Supabase PostgreSQL.
 class PlayersRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
+  final GroupMembersRepository _membersRepo;
+  final ActionLogsRepository _logs;
   static const _uuid = Uuid();
 
-  PlayersRepository({SupabaseClient? client, CacheStore? cache})
-      : _client = client ?? supabase,
-        _cache = cache ?? CacheStore();
+  PlayersRepository({
+    SupabaseClient? client,
+    CacheStore? cache,
+    GroupMembersRepository? membersRepo,
+    ActionLogsRepository? logsRepo,
+  })  : _client = client ?? supabase,
+        _cache = cache ?? CacheStore(),
+        _membersRepo = membersRepo ?? GroupMembersRepository(client: client ?? supabase),
+        _logs = logsRepo ?? ActionLogsRepository(client: client ?? supabase);
 
   /// Returns every player linked to a given group.
   ///
@@ -133,7 +149,7 @@ class PlayersRepository {
     final updatePayload = <String, dynamic>{
       'name': player.name.trim(),
       'icon': player.icon,
-      'badges': player.manualBadges.map((b) => b.toMap()).toList(),
+      'manual_badges': player.manualBadges.map((b) => b.toMap()).toList(),
     };
 
     final response = await _client
@@ -193,6 +209,162 @@ class PlayersRepository {
         .whereType<Map>()
         .map((e) => PlayerModel.fromMap(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  /// Mapeia a extensão do arquivo para um mime type que o Storage aceita
+  /// (o bucket só permite os tipos "oficiais" -- "audio/mp3" não é um
+  /// mime type válido, por isso o upload de .mp3 tem que ir como audio/mpeg).
+  static String _mimeTypeForExtension(String ext) {
+    switch (ext.toLowerCase().replaceAll('.', '')) {
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'ogg':
+        return 'audio/ogg';
+      case 'm4a':
+        return 'audio/mp4';
+      default:
+        return 'audio/mpeg';
+    }
+  }
+
+  /// Faz upload de um áudio customizado de gol para o Storage e associa
+  /// a URL pública ao jogador. Somente admins do grupo podem chamar isso
+  /// -- a checagem aqui é só para a UI reagir rápido; a garantia real é
+  /// a policy de Storage/RLS (ver 005_goal_audio_and_action_logs.sql).
+  Future<PlayerModel> uploadGoalSound({
+    required String groupId,
+    required String playerId,
+    required Uint8List fileBytes,
+    required String fileExtension,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem definir áudios de gol.');
+    }
+
+    final ext = fileExtension.replaceAll('.', '').toLowerCase();
+    final path = '$playerId/goal_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+    await _client.storage.from(goalSoundsBucket).uploadBinary(
+          path,
+          fileBytes,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: _mimeTypeForExtension(ext),
+          ),
+        );
+
+    final publicUrl = _client.storage.from(goalSoundsBucket).getPublicUrl(path);
+
+    final response = await _client
+        .from('players')
+        .update({'goal_sound_url': publicUrl})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: ActionLogsRepository.actionGoalSoundSet,
+      targetPlayerId: playerId,
+      details: {'url': publicUrl},
+    );
+    return updated;
+  }
+
+  /// Remove o áudio customizado de gol de um jogador (volta a usar o som genérico).
+  Future<PlayerModel> clearGoalSound({
+    required String groupId,
+    required String playerId,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem remover áudios de gol.');
+    }
+
+    final response = await _client
+        .from('players')
+        .update({'goal_sound_url': null})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: ActionLogsRepository.actionGoalSoundClear,
+      targetPlayerId: playerId,
+    );
+    return updated;
+  }
+
+  /// Valores aceitos para o efeito de nome (mutuamente exclusivos).
+  static const List<String> validNameEffects = ['gold', 'silver', 'bronze'];
+
+  /// Define (ou remove, se [effect] for null) o efeito visual do nome de
+  /// um jogador. Somente admins do grupo podem chamar isso -- a checagem
+  /// aqui é só para a UI reagir rápido; a garantia real é a policy de
+  /// RLS (ver 006_player_effects.sql).
+  Future<PlayerModel> setNameEffect({
+    required String groupId,
+    required String playerId,
+    required String? effect,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem definir efeitos de nome.');
+    }
+    if (effect != null && !validNameEffects.contains(effect)) {
+      throw ArgumentError('Efeito de nome inválido: $effect');
+    }
+
+    final response = await _client
+        .from('players')
+        .update({'name_effect': effect})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: ActionLogsRepository.actionNameEffectSet,
+      targetPlayerId: playerId,
+      details: {'effect': effect},
+    );
+    return updated;
+  }
+
+  /// Define/remove o selo de "craque do mês" (só aparece no pódio do ranking).
+  /// Somente admins do grupo podem chamar isso.
+  Future<PlayerModel> setMonthlyHighlight({
+    required String groupId,
+    required String playerId,
+    required bool value,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem definir o selo de craque do mês.');
+    }
+
+    final response = await _client
+        .from('players')
+        .update({'monthly_highlight': value})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: ActionLogsRepository.actionMonthlyHighlightSet,
+      targetPlayerId: playerId,
+      details: {'value': value},
+    );
+    return updated;
   }
 
   /// Fetches a specific player by its internal UUID.

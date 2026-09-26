@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/season_model.dart';
+import '../models/player_badge_model.dart';
 import '../repositories/supabase_service.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
@@ -44,7 +45,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // Afeta TODOS os dados da tela (nota, ranking, stats, gráfico, avançadas).
   List<dynamic> _rawHistory = []; // histórico completo, sem filtro
   List<SeasonModel> _allSeasons = [];
-  String _selectedPeriodKey = 'all'; // 'all'|'last'|'month'|'year'|'custom'|seasonId
+  String _selectedPeriodKey =
+      'all'; // 'all'|'last'|'month'|'year'|'custom'|seasonId
   DateTime? _customFrom;
   DateTime? _customTo;
 
@@ -74,12 +76,20 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   List<Map<String, dynamic>> _allPlayers = [];
 
   bool _showRadarChart = true;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _loadPreferences();
     _loadPlayerDetails();
+    _checkAdminStatus();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final isAdmin = await SupabaseService.instance.groupMembers
+        .isCurrentUserAdmin(widget.groupId);
+    if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
   Future<void> _loadPreferences() async {
@@ -98,13 +108,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Future<void> _loadPlayerDetails() async {
     List<Map<String, dynamic>> players = [];
     try {
-      final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
-      players = fetched.map((j) => {
-        'id': j.id,
-        'name': j.name,
-        'icon': j.avatarUrl,
-        'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
-      }).toList();
+      final fetched = await SupabaseService.instance.players.getPlayersByGroup(
+        widget.groupId,
+      );
+      players = fetched
+          .map(
+            (j) => {
+              'id': j.id,
+              'name': j.name,
+              'icon': j.avatarUrl,
+              'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
+            },
+          )
+          .toList();
     } catch (_) {}
 
     if (players.isEmpty) {
@@ -130,6 +146,37 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
     if (player?['manual_badges'] != null) {
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
+
+      // Update with latest templates if available
+      final prefs = await SharedPreferences.getInstance();
+      final String cbKey = 'custom_badges_${widget.groupId}';
+      if (prefs.containsKey(cbKey)) {
+        final List<Map<String, dynamic>> templates =
+            List<Map<String, dynamic>>.from(
+              jsonDecode(prefs.getString(cbKey)!),
+            );
+        for (var i = 0; i < manualBadges.length; i++) {
+          final badgeId = manualBadges[i]['id'];
+          Map<String, dynamic>? tpl;
+
+          if (badgeId != null) {
+            tpl = templates.firstWhereOrNull((t) => t['id'] == badgeId);
+          } else {
+            // Legacy fallback: match by title or icon
+            tpl = templates.firstWhereOrNull(
+              (t) =>
+                  t['title'] == manualBadges[i]['title'] ||
+                  t['icon'] == manualBadges[i]['icon'],
+            );
+          }
+
+          if (tpl != null) {
+            manualBadges[i]['id'] = tpl['id'];
+            manualBadges[i]['title'] = tpl['title'];
+            manualBadges[i]['icon'] = tpl['icon'];
+          }
+        }
+      }
     }
 
     final List<dynamic> rawHistory = await getAllGroupMatches(widget.groupId);
@@ -145,8 +192,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     // Se não houver temporadas cadastradas, mostra o histórico completo.
     String defaultPeriodKey = 'all';
     if (seasons.isNotEmpty) {
-      final activeSeason = seasons.firstWhereOrNull((s) => s.isActive) ??
-          seasons.first;
+      final activeSeason =
+          seasons.firstWhereOrNull((s) => s.isActive) ?? seasons.first;
       defaultPeriodKey = activeSeason.id;
     }
 
@@ -179,13 +226,16 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     if (_selectedPeriodKey == 'last') {
       final sorted = List<dynamic>.from(_rawHistory)
         ..sort(
-          (a, b) =>
-              (parseDate(a) ?? DateTime(0)).compareTo(parseDate(b) ?? DateTime(0)),
+          (a, b) => (parseDate(a) ?? DateTime(0)).compareTo(
+            parseDate(b) ?? DateTime(0),
+          ),
         );
       final dynamic lastMatch = sorted.last;
       final dynamic lastSessionId = (lastMatch as Map)['sessionId'];
       if (lastSessionId == null) return [lastMatch];
-      return sorted.where((m) => (m as Map)['sessionId'] == lastSessionId).toList();
+      return sorted
+          .where((m) => (m as Map)['sessionId'] == lastSessionId)
+          .toList();
     }
 
     if (_selectedPeriodKey == 'month') {
@@ -414,14 +464,18 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.accentBlue : Colors.transparent,
+                      color: isSelected
+                          ? AppColors.accentBlue
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       o['label']!,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                         color: isSelected ? Colors.white : Colors.white70,
                       ),
                     ),
@@ -644,7 +698,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     int hatTricks = 0;
     int cleanSheets = 0;
     int ownGoals = 0;
-    int clutchGoals = 0; // gols decisivos nos minutos finais (ver rating_calculator)
+    int clutchGoals =
+        0; // gols decisivos nos minutos finais (ver rating_calculator)
     int comebackGoals = 0; // gols da virada
     int currentUnbeatenStreak = 0;
     int maxUnbeatenStreak = 0;
@@ -935,26 +990,49 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     });
   }
 
-  Future<void> _saveManualBadge(String icon, String title) async {
+  Future<void> _saveManualBadge(String? id, String icon, String title) async {
     final prefs = await SharedPreferences.getInstance();
     final String playersKey = 'players_${widget.groupId}';
-    if (!prefs.containsKey(playersKey)) return;
 
-    final List<Map<String, dynamic>> loadedPlayers =
-        List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString(playersKey)!),
-        );
-    final int index = loadedPlayers.indexWhere(
-      (p) => (p['id'] ?? '').toString() == widget.playerId,
-    );
+    // Update local cache
+    if (prefs.containsKey(playersKey)) {
+      final List<Map<String, dynamic>> loadedPlayers =
+          List<Map<String, dynamic>>.from(
+            jsonDecode(prefs.getString(playersKey)!),
+          );
+      final int index = loadedPlayers.indexWhere(
+        (p) => (p['id'] ?? '').toString() == widget.playerId,
+      );
 
-    if (index != -1) {
-      loadedPlayers[index]['manual_badges'] ??= [];
-      loadedPlayers[index]['manual_badges'].add({'icon': icon, 'title': title});
-      await prefs.setString(playersKey, jsonEncode(loadedPlayers));
-      setState(() {
-        manualBadges.add({'icon': icon, 'title': title});
-      });
+      if (index != -1) {
+        loadedPlayers[index]['manual_badges'] ??= [];
+        loadedPlayers[index]['manual_badges'].add({
+          'id': id,
+          'icon': icon,
+          'title': title,
+        });
+        await prefs.setString(playersKey, jsonEncode(loadedPlayers));
+      }
+    }
+
+    setState(() {
+      manualBadges.add({'id': id, 'icon': icon, 'title': title});
+    });
+
+    // Update in Supabase
+    try {
+      final player = await SupabaseService.instance.players.getPlayerById(
+        widget.playerId,
+      );
+      if (player != null) {
+        // Need to add it to their existing badges to be safe
+        final updatedBadges = List.of(player.manualBadges);
+        updatedBadges.add(PlayerBadgeModel(id: id, icon: icon, title: title));
+        final updatedPlayer = player.copyWith(manualBadges: updatedBadges);
+        await SupabaseService.instance.players.updatePlayer(updatedPlayer);
+      }
+    } catch (e) {
+      debugPrint("Error updating badge in Supabase: $e");
     }
   }
 
@@ -1051,12 +1129,15 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   void _showRatingBreakdown() {
     final double nota = (playerStats['nota'] ?? kRatingBase) as double;
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.headerBlue,
-        title: const Text('Composição da Nota', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Composição da Nota',
+          style: TextStyle(color: Colors.white),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1078,13 +1159,21 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               const Divider(color: Colors.white24, height: 24),
               const Text(
                 '* Nota Bayesiana: Penaliza ou bonifica levemente jogadores baseando-se no histórico.',
-                style: TextStyle(color: Colors.white54, fontSize: 11, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
               const SizedBox(height: 12),
               Center(
                 child: Text(
                   'Sua Média Atual: ${nota.toStringAsFixed(1)}',
-                  style: const TextStyle(color: AppColors.accentBlue, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: AppColors.accentBlue,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -1093,7 +1182,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Entendi', style: TextStyle(color: AppColors.accentBlue)),
+            child: const Text(
+              'Entendi',
+              style: TextStyle(color: AppColors.accentBlue),
+            ),
           ),
         ],
       ),
@@ -1106,8 +1198,18 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-          Text(value, style: TextStyle(color: valueColor, fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1385,6 +1487,22 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 itemCount: availableCustomBadges.length,
                 itemBuilder: (context, i) {
                   final badge = availableCustomBadges[i];
+                  String? claimedByName;
+                  for (final p in _allPlayers) {
+                    final pBadges = p['manual_badges'] as List<dynamic>? ?? [];
+                    for (final b in pBadges) {
+                      if (b is Map &&
+                          b['id'] == badge['id'] &&
+                          p['id'] != widget.playerId) {
+                        claimedByName = p['name']?.toString();
+                        break;
+                      }
+                    }
+                    if (claimedByName != null) break;
+                  }
+
+                  final bool isClaimed = claimedByName != null;
+
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
@@ -1396,33 +1514,75 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(6),
-                        child: Image.asset(
-                          badge['icon'],
-                          errorBuilder: (c, e, s) => const Icon(
-                            Icons.emoji_events,
-                            color: Colors.amber,
+                        child: ColorFiltered(
+                          colorFilter: isClaimed
+                              ? const ColorFilter.matrix([
+                                  0.2126,
+                                  0.7152,
+                                  0.0722,
+                                  0,
+                                  0,
+                                  0.2126,
+                                  0.7152,
+                                  0.0722,
+                                  0,
+                                  0,
+                                  0.2126,
+                                  0.7152,
+                                  0.0722,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  0,
+                                ])
+                              : const ColorFilter.mode(
+                                  Colors.transparent,
+                                  BlendMode.multiply,
+                                ),
+                          child: Image.asset(
+                            badge['icon'],
+                            errorBuilder: (c, e, s) => const Icon(
+                              Icons.emoji_events,
+                              color: Colors.amber,
+                            ),
                           ),
                         ),
                       ),
                     ),
                     title: Text(
                       badge['title'],
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isClaimed ? Colors.white38 : Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     subtitle: Text(
-                      badge['desc'],
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      isClaimed
+                          ? 'Resgatado por $claimedByName'
+                          : badge['desc'],
+                      style: TextStyle(
+                        color: isClaimed
+                            ? Colors.redAccent.withOpacity(0.8)
+                            : Colors.white54,
                         fontSize: 12,
+                        fontStyle: isClaimed
+                            ? FontStyle.italic
+                            : FontStyle.normal,
                       ),
                     ),
-                    onTap: () {
-                      _saveManualBadge(badge['icon'], badge['title']);
-                      Navigator.pop(ctx);
-                    },
+                    onTap: isClaimed
+                        ? null
+                        : () {
+                            _saveManualBadge(
+                              badge['id'],
+                              badge['icon'],
+                              badge['title'],
+                            );
+                            Navigator.pop(ctx);
+                          },
                   );
                 },
               ),
@@ -1433,7 +1593,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     );
   }
 
-  Future<void> _showRemoveManualBadgeDialog(int index) async {
+  Future<void> _showRemoveManualBadgeDialog(int index, String? badgeId) async {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1457,21 +1617,64 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final prefs = await SharedPreferences.getInstance();
-              final String playersKey = 'players_${widget.groupId}';
-              final List<Map<String, dynamic>> loadedPlayers =
-                  List<Map<String, dynamic>>.from(
-                    jsonDecode(prefs.getString(playersKey)!),
+
+              // 1. Atualiza estado local imediatamente
+              setState(() {
+                manualBadges.removeAt(index);
+              });
+
+              // 2. Persiste no Supabase — remove por ID se disponível
+              try {
+                final player = await SupabaseService.instance.players
+                    .getPlayerById(widget.playerId);
+                if (player != null) {
+                  List<PlayerBadgeModel> updatedBadges;
+                  if (badgeId != null) {
+                    updatedBadges = player.manualBadges
+                        .where((b) => b.id != badgeId)
+                        .toList();
+                  } else {
+                    // Fallback por índice se não houver ID
+                    updatedBadges = List.of(player.manualBadges);
+                    if (index >= 0 && index < updatedBadges.length) {
+                      updatedBadges.removeAt(index);
+                    }
+                  }
+                  final updatedPlayer =
+                      player.copyWith(manualBadges: updatedBadges);
+                  await SupabaseService.instance.players
+                      .updatePlayer(updatedPlayer);
+                }
+              } catch (e) {
+                debugPrint("Error removing badge from Supabase: $e");
+              }
+
+              // 3. Atualiza cache local SharedPreferences
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                final String playersKey = 'players_${widget.groupId}';
+                if (prefs.containsKey(playersKey)) {
+                  final List<Map<String, dynamic>> loadedPlayers =
+                      List<Map<String, dynamic>>.from(
+                        jsonDecode(prefs.getString(playersKey)!),
+                      );
+                  final int pIndex = loadedPlayers.indexWhere(
+                    (p) => (p['id'] ?? '').toString() == widget.playerId,
                   );
-              final int pIndex = loadedPlayers.indexWhere(
-                (p) => (p['id'] ?? '').toString() == widget.playerId,
-              );
-              if (pIndex != -1) {
-                loadedPlayers[pIndex]['manual_badges'].removeAt(index);
-                await prefs.setString(playersKey, jsonEncode(loadedPlayers));
-                setState(() {
-                  manualBadges.removeAt(index);
-                });
+                  if (pIndex != -1) {
+                    final List badges = List.from(
+                        loadedPlayers[pIndex]['manual_badges'] ?? []);
+                    if (badgeId != null) {
+                      badges.removeWhere((b) => b is Map && b['id'] == badgeId);
+                    } else if (index >= 0 && index < badges.length) {
+                      badges.removeAt(index);
+                    }
+                    loadedPlayers[pIndex]['manual_badges'] = badges;
+                    await prefs.setString(playersKey, jsonEncode(loadedPlayers));
+                  }
+                }
+              } catch (e) {
+                debugPrint("Error updating local cache: $e");
               }
             },
             child: const Text(
@@ -2031,14 +2234,15 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         ),
                       ),
                     ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle_outline,
-                      color: AppColors.accentBlue,
+                  if (_isAdmin)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: AppColors.accentBlue,
+                      ),
+                      tooltip: 'Dar Prêmio Manual',
+                      onPressed: _showAddManualBadgeDialog,
                     ),
-                    tooltip: 'Dar Prêmio Manual',
-                    onPressed: _showAddManualBadgeDialog,
-                  ),
                 ],
               ),
             ],
@@ -2167,7 +2371,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         : (badge['color'] as Color? ?? Colors.blueAccent);
     return GestureDetector(
       onLongPress: () {
-        if (isManual && index != null) _showRemoveManualBadgeDialog(index);
+        if (isManual && index != null && _isAdmin) {
+          _showRemoveManualBadgeDialog(index, badge['id']?.toString());
+        }
       },
       child: Container(
         decoration: BoxDecoration(

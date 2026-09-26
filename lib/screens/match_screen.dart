@@ -17,6 +17,7 @@ import '../models/match_event_model.dart';
 import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_pitch_player.dart';
 import '../widgets/match/match_player_tile.dart';
+import '../widgets/shared/player_name_text.dart';
 import 'draft_screen.dart';
 
 class MatchScreen extends StatefulWidget {
@@ -40,7 +41,15 @@ class MatchScreen extends StatefulWidget {
 class _MatchScreenState extends State<MatchScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // Player dedicado a sons locais da UI (fim de partida, vitória) -- modo de
+  // baixa latência, feito pra assets locais.
+  final AudioPlayer _audioPlayer = AudioPlayer()..setPlayerMode(PlayerMode.lowLatency);
+  // Player dedicado exclusivamente ao áudio customizado de gol (URL de rede).
+  // Precisa ser uma instância separada e em PlayerMode.mediaPlayer: o modo
+  // lowLatency (usado acima) não é confiável pra tocar UrlSource em Android,
+  // e compartilhar uma única instância entre asset local e URL de rede é o
+  // que causava os áudios "engasgando"/não tocando no mobile.
+  final AudioPlayer _goalSoundPlayer = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
 
   List<Map<String, dynamic>> allSavedPlayers = [];
   List<Map<String, dynamic>> presentPlayers = [];
@@ -98,6 +107,7 @@ class _MatchScreenState extends State<MatchScreen>
     _cloudSyncDebounce?.cancel();
     _tabController.dispose();
     _audioPlayer.dispose();
+    _goalSoundPlayer.dispose();
     super.dispose();
   }
 
@@ -244,6 +254,9 @@ class _MatchScreenState extends State<MatchScreen>
             'name': p.displayName,
             'icon': p.icon,
             'rating': p.rating,
+            'goal_sound_url': p.goalSoundUrl,
+            'name_effect': p.nameEffect,
+            'monthly_highlight': p.monthlyHighlight,
           }).toList();
         }
       } catch (e) {
@@ -625,8 +638,9 @@ class _MatchScreenState extends State<MatchScreen>
           ...teammates.map(
             (teammate) => SimpleDialogOption(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              child: Text(
-                teammate['name'],
+              child: PlayerNameText(
+                name: teammate['name'].toString(),
+                nameEffect: teammate['name_effect']?.toString(),
                 style: const TextStyle(
                   color: AppColors.textWhite,
                   fontSize: 16,
@@ -1591,6 +1605,8 @@ class _MatchScreenState extends State<MatchScreen>
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white.withOpacity(0.05)),
                 ),
+                child: Material(
+                color: Colors.transparent,
                 child: ListTile(
                   leading: Stack(
                     alignment: Alignment.bottomRight,
@@ -1631,8 +1647,9 @@ class _MatchScreenState extends State<MatchScreen>
                   title: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          displayList[i]['name'],
+                        child: PlayerNameText(
+                          name: displayList[i]['name'].toString(),
+                          nameEffect: displayList[i]['name_effect']?.toString(),
                           style: TextStyle(
                             color: desistiu
                                 ? Colors.white54
@@ -1696,6 +1713,7 @@ class _MatchScreenState extends State<MatchScreen>
                   ),
                   onTap: () => _showChegadaOptions(displayList[i]),
                 ),
+              ),
               ),
             ),
               ],
@@ -2124,7 +2142,9 @@ class _MatchScreenState extends State<MatchScreen>
           width: isCompleteTeam ? 1.5 : 1,
         ),
       ),
-      child: ListTile(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         leading: Stack(
           alignment: Alignment.bottomRight,
@@ -2164,8 +2184,9 @@ class _MatchScreenState extends State<MatchScreen>
         title: Row(
           children: [
             Expanded(
-              child: Text(
-                player['name'],
+              child: PlayerNameText(
+                name: player['name'].toString(),
+                nameEffect: player['name_effect']?.toString(),
                 style: TextStyle(
                   color: isCompleteTeam ? Colors.white : Colors.white70,
                   fontWeight: isCompleteTeam
@@ -2196,6 +2217,7 @@ class _MatchScreenState extends State<MatchScreen>
         ),
         trailing: const Icon(Icons.drag_handle, color: Colors.white24),
         onTap: () => _showChegadaOptions(player),
+      ),
       ),
     );
   }
@@ -2371,6 +2393,9 @@ class _MatchScreenState extends State<MatchScreen>
               'name': p.displayName,
               'icon': p.icon,
               'rating': p.rating,
+              'goal_sound_url': p.goalSoundUrl,
+              'name_effect': p.nameEffect,
+              'monthly_highlight': p.monthlyHighlight,
             }).toList();
           });
           await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
@@ -2686,8 +2711,9 @@ class _MatchScreenState extends State<MatchScreen>
           ...teammates.map(
             (teammate) => SimpleDialogOption(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              child: Text(
-                teammate['name'],
+              child: PlayerNameText(
+                name: teammate['name'].toString(),
+                nameEffect: teammate['name_effect']?.toString(),
                 style: const TextStyle(
                   color: AppColors.textWhite,
                   fontSize: 16,
@@ -2718,9 +2744,31 @@ class _MatchScreenState extends State<MatchScreen>
     String? assistId,
   }) async {
     try {
-      if (type == "goal" || type == "own_goal")
-        await _audioPlayer.play(AssetSource('audio/goal.mp3'));
-    } catch (e) {}
+      if (type == "goal" || type == "own_goal") {
+        final String? customSoundUrl = player['goal_sound_url']?.toString();
+        if (customSoundUrl != null && customSoundUrl.isNotEmpty && type == "goal") {
+          // Só quem fez o gol de verdade tem seu áudio tocado; gol contra
+          // sempre usa o som padrão para não soar como comemoração.
+          // Sempre para qualquer reprodução pendente nesse player antes de
+          // tocar de novo -- evita que um segundo gol interrompa/corrompa o
+          // carregamento de uma URL que ainda estava bufferizando.
+          await _goalSoundPlayer.stop();
+          await _goalSoundPlayer.play(UrlSource(customSoundUrl));
+        } else {
+          await _audioPlayer.stop();
+          await _audioPlayer.play(AssetSource('audio/goal.mp3'));
+        }
+      }
+    } catch (e) {
+      // Se o áudio customizado falhar (link quebrado, sem internet etc.),
+      // cai pro som padrão em vez de silenciar o gol.
+      try {
+        if (type == "goal" || type == "own_goal") {
+          await _audioPlayer.stop();
+          await _audioPlayer.play(AssetSource('audio/goal.mp3'));
+        }
+      } catch (_) {}
+    }
     setState(() {
       if (type == "goal") {
         if (isRedTeam)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/rating_calculator.dart';
+import '../shared/player_name_text.dart';
 
 class MatchPlayerTile extends StatelessWidget {
   final Map<String, dynamic> player;
@@ -46,7 +47,12 @@ class MatchPlayerTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(player['name'].toString().split(' ')[0], style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+              child: PlayerNameText(
+                name: player['name'].toString().split(' ')[0],
+                nameEffect: player['name_effect']?.toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             Row(mainAxisSize: MainAxisSize.min, children: eventIcons),
           ],

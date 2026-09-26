@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
+import '../shared/player_name_text.dart';
 
 class WaitlistCard extends StatelessWidget {
   final Map<String, dynamic> player;
@@ -36,8 +37,9 @@ class WaitlistCard extends StatelessWidget {
           backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
           child: iconPath == null ? Text("${index + 1}º", style: const TextStyle(color: Colors.white)) : null,
         ),
-        title: Text(
-          player['name'],
+        title: PlayerNameText(
+          name: player['name'].toString(),
+          nameEffect: player['name_effect']?.toString(),
           style: const TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold),
         ),
         subtitle: isNextTeam 
