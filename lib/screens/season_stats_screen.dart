@@ -1167,14 +1167,32 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                           border: Border.all(color: color, width: 2),
                         ),
                         alignment: Alignment.center,
-                        child: Text(
-                          _initials(s.player.name),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
+                        child: (s.player.icon != null && s.player.icon!.isNotEmpty)
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.asset(
+                                  s.player.icon!,
+                                  width: avatarSizes[idx],
+                                  height: avatarSizes[idx],
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => Text(
+                                    _initials(s.player.name),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                _initials(s.player.name),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
                       ),
                       Positioned(
                         top: place == 1 ? -22 : -8,
