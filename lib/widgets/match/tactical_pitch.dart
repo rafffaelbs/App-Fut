@@ -1,16 +1,29 @@
-import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/overall_calculator.dart';
+import '../../utils/pitch_layout.dart';
 import '../../utils/player_identity.dart';
-import '../../utils/rating_calculator.dart';
 import '../../utils/tactical_formation.dart';
 import '../player/fifa_card.dart';
 import '../shared/player_avatar_frame.dart';
 
-/// Campo tático com perspectiva 3D realista, iluminação de estádio,
-/// marcações oficiais completas e cartões de jogadores com alta legibilidade.
-class TacticalPitch extends StatelessWidget {
+const _emptyStats = {
+  'nota': 0.0,
+  'goals': 0,
+  'assists': 0,
+  'ownGoals': 0,
+  'yellow': 0,
+  'red': 0,
+};
+
+/// Campo tático em perspectiva com cartas "billboard": o gramado é um
+/// trapézio, mas as cartas ficam de frente e são posicionadas por
+/// [PitchLayout], que garante que nenhuma se sobreponha.
+///
+/// Toque na faixa de um time faz zoom nele; toque de novo (ou duplo toque no
+/// campo) volta à visão geral. O foco é estado local: não reconstrói a tela.
+class TacticalPitch extends StatefulWidget {
   final int teamSize;
   final List<Map<String, dynamic>> teamRed;
   final List<Map<String, dynamic>> teamWhite;
@@ -22,6 +35,16 @@ class TacticalPitch extends StatelessWidget {
   final VoidCallback onGkRedTap;
   final VoidCallback onGkWhiteTap;
   final List<Widget> Function(Map<String, dynamic> stats) eventIconsOf;
+
+  /// Mostra chips (foto) em vez de cartas. Acima de 7 de linha é automático.
+  final bool useChips;
+
+  /// Jogador destacado (ex.: toque num evento da timeline).
+  final ValueListenable<String?>? highlightedPlayerId;
+
+  /// Altura disponível para o campo; o campo nunca fica menor que o mínimo
+  /// necessário para as cartas não se sobreporem.
+  final double availableHeight;
 
   const TacticalPitch({
     super.key,
@@ -36,80 +59,177 @@ class TacticalPitch extends StatelessWidget {
     required this.onGkRedTap,
     required this.onGkWhiteTap,
     required this.eventIconsOf,
+    this.highlightedPlayerId,
+    this.availableHeight = 0,
+    this.useChips = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final slots = tacticalFormation(teamSize);
-    final height = _pitchHeight(teamSize);
+  State<TacticalPitch> createState() => _TacticalPitchState();
+}
 
+class _TacticalPitchState extends State<TacticalPitch> {
+  static const _anim = Duration(milliseconds: 300);
+
+  PitchFocus _focus = PitchFocus.both;
+  int _formationIndex = 0;
+
+  // Cache do layout: só recalcula quando tamanho, formato ou foco mudam.
+  Size? _cachedSize;
+  int? _cachedN;
+  int? _cachedFormation;
+  bool? _cachedChips;
+  PitchFocus? _cachedFocus;
+  PitchLayoutResult? _both;
+  PitchLayoutResult? _focused;
+
+  void _toggleFocus(PitchFocus tapped) {
+    setState(() => _focus = _focus == tapped ? PitchFocus.both : tapped);
+  }
+
+  void _resetFocus() {
+    if (_focus != PitchFocus.both) setState(() => _focus = PitchFocus.both);
+  }
+
+  void _ensureLayout(Size size) {
+    if (_cachedSize == size &&
+        _cachedN == widget.teamSize &&
+        _cachedFormation == _formationIndex &&
+        _cachedChips == widget.useChips &&
+        _cachedFocus == _focus) {
+      return;
+    }
+    _cachedSize = size;
+    _cachedN = widget.teamSize;
+    _cachedFormation = _formationIndex;
+    _cachedChips = widget.useChips;
+    _cachedFocus = _focus;
+    _both = PitchLayout.compute(
+      lineCount: widget.teamSize,
+      field: size,
+      formation: _rows,
+      chips: widget.useChips,
+    );
+    _focused = _focus == PitchFocus.both
+        ? null
+        : PitchLayout.compute(
+            lineCount: widget.teamSize,
+            field: size,
+            focus: _focus,
+            formation: _rows,
+            chips: widget.useChips,
+          );
+  }
+
+  List<List<int>> get _presets => formationPresets(widget.teamSize);
+
+  List<int> get _rows {
+    final p = _presets;
+    return p[_formationIndex < p.length ? _formationIndex : 0];
+  }
+
+  /// Altura que ajusta o campo às cartas: usa a maior densidade que cabe na
+  /// altura e na largura disponíveis, em vez de esticar o gramado.
+  double _fitHeight(double width) {
+    final rows = _rows;
+    final avail =
+        widget.availableHeight > 0 ? widget.availableHeight - 36 : 0.0;
+    final order =
+        PitchLayout.candidates(widget.teamSize, chips: widget.useChips);
+    for (final c in order) {
+      final h = PitchLayout.minHeight(widget.teamSize,
+          density: c.density, scale: c.scale, formation: rows);
+      if (avail > 0 && h > avail) continue;
+      final r = PitchLayout.compute(
+          lineCount: widget.teamSize,
+          field: Size(width, h),
+          formation: rows,
+          chips: widget.useChips);
+      if (r.scale == c.scale) return h;
+    }
+    final c = order.last;
+    final h = PitchLayout.minHeight(widget.teamSize,
+        density: c.density, scale: c.scale, formation: rows);
+    return h > avail ? h : avail;
+  }
+
+  Widget _formationPicker() {
+    final presets = _presets;
+    if (presets.length < 2) return const SizedBox.shrink();
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        itemCount: presets.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        itemBuilder: (context, i) {
+          final selected = i == _formationIndex;
+          return ChoiceChip(
+            label: Text(formationRowsLabel(presets[i])),
+            labelStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? AppColors.textWhite : AppColors.textMuted,
+            ),
+            selected: selected,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            selectedColor: AppColors.accentBlue,
+            backgroundColor: AppColors.headerBlue,
+            side: const BorderSide(color: AppColors.borderSubtle),
+            onSelected: (_) => setState(() => _formationIndex = i),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPicker = _presets.length > 1;
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final height = _fitHeight(outer.maxWidth - 20);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [if (hasPicker) _formationPicker(), _pitch(height)],
+        );
+      },
+    );
+  }
+
+  Widget _pitch(double height) {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF08120B),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1E293B), width: 2.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.65),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.4),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: AppColors.pitchEdge,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSubtle, width: 1.5),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final cardW = _cardWidth(constraints.maxWidth, teamSize);
-            return Stack(
-              children: [
-                const Positioned.fill(child: CustomPaint(painter: _PitchPainter())),
-
-                // Indicadores modernos e limpos das equipes
-                _endLabel('🔴 TIME VERMELHO', const Alignment(0, -0.98), AppColors.redTeam),
-                _endLabel('⚪ TIME BRANCO', const Alignment(0, 0.98), Colors.white),
-
-                // Jogadores de Linha - Vermelho no topo (y < 0)
-                ..._teamCards(
-                  isRed: true,
-                  team: teamRed,
-                  slots: slots,
-                  cardW: cardW,
-                ),
-
-                // Jogadores de Linha - Branco embaixo (y > 0)
-                ..._teamCards(
-                  isRed: false,
-                  team: teamWhite,
-                  slots: slots,
-                  cardW: cardW,
-                ),
-
-                // Goleiro Vermelho (Topo)
-                Align(
-                  alignment: const Alignment(0, -0.87),
-                  child: SizedBox(
-                    width: cardW,
-                    child: _buildGkCard(gkRed, true, onGkRedTap),
+            final size = Size(constraints.maxWidth, constraints.maxHeight);
+            _ensureLayout(size);
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTap: _resetFocus,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Positioned.fill(
+                    child: RepaintBoundary(
+                      child: CustomPaint(painter: _PitchPainter()),
+                    ),
                   ),
-                ),
-
-                // Goleiro Branco (Embaixo)
-                Align(
-                  alignment: const Alignment(0, 0.87),
-                  child: SizedBox(
-                    width: cardW,
-                    child: _buildGkCard(gkWhite, false, onGkWhiteTap),
-                  ),
-                ),
-              ],
+                  _teamBand(size, isRed: true),
+                  _teamBand(size, isRed: false),
+                  ..._cards(size),
+                ],
+              ),
             );
           },
         ),
@@ -117,262 +237,396 @@ class TacticalPitch extends StatelessWidget {
     );
   }
 
-  Widget _endLabel(String text, Alignment align, Color accentColor) {
-    return Align(
-      alignment: align,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.75),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+  Widget _teamBand(Size size, {required bool isRed}) {
+    final hidden = _focus == (isRed ? PitchFocus.white : PitchFocus.red);
+    final color = isRed ? AppColors.redTeam : AppColors.whiteTeam;
+    final textColor = isRed ? AppColors.textWhite : AppColors.deepBlue;
+    final focused = _focus == (isRed ? PitchFocus.red : PitchFocus.white);
+    final top = isRed ? size.height * 0.012 : null;
+    final bottom = isRed ? null : size.height * 0.012;
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          duration: _anim,
+          opacity: hidden ? 0.35 : 1,
+          child: GestureDetector(
+            onTap: () =>
+                _toggleFocus(isRed ? PitchFocus.red : PitchFocus.white),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isRed ? 'TIME VERMELHO' : 'TIME BRANCO',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    focused ? Icons.zoom_out_map : Icons.zoom_in,
+                    size: 12,
+                    color: textColor,
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: accentColor,
-            fontSize: 9.5,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.1,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildGkCard(Map<String, dynamic>? gk, bool isRed, VoidCallback onTap) {
-    if (gk == null) {
-      return _EmptyPitchGkCard(isRed: isRed, onTap: onTap);
-    }
-    final pid = playerIdFromObject(gk);
-    final stats = allStats[pid] ??
-        const {
-          'nota': 0.0,
-          'goals': 0,
-          'assists': 0,
-          'ownGoals': 0,
-          'yellow': 0,
-          'red': 0,
-        };
-    return _PitchPlayerCard(
-      player: gk,
-      isRed: isRed,
-      stats: stats,
-      isMotm: pid == motmPlayerId,
-      eventIcons: eventIconsOf(stats),
-      onTap: onTap,
-    );
-  }
+  List<Widget> _cards(Size size) {
+    final both = _both!;
+    final focused = _focused;
+    final widgets = <_Placed>[];
 
-  List<Widget> _teamCards({
-    required bool isRed,
-    required List<Map<String, dynamic>> team,
-    required List<FormationSlot> slots,
-    required double cardW,
-  }) {
-    return List<Widget>.generate(slots.length, (i) {
-      final player = i < team.length ? team[i] : null;
-      final slot = slots[i];
-      // Vermelho fica no topo (y vai de -0.58 recuado a -0.16 no meio de campo)
-      // Branco fica embaixo (y vai de +0.58 recuado a +0.16 no meio de campo)
-      final y = isRed
-          ? -0.58 + slot.depth * 0.42
-          : 0.58 - slot.depth * 0.42;
-      final pid = player == null ? '' : playerIdFromObject(player);
-      final stats = allStats[pid] ??
-          const {
-            'nota': 0.0,
-            'goals': 0,
-            'assists': 0,
-            'ownGoals': 0,
-            'yellow': 0,
-            'red': 0,
-          };
-      return Align(
-        alignment: Alignment(slot.x * 0.82, y),
-        child: SizedBox(
-          width: cardW,
-          child: player == null
-              ? _EmptyPitchCard()
-              : _PitchPlayerCard(
-                  player: player,
-                  isRed: isRed,
-                  stats: stats,
-                  isMotm: pid == motmPlayerId,
-                  eventIcons: eventIconsOf(stats),
-                  onTap: () => onPlayerTap(player, isRed),
-                ),
+    PitchSlotRect? find(PitchLayoutResult? r, bool isRed, int index) {
+      if (r == null) return null;
+      for (final s in r.slots) {
+        if (s.isRed == isRed && s.index == index) return s;
+      }
+      return null;
+    }
+
+    void add(bool isRed, int index) {
+      final hidden = _focus == (isRed ? PitchFocus.white : PitchFocus.red);
+      final slot = (hidden
+          ? find(both, isRed, index)
+          : find(focused ?? both, isRed, index))!;
+      final isGk = index < 0;
+      final team = isRed ? widget.teamRed : widget.teamWhite;
+      final player = isGk
+          ? (isRed ? widget.gkRed : widget.gkWhite)
+          : (index < team.length ? team[index] : null);
+      widgets.add(
+        _Placed(
+          key: ValueKey('${isRed ? 'r' : 'w'}$index'),
+          slot: slot,
+          hidden: hidden,
+          child: _PitchCard(
+            player: player,
+            isRed: isRed,
+            isGk: isGk,
+            density: slot.density,
+            stats: player == null
+                ? _emptyStats
+                : widget.allStats[playerIdFromObject(player)] ?? _emptyStats,
+            isMotm:
+                player != null &&
+                playerIdFromObject(player) == widget.motmPlayerId,
+            highlighted: widget.highlightedPlayerId,
+            eventIconsOf: widget.eventIconsOf,
+            onTap: isGk
+                ? (isRed ? widget.onGkRedTap : widget.onGkWhiteTap)
+                : () => widget.onPlayerTap(player!, isRed),
+            onEmptyTap: isGk
+                ? (isRed ? widget.onGkRedTap : widget.onGkWhiteTap)
+                : null,
+          ),
         ),
       );
-    });
-  }
+    }
 
-  static double _pitchHeight(int n) {
-    if (n <= 3) return 580;
-    if (n <= 5) return 660;
-    return 720;
-  }
+    for (final isRed in const [true, false]) {
+      add(isRed, -1);
+      for (var i = 0; i < widget.teamSize; i++) {
+        add(isRed, i);
+      }
+    }
 
-  static double _cardWidth(double pitchW, int n) {
-    if (n <= 3) return (pitchW * 0.23).clamp(58, 80);
-    if (n <= 5) return (pitchW * 0.185).clamp(50, 68);
-    return (pitchW * 0.16).clamp(46, 60);
+    // Do fundo para a frente: a carta da frente nunca é encoberta.
+    widgets.sort(
+      (a, b) => a.slot.rect.center.dy.compareTo(b.slot.rect.center.dy),
+    );
+    return [
+      for (final w in widgets)
+        AnimatedPositioned(
+          key: w.key,
+          duration: _anim,
+          curve: Curves.easeOutCubic,
+          left: w.slot.itemRect.left,
+          top: w.slot.itemRect.top,
+          width: w.slot.itemRect.width,
+          height: w.slot.itemRect.height,
+          child: AnimatedOpacity(
+            duration: _anim,
+            opacity: w.hidden ? 0.35 : 1,
+            child: IgnorePointer(ignoring: w.hidden, child: w.child),
+          ),
+        ),
+    ];
   }
 }
 
-class _PitchPlayerCard extends StatelessWidget {
-  final Map<String, dynamic> player;
+class _Placed {
+  final Key key;
+  final PitchSlotRect slot;
+  final bool hidden;
+  final Widget child;
+  const _Placed({
+    required this.key,
+    required this.slot,
+    required this.hidden,
+    required this.child,
+  });
+}
+
+/// Carta no campo: carta + trilha de eventos/nota logo abaixo, sem sobrepor.
+class _PitchCard extends StatefulWidget {
+  final Map<String, dynamic>? player;
   final bool isRed;
+  final bool isGk;
+  final CardDensity density;
   final Map<String, dynamic> stats;
   final bool isMotm;
-  final List<Widget> eventIcons;
+  final ValueListenable<String?>? highlighted;
+  final List<Widget> Function(Map<String, dynamic> stats) eventIconsOf;
   final VoidCallback onTap;
+  final VoidCallback? onEmptyTap;
 
-  const _PitchPlayerCard({
+  const _PitchCard({
     required this.player,
     required this.isRed,
+    required this.isGk,
+    required this.density,
     required this.stats,
     required this.isMotm,
-    required this.eventIcons,
+    required this.highlighted,
+    required this.eventIconsOf,
     required this.onTap,
+    required this.onEmptyTap,
   });
 
   @override
+  State<_PitchCard> createState() => _PitchCardState();
+}
+
+class _PitchCardState extends State<_PitchCard> {
+  double _scale = 1;
+
+  @override
+  void didUpdateWidget(covariant _PitchCard old) {
+    super.didUpdateWidget(old);
+    final before = (old.stats['goals'] as num?)?.toInt() ?? 0;
+    final now = (widget.stats['goals'] as num?)?.toInt() ?? 0;
+    if (now > before) _pulse();
+  }
+
+  // 1.0 → 1.08 → 1.0 em 250ms, só nesta carta.
+  Future<void> _pulse() async {
+    setState(() => _scale = 1.08);
+    await Future<void>.delayed(const Duration(milliseconds: 125));
+    if (mounted) setState(() => _scale = 1);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final player = widget.player;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cardH = c.maxHeight - PitchLayout.eventTrail;
+        return Column(
+          children: [
+            SizedBox(
+              width: c.maxWidth,
+              height: cardH,
+              child: player == null ? _empty() : _card(player),
+            ),
+            SizedBox(
+              height: PitchLayout.eventTrail,
+              child: player == null ? null : _trail(player),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _empty() {
+    final color = widget.isGk
+        ? (widget.isRed ? AppColors.redTeam : AppColors.whiteTeam)
+        : AppColors.textDim;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onEmptyTap,
+      child: CustomPaint(
+        painter: _DashedRRect(color.withValues(alpha: 0.7)),
+        child: Center(
+          child: widget.isGk
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'GK',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Icon(Icons.add, size: 14, color: color),
+                  ],
+                )
+              : Icon(
+                  Icons.person_outline,
+                  size: 20,
+                  color: AppColors.textDim.withValues(alpha: 0.3),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _card(Map<String, dynamic> player) {
     final overall = playerOverallOf(player).round();
     final community = player['community'] is CommunityAttributes
         ? player['community'] as CommunityAttributes
         : CommunityAttributes.fromMap(player);
-    final nota = (stats['nota'] as num?)?.toDouble();
-    final frame = resolvePlayerFrame(player);
-    final teamColor = isRed ? AppColors.redTeam : Colors.white;
+    final teamColor = widget.isRed ? AppColors.redTeam : AppColors.whiteTeam;
+    final pid = playerIdFromObject(player);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          // Sombra 3D física sob o card
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-                BoxShadow(
-                  color: teamColor.withValues(alpha: 0.18),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: FifaCard(
-              name: player['name']?.toString() ?? '',
-              iconPath: player['icon']?.toString(),
-              overall: overall,
-              attributes: community,
-              frame: frame,
-              compact: true,
-              onTap: onTap,
-            ),
+    Widget card = FittedBox(
+      fit: BoxFit.contain,
+      child: FifaCard(
+        name: player['name']?.toString() ?? '',
+        iconPath: player['icon']?.toString(),
+        overall: overall,
+        attributes: community,
+        frame: resolvePlayerFrame(player),
+        density: widget.density,
+        onTap: widget.onTap,
+      ),
+    );
+
+    if (widget.highlighted != null) {
+      card = ValueListenableBuilder<String?>(
+        valueListenable: widget.highlighted!,
+        builder: (context, id, child) => DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: id == pid
+                ? Border.all(color: AppColors.highlightBlue, width: 2)
+                : null,
           ),
+          child: child,
+        ),
+        child: card,
+      );
+    }
 
-          // Mini indicador elegante do time no canto superior esquerdo
-          Positioned(
-            top: 2,
-            left: 2,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: teamColor,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.black87, width: 1),
-              ),
-            ),
-          ),
-
-          // Craque da Partida (MOTM) - Badge refinado
-          if (isMotm)
+    return AnimatedScale(
+      scale: _scale,
+      duration: const Duration(milliseconds: 125),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(child: card),
             Positioned(
-              top: -8,
-              left: -8,
-              child: Container(
-                padding: const EdgeInsets.all(2.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFFD700), width: 1.2),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 4),
-                  ],
-                ),
-                child: const Icon(
+              top: 1,
+              left: 1,
+              child: widget.isGk
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.headerBlue,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: AppColors.textMuted,
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'GK',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: teamColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.deepBlue, width: 1),
+                      ),
+                    ),
+            ),
+            if (widget.isMotm)
+              const Positioned(
+                top: -6,
+                right: -4,
+                child: Icon(
                   Icons.emoji_events_rounded,
-                  color: Color(0xFFFFD700),
+                  color: AppColors.goldAccent,
                   size: 14,
                 ),
               ),
-            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          // Ícones de Eventos (Gols, Cartões) em pill escuro
-          if (eventIcons.isNotEmpty)
-            Positioned(
-              top: -6,
-              right: -8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white24, width: 0.8),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 3),
-                  ],
+  // Nota + eventos numa trilha abaixo da carta (máx. 3 ícones, depois "+N").
+  Widget _trail(Map<String, dynamic> player) {
+    final nota = (widget.stats['nota'] as num?)?.toDouble() ?? 0;
+    final icons = widget.eventIconsOf(widget.stats);
+    final shown = icons.take(3).toList();
+    final extra = icons.length - shown.length;
+    if (nota <= 0 && icons.isEmpty) return const SizedBox.shrink();
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (nota > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: AppColors.ratingPill(nota),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                nota.toStringAsFixed(1),
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: eventIcons),
               ),
             ),
-
-          // Nota do Jogador (estilo SofaScore)
-          if (nota != null && nota > 0)
-            Positioned(
-              bottom: -5,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: getRatingColor(nota),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.black, width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1.5),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  nota.toStringAsFixed(1),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.2,
-                  ),
+          if (nota > 0 && shown.isNotEmpty) const SizedBox(width: 3),
+          ...shown,
+          if (extra > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 2),
+              child: Text(
+                '+$extra',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -382,296 +636,130 @@ class _PitchPlayerCard extends StatelessWidget {
   }
 }
 
-class _EmptyPitchGkCard extends StatelessWidget {
-  final bool isRed;
-  final VoidCallback onTap;
-
-  const _EmptyPitchGkCard({required this.isRed, required this.onTap});
+class _DashedRRect extends CustomPainter {
+  final Color color;
+  const _DashedRRect(this.color);
 
   @override
-  Widget build(BuildContext context) {
-    final color = isRed ? AppColors.redTeam : Colors.white;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AspectRatio(
-        aspectRatio: FifaCard.compactWidth / FifaCard.compactHeight,
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: color.withValues(alpha: 0.70),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.sports_handball, color: color, size: 20),
-              const SizedBox(height: 2),
-              Text(
-                'GK',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Icon(
-                Icons.add_circle_outline,
-                color: color.withValues(alpha: 0.75),
-                size: 13,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)),
+      );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final m in path.computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += 7) {
+        canvas.drawPath(m.extractPath(d, d + 4), paint);
+      }
+    }
   }
-}
 
-class _EmptyPitchCard extends StatelessWidget {
   @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: FifaCard.compactWidth / FifaCard.compactHeight,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.18),
-            width: 1.2,
-          ),
-        ),
-        child: const Center(
-          child: Icon(Icons.person_outline, color: Colors.white24, size: 22),
-        ),
-      ),
-    );
-  }
+  bool shouldRepaint(covariant _DashedRRect old) => old.color != color;
 }
 
-/// Pintor customizado do gramado com perspectiva 3D, corte de grama profissional,
-/// traves em profundidade e linhas oficiais nítidas.
+/// Gramado em perspectiva (trapézio): estreito ao fundo, largo na frente,
+/// com a mesma escala de largura que [PitchLayout.widthScale] usa nas cartas.
 class _PitchPainter extends CustomPainter {
   const _PitchPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
     final rect = Offset.zero & size;
 
-    // 1. Gramado 3D com iluminação central estilo estádio (floodlight radial)
-    final turfShader = RadialGradient(
-      center: Alignment.center,
-      radius: 0.75,
-      colors: const [
-        Color(0xFF143B23), // Verde esmeralda rico iluminado no meio
-        Color(0xFF0F2C1A), // Verde gramado denso
-        Color(0xFF08190E), // Borda escura com vinheta de estádio
-      ],
-      stops: const [0.0, 0.55, 1.0],
-    ).createShader(rect);
-    canvas.drawRect(rect, Paint()..shader = turfShader);
-
-    // 2. Faixas de corte de grama alternadas (mowing stripes)
-    const stripeCount = 12;
-    final stripeH = size.height / stripeCount;
-    final lightStripe = Paint()..color = Colors.white.withValues(alpha: 0.025);
-    final darkStripe = Paint()..color = Colors.black.withValues(alpha: 0.06);
-
-    for (var i = 0; i < stripeCount; i++) {
-      final sRect = Rect.fromLTWH(0, i * stripeH, size.width, stripeH);
-      canvas.drawRect(sRect, i.isEven ? lightStripe : darkStripe);
+    // Ponto do campo (fx 0..1 na largura, fy 0..1 de fundo a frente).
+    Offset pt(double fx, double fy) {
+      final ws = PitchLayout.widthScale(fy);
+      return Offset(w * (0.5 + (fx - 0.5) * ws), h * fy);
     }
 
-    // 3. Área de jogo (demarcação do campo com recuo)
-    final insetH = 14.0;
-    final insetV = 16.0;
-    final field = Rect.fromLTWH(
-      insetH,
-      insetV,
-      size.width - insetH * 2,
-      size.height - insetV * 2,
+    Path poly(List<Offset> p) => Path()..addPolygon(p, true);
+
+    // Listras alternadas, sutis.
+    const stripes = 10;
+    for (var i = 0; i < stripes; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, h * i / stripes, w, h / stripes + 0.5),
+        Paint()
+          ..color = i.isEven ? AppColors.pitchStripeA : AppColors.pitchStripeB,
+      );
+    }
+
+    // Vinheta nas bordas (preto 25%).
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          radius: 0.9,
+          colors: [
+            Colors.transparent,
+            AppColors.pitchEdge.withValues(alpha: 0.5),
+          ],
+        ).createShader(rect),
     );
 
-    // Efeito de rebaixo do campo (inner drop shadow nas bordas)
-    final turfShadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(field.inflate(1), const Radius.circular(10)),
-      turfShadow,
-    );
-
-    // 4. Linhas de campo com giz semi-translúcido nítido
     final line = Paint()
-      ..color = Colors.white.withValues(alpha: 0.58)
+      ..color = AppColors.textWhite.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final soft = Paint()
+      ..color = AppColors.textWhite.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
-    // Linha perimetral com cantos arredondados
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(field, const Radius.circular(8)),
+    const top = 0.03, bottom = 0.97, l = 0.03, r = 0.97;
+    canvas.drawPath(
+      poly([pt(l, top), pt(r, top), pt(r, bottom), pt(l, bottom)]),
       line,
     );
+    canvas.drawLine(pt(l, 0.5), pt(r, 0.5), line);
 
-    // Linha do meio de campo
-    final midY = size.height / 2;
-    canvas.drawLine(Offset(field.left, midY), Offset(field.right, midY), line);
-
-    // Círculo central
-    final centerOffset = Offset(size.width / 2, midY);
-    final centerRadius = size.width * 0.15;
-    canvas.drawCircle(centerOffset, centerRadius, line);
-
-    // Ponto central
-    canvas.drawCircle(
-      centerOffset,
-      3.2,
-      Paint()..color = Colors.white.withValues(alpha: 0.85),
+    // Círculo central (decorativo, 25%): elipse achatada pela perspectiva.
+    final c = pt(0.5, 0.5);
+    canvas.drawOval(
+      Rect.fromCenter(center: c, width: w * 0.30, height: h * 0.07),
+      soft,
     );
 
-    // 5. Escanteios (Corner arcs nos 4 cantos)
-    const cornerR = 10.0;
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(field.left, field.top), radius: cornerR),
-      0,
-      math.pi / 2,
-      false,
-      line,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(field.right, field.top), radius: cornerR),
-      math.pi / 2,
-      math.pi / 2,
-      false,
-      line,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(field.right, field.bottom), radius: cornerR),
-      math.pi,
-      math.pi / 2,
-      false,
-      line,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(field.left, field.bottom), radius: cornerR),
-      3 * math.pi / 2,
-      math.pi / 2,
-      false,
-      line,
-    );
-
-    // 6. Áreas de pênalti e gol nos dois lados (Grande Área, Pequena Área, Meia-lua e Pênalti)
-    _drawPenaltyArea(canvas, field, line, isTop: true);
-    _drawPenaltyArea(canvas, field, line, isTop: false);
-
-    // 7. Traves em 3D com profundidade de rede atrás da linha de gol
-    _draw3DGoal(canvas, field, isTop: true);
-    _draw3DGoal(canvas, field, isTop: false);
-
-    // 8. Iluminação suave de zona das equipes
-    final teamAmbient = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppColors.redTeam.withValues(alpha: 0.05),
-          Colors.transparent,
-          Colors.white.withValues(alpha: 0.05),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(rect);
-    canvas.drawRect(rect, teamAmbient);
-  }
-
-  void _drawPenaltyArea(Canvas canvas, Rect field, Paint line, {required bool isTop}) {
-    // Grande Área
-    final bigBoxW = field.width * 0.50;
-    final bigBoxH = field.height * 0.125;
-    final bigBoxLeft = field.center.dx - bigBoxW / 2;
-    final bigBoxTop = isTop ? field.top : field.bottom - bigBoxH;
-    canvas.drawRect(Rect.fromLTWH(bigBoxLeft, bigBoxTop, bigBoxW, bigBoxH), line);
-
-    // Pequena Área (Área de Meta)
-    final smallBoxW = field.width * 0.26;
-    final smallBoxH = field.height * 0.052;
-    final smallBoxLeft = field.center.dx - smallBoxW / 2;
-    final smallBoxTop = isTop ? field.top : field.bottom - smallBoxH;
-    canvas.drawRect(Rect.fromLTWH(smallBoxLeft, smallBoxTop, smallBoxW, smallBoxH), line);
-
-    // Marca do Pênalti
-    final penaltySpotY = isTop ? field.top + bigBoxH * 0.72 : field.bottom - bigBoxH * 0.72;
-    canvas.drawCircle(
-      Offset(field.center.dx, penaltySpotY),
-      2.6,
-      Paint()..color = Colors.white.withValues(alpha: 0.85),
-    );
-
-    // Meia-lua da Grande Área (D-box)
-    final arcRadius = field.width * 0.14;
-    final arcCenter = Offset(field.center.dx, penaltySpotY);
-    if (isTop) {
-      canvas.drawArc(
-        Rect.fromCircle(center: arcCenter, radius: arcRadius),
-        0.65,
-        1.84,
-        false,
+    // Áreas e gols nas duas extremidades.
+    for (final back in const [true, false]) {
+      double y(double d) => back ? top + d : bottom - d;
+      canvas.drawPath(
+        poly([
+          pt(0.25, y(0)),
+          pt(0.75, y(0)),
+          pt(0.75, y(0.1)),
+          pt(0.25, y(0.1)),
+        ]),
         line,
       );
-    } else {
-      canvas.drawArc(
-        Rect.fromCircle(center: arcCenter, radius: arcRadius),
-        math.pi + 0.65,
-        1.84,
-        false,
+      canvas.drawPath(
+        poly([
+          pt(0.38, y(0)),
+          pt(0.62, y(0)),
+          pt(0.62, y(0.04)),
+          pt(0.38, y(0.04)),
+        ]),
+        line,
+      );
+      final g = back ? top : bottom;
+      final dir = back ? -1.0 : 1.0;
+      canvas.drawPath(
+        poly([
+          pt(0.42, g),
+          pt(0.42, g + dir * 0.012),
+          pt(0.58, g + dir * 0.012),
+          pt(0.58, g),
+        ]),
         line,
       );
     }
-  }
-
-  void _draw3DGoal(Canvas canvas, Rect field, {required bool isTop}) {
-    final goalW = field.width * 0.20;
-    final goalH = 8.0;
-    final gLeft = field.center.dx - goalW / 2;
-    final gTop = isTop ? field.top - goalH : field.bottom;
-
-    // Fundo sombreado da rede (profundidade)
-    final netPocket = Rect.fromLTWH(gLeft, gTop, goalW, goalH);
-    canvas.drawRect(
-      netPocket,
-      Paint()..color = Colors.black.withValues(alpha: 0.35),
-    );
-
-    // Malha sutil da rede
-    final netGrid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.20)
-      ..strokeWidth = 0.8;
-    for (var x = gLeft + 4; x < gLeft + goalW; x += 6) {
-      canvas.drawLine(Offset(x, gTop), Offset(x, gTop + goalH), netGrid);
-    }
-
-    // Traves e travessão branco sólido em 3D
-    final postPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    canvas.drawRect(netPocket, postPaint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _PitchPainter old) => false;
 }

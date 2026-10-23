@@ -10,8 +10,9 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
-import '../widgets/shared/player_name_text.dart';
-import '../widgets/shared/player_avatar_frame.dart';
+import '../theme/app_theme.dart';
+import '../widgets/shared/ranking_player_bits.dart';
+import '../widgets/shared/stars_badge.dart';
 import '../repositories/supabase_service.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -902,32 +903,13 @@ class _RankingScreenState extends State<RankingScreen> {
                                       ),
                                     ),
                                   ),
-                                  _playerAvatar(player, radius: 16),
+                                  RankAvatar(player: player, size: 32),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: PlayerNameText(
-                                      name: player['name'].toString(),
-                                      nameEffect: player['name_effect']?.toString(),
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 13,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    child: RankName(player: player, style: const TextStyle(fontSize: 13)),
                                   ),
                                   // Nota
-                                  SizedBox(
-                                    width: 40,
-                                    child: Text(
-                                      nota.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        color: getRatingColor(nota),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
+                                  SizedBox(width: 48, child: Center(child: RatingPill(rating: nota, fontSize: 12))),
                                   const SizedBox(width: 8),
                                   // G+A
                                   SizedBox(
@@ -1210,35 +1192,15 @@ class _RankingScreenState extends State<RankingScreen> {
                                       ),
                                     ),
                                   ),
-                                  _playerAvatar(player, radius: 14),
+                                  RankAvatar(player: player, size: 28),
                                 ],
                               ),
-                              title: PlayerNameText(
-                                name: player['name'].toString(),
-                                nameEffect: player['name_effect']?.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
+                              title: RankName(player: player, style: const TextStyle(fontSize: 13)),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   // Nota
-                                  SizedBox(
-                                    width: 35,
-                                    child: Text(
-                                      (player['nota'] as double)
-                                          .toStringAsFixed(1),
-                                      style: const TextStyle(
-                                        color: Colors.greenAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
+                                  SizedBox(width: 48, child: Center(child: RatingPill(rating: player['nota'] as double, fontSize: 12))),
                                   const SizedBox(width: 15),
                                   // CS
                                   SizedBox(
@@ -1365,398 +1327,117 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  Widget _playerAvatar(Map<String, dynamic> p, {double radius = 24, bool highlight = false}) {
-    final String? icon = p['icon'] as String?;
-    final avatar = CircleAvatar(
-      radius: radius,
-      backgroundColor: AppColors.headerBlue,
-      backgroundImage: icon != null && icon.isNotEmpty
-          ? AssetImage(icon)
-          : null,
-      child: (icon == null || icon.isEmpty)
-          ? Text(
-              (p['name'] as String).isNotEmpty
-                  ? (p['name'] as String)[0].toUpperCase()
-                  : '?',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: radius * 0.7,
-              ),
-            )
-          : null,
-    );
-
-    final frame = resolvePlayerFrame(p);
-    if (frame.type == PlayerFrameType.none) {
-      return avatar;
-    }
-
-    return PlayerAvatarFrame(
-      frame: frame,
-      compact: !highlight,
-      isCircular: true,
-      child: avatar,
-    );
-  }
-
   // ─── Pódio (Top 3) ───────────────────────────────────────────
 
-  Widget _buildPodium(List<Map<String, dynamic>> top) {
-    final p1 = top.isNotEmpty ? top[0] : null;
-    final p2 = top.length > 1 ? top[1] : null;
-    final p3 = top.length > 2 ? top[2] : null;
+  Widget _buildPodium(List<Map<String, dynamic>> top) => _podiumRow(top);
 
+  Widget _buildGkPodium(List<Map<String, dynamic>> list) =>
+      list.isEmpty ? const SizedBox.shrink() : _podiumRow(list, isGk: true);
+
+  Widget _podiumRow(List<Map<String, dynamic>> list, {bool isGk = false}) {
+    Map<String, dynamic>? at(int i) => list.length > i ? list[i] : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Expanded(child: _podiumSlot(p2, 2, 80, Colors.grey[300]!)),
-        Expanded(child: _podiumSlot(p1, 1, 110, Colors.amber)),
-        Expanded(child: _podiumSlot(p3, 3, 60, Colors.brown[300]!)),
+        Expanded(child: _podiumSlot(at(1), 2, 72, AppColors.tierSilver, isGk)),
+        Expanded(child: _podiumSlot(at(0), 1, 104, AppColors.tierGold, isGk)),
+        Expanded(child: _podiumSlot(at(2), 3, 52, AppColors.tierBronzeAccent, isGk)),
       ],
     );
   }
+
+  void _openPlayer(Map<String, dynamic> player) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlayerDetailScreen(
+            groupId: widget.groupId,
+            tournamentId: widget.tournamentId,
+            playerId: player['id'].toString(),
+            initialPlayerName: player['name'],
+          ),
+        ),
+      );
 
   Widget _podiumSlot(
     Map<String, dynamic>? player,
     int position,
     double barHeight,
-    Color accentColor,
+    Color medal,
+    bool isGk,
   ) {
     if (player == null) return const SizedBox.shrink();
 
+    final bool first = position == 1;
     final double nota = player['nota'] as double;
-    final int wins = player['wins'] as int;
-    final int draws = player['draws'] as int;
-    final int losses = player['losses'] as int;
-    final int games = player['games'] as int;
-    final int goals = player['goals'] as int;
-    final int assists = player['assists'] as int;
-    final int ga = goals + assists;
-
-    final String medal = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
+    final cosmetic = cosmeticOfMap(player);
+    final String metric = isGk
+        ? '${player['clean_sheets'] ?? 0}'
+        : '${(player['goals'] as int) + (player['assists'] as int)}';
+    final String metricLabel = isGk ? 'Jogos sem sofrer gol' : 'G+A';
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PlayerDetailScreen(
-            groupId: widget.groupId,
-            tournamentId: widget.tournamentId,
-            playerId: player['id'].toString(),
-            initialPlayerName: player['name'],
-          ),
-        ),
-      ),
+      onTap: () => _openPlayer(player),
+      onLongPress: () => showPlayerCardPeek(context, player),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _playerAvatar(player, radius: position == 1 ? 28 : 22, highlight: true),
+          RankAvatar(player: player, size: first ? 56 : 44, glow: true),
+          if (cosmetic.stars > 0) ...[
+            const SizedBox(height: 2),
+            StarsBadge(stars: cosmetic.stars, compact: true, size: 12),
+          ],
           const SizedBox(height: 4),
-          // Nome
-          PlayerNameText(
-            name: player['name'].toString(),
-            nameEffect: player['name_effect']?.toString(),
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: position == 1 ? 13 : 11,
-              fontWeight: FontWeight.bold,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: RankName(
+              player: player,
+              showStars: false,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: first ? 14 : 12),
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          // Nota
-          Text(
-            nota.toStringAsFixed(1),
-            style: TextStyle(
-              color: accentColor,
-              fontWeight: FontWeight.bold,
-              fontSize: position == 1 ? 16 : 14,
-            ),
-          ),
-          const SizedBox(height: 4),
-          // G+A com breakdown Gols/Assists
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Gols
-              Text('⚽', style: TextStyle(fontSize: position == 1 ? 11 : 10)),
-              Text(
-                '$goals',
-                style: TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: position == 1 ? 12 : 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Assistências
-              Icon(
-                Icons.handshake,
-                color: Colors.lightBlueAccent,
-                size: position == 1 ? 12 : 10,
-              ),
-              Text(
-                '$assists',
-                style: TextStyle(
-                  color: Colors.lightBlueAccent,
-                  fontSize: position == 1 ? 12 : 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              // G+A total
-              Text(
-                'G+A $ga',
-                style: TextStyle(
-                  color: accentColor.withValues(alpha: 0.85),
-                  fontSize: position == 1 ? 11 : 9,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          // W / D / L
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '$wins',
-                style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '/',
-                style: const TextStyle(color: Colors.white24, fontSize: 11),
-              ),
-              Text(
-                '$draws',
-                style: const TextStyle(
-                  color: Colors.orangeAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '/',
-                style: const TextStyle(color: Colors.white24, fontSize: 11),
-              ),
-              Text(
-                '$losses',
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          Text(
-            '$games jogos',
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
           ),
           const SizedBox(height: 6),
-          // Degrau do pódio
-          Container(
-            height: barHeight,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.2),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(6),
-                topRight: Radius.circular(6),
-              ),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-            ),
-            child: Center(
-              child: Text(medal, style: const TextStyle(fontSize: 22)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGkPodium(List<Map<String, dynamic>> list) {
-    if (list.isEmpty) return const SizedBox.shrink();
-    final p1 = list.length > 0 ? list[0] : null;
-    final p2 = list.length > 1 ? list[1] : null;
-    final p3 = list.length > 2 ? list[2] : null;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(child: _gkPodiumSlot(p2, 2, 80, Colors.grey[300]!)),
-        Expanded(child: _gkPodiumSlot(p1, 1, 110, Colors.amber)),
-        Expanded(child: _gkPodiumSlot(p3, 3, 60, Colors.brown[300]!)),
-      ],
-    );
-  }
-
-  Widget _gkPodiumSlot(
-    Map<String, dynamic>? player,
-    int position,
-    double barHeight,
-    Color accentColor,
-  ) {
-    if (player == null) return const SizedBox.shrink();
-
-    final double nota = player['nota'] as double;
-    final int cleanSheets = player['clean_sheets'] as int;
-    final int conceded = player['conceded'] as int;
-    final int games = player['games'] as int;
-    final int goals = player['goals'] as int;
-    final int assists = player['assists'] as int;
-    
-    final int wins = player['wins'] as int;
-    final int draws = player['draws'] as int;
-    final int losses = player['losses'] as int;
-
-    final String medal = position == 1 ? '🥇' : (position == 2 ? '🥈' : '🥉');
-
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PlayerDetailScreen(
-            groupId: widget.groupId,
-            tournamentId: widget.tournamentId,
-            playerId: player['id'].toString(),
-            initialPlayerName: player['name'],
-          ),
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          _playerAvatar(player, radius: position == 1 ? 28 : 22, highlight: true),
-          const SizedBox(height: 4),
-          PlayerNameText(
-            name: player['name'].toString(),
-            nameEffect: player['name_effect']?.toString(),
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: position == 1 ? 13 : 11,
-              fontWeight: FontWeight.bold,
-            ),
+          Text(metric, style: AppTheme.number(fontSize: 20)),
+          Text(
+            metricLabel,
             textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
           ),
-          const SizedBox(height: 4),
-          Text(
-            nota.toStringAsFixed(1),
-            style: TextStyle(
-              color: accentColor,
-              fontWeight: FontWeight.bold,
-              fontSize: position == 1 ? 16 : 14,
+          if (!isGk) ...[
+            const SizedBox(height: 4),
+            GoalsAssistsText(
+              goals: player['goals'] as int,
+              assists: player['assists'] as int,
             ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('⚽', style: TextStyle(fontSize: position == 1 ? 11 : 10)),
-              Text(
-                '$goals',
-                style: TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: position == 1 ? 12 : 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.handshake,
-                color: Colors.lightBlueAccent,
-                size: position == 1 ? 12 : 10,
-              ),
-              Text(
-                '$assists',
-                style: TextStyle(
-                  color: Colors.lightBlueAccent,
-                  fontSize: position == 1 ? 12 : 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'CS $cleanSheets | GS $conceded',
-                style: TextStyle(
-                  color: accentColor.withValues(alpha: 0.85),
-                  fontSize: position == 1 ? 11 : 9,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '$wins',
-                style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '/',
-                style: const TextStyle(color: Colors.white24, fontSize: 11),
-              ),
-              Text(
-                '$draws',
-                style: const TextStyle(
-                  color: Colors.orangeAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '/',
-                style: const TextStyle(color: Colors.white24, fontSize: 11),
-              ),
-              Text(
-                '$losses',
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
+          ],
+          const SizedBox(height: 6),
+          RatingPill(rating: nota, fontSize: first ? 15 : 13),
+          const SizedBox(height: 6),
           Text(
-            '$games jogos',
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
+            '${player['games']} jogos',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+          ),
+          WdlText(
+            wins: player['wins'] as int,
+            draws: player['draws'] as int,
+            losses: player['losses'] as int,
+            fontSize: 10,
           ),
           const SizedBox(height: 6),
           Container(
             height: barHeight,
             decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.2),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(6),
-                topRight: Radius.circular(6),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [medal.withValues(alpha: 0.2), medal.withValues(alpha: 0)],
               ),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              border: Border(top: BorderSide(color: medal, width: 2)),
             ),
-            child: Center(
-              child: Text(medal, style: const TextStyle(fontSize: 22)),
-            ),
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('$position', style: AppTheme.number(fontSize: 22, color: medal)),
           ),
         ],
       ),
@@ -1770,173 +1451,82 @@ class _RankingScreenState extends State<RankingScreen> {
     return Column(
       children: List.generate(items.length, (i) {
         final player = items[i];
-        final int pos = i + 4;
-        final double nota = player['nota'] as double;
-        final int goals = player['goals'] as int;
-        final int assists = player['assists'] as int;
-        final int ga = goals + assists;
-
-        final int cleanSheets = isGk ? (player['clean_sheets'] ?? 0) : 0;
-        final int conceded = isGk ? (player['conceded'] ?? 0) : 0;
+        final int games = player['games'] as int;
+        final String metric = isGk
+            ? '${player['clean_sheets'] ?? 0}'
+            : '${(player['goals'] as int) + (player['assists'] as int)}';
+        final String metricLabel = isGk ? 'CS' : 'G+A';
 
         return GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PlayerDetailScreen(
-                groupId: widget.groupId,
-                tournamentId: widget.tournamentId,
-                playerId: player['id'].toString(),
-                initialPlayerName: player['name'],
-              ),
-            ),
-          ),
+          onTap: () => _openPlayer(player),
+          onLongPress: () => showPlayerCardPeek(context, player),
           child: Container(
+            constraints: const BoxConstraints(minHeight: 64),
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: AppColors.headerBlue.withValues(alpha: 0.4),
+              color: AppColors.headerBlue,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: AppColors.borderSubtle),
             ),
             child: Row(
               children: [
                 SizedBox(
                   width: 28,
                   child: Text(
-                    '$pos',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    '${i + 4}',
+                    style: AppTheme.number(fontSize: 14, color: AppColors.textDim),
                   ),
                 ),
-                _playerAvatar(player, radius: 18),
+                RankAvatar(player: player, size: 40),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: PlayerNameText(
-                    name: player['name'].toString(),
-                    nameEffect: player['name_effect']?.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RankName(player: player),
+                      const SizedBox(height: 2),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (!isGk)
+                            Text(
+                              '⚽ ${player['goals']} · 👟 ${player['assists']} · ',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          Text(
+                            '$games ${games == 1 ? 'jogo' : 'jogos'} · ',
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          WdlText(
+                            wins: player['wins'] as int,
+                            draws: player['draws'] as int,
+                            losses: player['losses'] as int,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                // Nota
-                Text(
-                  nota.toStringAsFixed(1),
-                  style: TextStyle(
-                    color: getRatingColor(nota),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(metric, style: AppTheme.number(fontSize: 20)),
+                    Text(
+                      metricLabel,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 10),
-                // Stats
-                if (isGk)
-                  Row(
-                    children: [
-                      Text('⚽', style: TextStyle(fontSize: 10)),
-                      Text(
-                        '$goals',
-                        style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.handshake,
-                        color: Colors.lightBlueAccent,
-                        size: 10,
-                      ),
-                      Text(
-                        '$assists',
-                        style: TextStyle(
-                          color: Colors.lightBlueAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$cleanSheets/$conceded',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      const Text('⚽', style: TextStyle(fontSize: 11)),
-                      Text(
-                        '$goals',
-                        style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.handshake,
-                        color: Colors.lightBlueAccent,
-                        size: 12,
-                      ),
-                      Text(
-                        '$assists',
-                        style: const TextStyle(
-                          color: Colors.lightBlueAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '($ga)',
-                        style: const TextStyle(
-                          color: AppColors.highlightGreen,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(width: 8),
-                // V/E/D
-                Text(
-                  '${player['wins']}',
-                  style: const TextStyle(
-                    color: Colors.greenAccent,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  '/',
-                  style: const TextStyle(color: Colors.white24, fontSize: 11),
-                ),
-                Text(
-                  '${player['draws']}',
-                  style: const TextStyle(
-                    color: Colors.orangeAccent,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  '/',
-                  style: const TextStyle(color: Colors.white24, fontSize: 11),
-                ),
-                Text(
-                  '${player['losses']}',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 11),
-                ),
+                RatingPill(rating: player['nota'] as double),
               ],
             ),
           ),

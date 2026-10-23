@@ -1,30 +1,89 @@
 import 'package:flutter/material.dart';
+import '../../constants/app_colors.dart';
+import '../../theme/app_theme.dart';
+import '../../utils/cosmetic_resolver.dart';
 import '../../utils/overall_calculator.dart';
+import '../shared/cosmetic_frame.dart';
+import '../shared/cosmetic_icon.dart';
+import '../shared/cosmetic_name.dart';
 import '../shared/player_avatar_frame.dart';
+import '../shared/stars_badge.dart';
 
-/// Card de jogador no estilo FIFA/Ultimate Team.
+/// Densidades da carta (docs/design/06 e 03 §4.4).
 ///
-/// - Overall em destaque (canto superior esquerdo)
-/// - Ícone do jogador preservado (asset escolhido no perfil)
-/// - Nome e os 6 atributos (PAC SHO PAS / DRI DEF PHY)
-/// - Cor do card muda por faixa: bronze < 65, prata 65-74, ouro 75-84, elite 85+
+/// - [full]: Elenco/perfil/peek — atributos, glow permitido.
+/// - [large] (L): campo, espaço folgado.
+/// - [medium] (M): campo, futsal 5×5 em retrato.
+/// - [small] (S): chip (foto circular), campo 7×7 / 11×11.
+enum CardDensity { full, large, medium, small }
+
+/// Medidas de cada densidade, em dp de desenho (a carta é escalada por
+/// [FittedBox], então vale igual em qualquer tamanho).
+class _Metrics {
+  final double w, h;
+  static const frameGap = 2.0;
+  final double frameThickness;
+  final bool doubleFrame, texture, glow;
+  final double iconSize;
+  const _Metrics({
+    required this.w,
+    required this.h,
+    required this.frameThickness,
+    required this.doubleFrame,
+    required this.texture,
+    required this.glow,
+    required this.iconSize,
+  });
+
+  /// Espaço que a moldura cosmética ocupa ao redor da carta.
+  double framePad(bool hasDouble) =>
+      frameThickness + frameGap + (doubleFrame && hasDouble ? 2 : 0);
+}
+
+const _metrics = {
+  CardDensity.full: _Metrics(
+      w: 200, h: 280, frameThickness: 1.5, doubleFrame: true,
+      texture: true, glow: true, iconSize: 22),
+  CardDensity.large: _Metrics(
+      w: 132, h: 168, frameThickness: 1.5, doubleFrame: true,
+      texture: true, glow: false, iconSize: 14),
+  CardDensity.medium: _Metrics(
+      w: 60, h: 84, frameThickness: 1, doubleFrame: false,
+      texture: true, glow: false, iconSize: 12),
+  CardDensity.small: _Metrics(
+      w: 56, h: 74, frameThickness: 1.5, doubleFrame: false,
+      texture: false, glow: false, iconSize: 12),
+};
+
+/// Card de jogador no estilo FIFA/Ultimate Team, em camadas:
+/// escudo (tier) → textura → foto → textos → divisória + atributos →
+/// moldura cosmética (fora do escudo) → ícones/estrelas.
 ///
-/// O card é desenhado num espaço fixo e escalado com [FittedBox], então
-/// funciona igual no grid do Elenco, no perfil e (em [compact]) no campo tático.
+/// Faixas do tier: ver `tierForOverall` (bronze, prata, ouro, platina, lendária).
+/// Cosméticos vêm sempre de [frame] (`resolveCosmetic`).
 class FifaCard extends StatelessWidget {
   static const double designWidth = 200;
-  static const double designHeight = 290;
+  static const double designHeight = 280;
   static const double compactWidth = 132;
   static const double compactHeight = 168;
+
+  /// Textura swirl (máscara tingida pela cor do tier), na carta toda.
+  static const patternAsset = 'assets/card_patterns/swirl.png';
+
+  /// Mesmo provider em todas as cartas, para decodificar o PNG uma vez.
+  static const ImageProvider patternImage =
+      ResizeImage(AssetImage(patternAsset), width: 240);
+
+  /// Chame uma vez com contexto montado (ex.: ao abrir o Elenco/Partida).
+  static Future<void> precache(BuildContext context) =>
+      precacheImage(patternImage, context);
 
   final String name;
   final String? iconPath;
   final int overall;
   final CommunityAttributes? attributes;
   final PlayerFrameInfo? frame;
-
-  /// Versão enxuta (overall + ícone + nome) para o campo tático.
-  final bool compact;
+  final CardDensity density;
 
   /// Toque no card inteiro (ex.: abrir o perfil).
   final VoidCallback? onTap;
@@ -43,38 +102,59 @@ class FifaCard extends StatelessWidget {
     this.iconPath,
     this.attributes,
     this.frame,
-    this.compact = false,
+    this.density = CardDensity.full,
     this.onTap,
     this.onIconTap,
     this.onRemove,
   });
 
-  double get _w => compact ? compactWidth : designWidth;
-  double get _h => compact ? compactHeight : designHeight;
+  _Metrics get _m => _metrics[density]!;
 
   @override
   Widget build(BuildContext context) {
-    final tier = cardTierFor(overall);
+    final m = _m;
+    final tier = tierForOverall(overall);
     final palette = cardPaletteFor(tier);
-    final hasFrame = frame != null && frame!.type != PlayerFrameType.none;
+    final cosmetic = (frame ?? PlayerFrameInfo.none).cosmetic;
+    final hasFrame = cosmetic.frame != null;
 
-    Widget card = SizedBox(
-      width: _w,
-      height: _h,
+    final Widget body = density == CardDensity.small
+        ? _SmallChip(
+            name: name,
+            iconPath: iconPath,
+            overall: overall,
+            palette: palette,
+            cosmetic: cosmetic,
+          )
+        : _buildShieldCard(m, tier, palette, cosmetic);
+
+    double outerW = m.w, outerH = m.h;
+    Widget card = body;
+    if (density != CardDensity.small && hasFrame) {
+      final pad = m.framePad(cosmetic.frame!.isDouble);
+      outerW += pad * 2;
+      outerH += pad * 2;
+      card = CosmeticFrame(
+        cosmetic: cosmetic,
+        thickness: m.frameThickness,
+        gap: _Metrics.frameGap,
+        pathBuilder: fifaShieldPath,
+        glow: m.glow,
+        allowDouble: m.doubleFrame,
+        child: body,
+      );
+    }
+
+    card = SizedBox(
+      width: outerW,
+      height: outerH,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: FifaShieldPainter(palette, frame: frame),
-              ),
-            ),
-            _buildOverall(palette, tier),
-            _buildIcon(palette),
-            _buildName(palette),
-            if (!compact) _buildAttributes(palette),
+            Positioned.fill(child: card),
             if (onRemove != null)
               Positioned(
                 top: 4,
@@ -85,273 +165,210 @@ class FifaCard extends StatelessWidget {
                     width: 26,
                     height: 26,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: AppColors.cosmeticNamePlate,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.close_rounded,
-                        size: 16, color: Colors.white),
+                        size: 16, color: AppColors.textWhite),
                   ),
                 ),
               ),
-            // Mini badge de frame (coroa, estrelas, chama) sobre o ícone
-            if (hasFrame) _buildFrameBadge(),
           ],
         ),
       ),
     );
 
-    return AspectRatio(
-      aspectRatio: _w / _h,
-      child: FittedBox(fit: BoxFit.contain, child: card),
-    );
-  }
-
-  /// Mini badge posicionado no topo do card (coroa para Bola de Ouro,
-  /// estrelas para Craque do Mês, chama para Artilheiro).
-  Widget _buildFrameBadge() {
-    if (frame == null || frame!.type == PlayerFrameType.none) {
-      return const SizedBox.shrink();
-    }
-    final badgeTop = compact ? 4.0 : 6.0;
-    final iconSize = compact ? 11.0 : 16.0;
-
-    Widget? badgeChild;
-    Color badgeColor;
-
-    switch (frame!.type) {
-      case PlayerFrameType.bolaDeOuro:
-        badgeColor = const Color(0xFFFFD700);
-        badgeChild = Icon(Icons.military_tech_rounded, color: badgeColor, size: iconSize);
-        break;
-      case PlayerFrameType.craqueDoMes:
-        badgeColor = const Color(0xFF00E5FF);
-        final count = frame!.count;
-        if (count <= 3) {
-          badgeChild = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (int i = 0; i < count; i++)
-                Icon(Icons.star_rounded, color: const Color(0xFFFFD700), size: iconSize * 0.85),
-            ],
+    // Com restrição limitada a carta escala para caber; sem restrição
+    // (ex.: dentro de um FittedBox) usa o tamanho natural. AspectRatio sem
+    // limite não tem tamanho e a carta sumia.
+    return RepaintBoundary(
+      child: LayoutBuilder(
+        builder: (context, c) {
+          if (!c.hasBoundedWidth && !c.hasBoundedHeight) return card;
+          return AspectRatio(
+            aspectRatio: outerW / outerH,
+            child: FittedBox(fit: BoxFit.contain, child: card),
           );
-        } else {
-          badgeChild = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$count', style: TextStyle(color: const Color(0xFFFFD700), fontSize: iconSize * 0.85, fontWeight: FontWeight.w900, height: 1)),
-              Icon(Icons.star_rounded, color: const Color(0xFFFFD700), size: iconSize * 0.85),
-            ],
-          );
-        }
-        break;
-      case PlayerFrameType.artilheiro:
-        badgeColor = const Color(0xFFFF6D00);
-        badgeChild = Icon(Icons.local_fire_department_rounded, color: badgeColor, size: iconSize);
-        break;
-      case PlayerFrameType.diamond:
-        badgeColor = const Color(0xFF00E5FF);
-        badgeChild = Icon(Icons.diamond_rounded, color: badgeColor, size: iconSize);
-        break;
-      default:
-        return const SizedBox.shrink();
-    }
-
-    return Positioned(
-      top: badgeTop,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: compact ? 3 : 5, vertical: 1),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.70),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: badgeColor.withValues(alpha: 0.7), width: 1),
-          ),
-          child: badgeChild,
-        ),
+        },
       ),
     );
   }
 
-  Widget _buildOverall(CardPalette p, CardTier tier) {
-    return Positioned(
-      left: compact ? 10 : 22,
-      top: compact ? 18 : 34,
-      width: compact ? 42 : 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            '$overall',
-            style: TextStyle(
-              color: p.text,
-              fontSize: compact ? 28 : 44,
-              fontWeight: FontWeight.w900,
-              height: 1,
-              letterSpacing: -1,
+  // ── Carta com escudo (full / L / M) ────────────────────────────────
+
+  Widget _buildShieldCard(
+      _Metrics m, CardTier tier, CardPalette p, ResolvedCosmetic cosmetic) {
+    final full = density == CardDensity.full;
+    final large = density == CardDensity.large;
+    final medium = density == CardDensity.medium;
+
+    // Retângulo da foto (e da textura atrás dela).
+    final Rect photo = full
+        ? const Rect.fromLTWH(78, 20, 108, 116)
+        : large
+            ? const Rect.fromLTWH(40, 16, 72, 80)
+            : const Rect.fromLTWH(24, 6, 34, 40);
+    final double nameTop = full ? 142 : (large ? 100 : 52);
+    final double nameH = full ? 24 : (large ? 18 : 14);
+    final double nameFont = full ? 20 : (large ? 14 : 10);
+    final double sideInset = full ? 14 : (large ? 8 : 3);
+
+    final primary = cosmetic.primaryIcon;
+    final starsCompact = !full && !large || cosmetic.stars > 3;
+
+    Widget nameText = CosmeticName(
+      name: full || large ? name.toUpperCase() : _shortName(name),
+      cosmetic: cosmetic,
+      solid: medium,
+      plaque: true,
+      compactPlaque: medium,
+      showIcon: full && cosmetic.nameIcon != null,
+      iconSize: 14,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: AppTheme.number(
+        fontSize: nameFont,
+        fontWeight: FontWeight.w700,
+        color: p.nameText,
+      ).copyWith(letterSpacing: 0.4, height: 1.1),
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 1–2. Escudo + gradiente do tier
+        Positioned.fill(
+          child: CustomPaint(painter: FifaShieldPainter(p)),
+        ),
+        // 3. Swirl uniforme na carta toda (recortado pelo escudo)
+        if (m.texture)
+          Positioned.fill(
+            child: ClipPath(
+              clipper: const _ShieldClipper(),
+              child: _CardPattern(color: p.pattern, opacity: _patternOpacity),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            'OVR',
-            style: TextStyle(
-              color: p.text,
-              fontSize: compact ? 9 : 13,
-              fontWeight: FontWeight.w800,
-              height: 1,
-              letterSpacing: 1,
-            ),
+        // 4. Foto
+        Positioned.fromRect(
+          rect: photo,
+          child: _PlayerPhoto(
+            name: name,
+            iconPath: iconPath,
+            color: p.text,
+            fontSize: full ? 56 : 28,
+            onTap: onIconTap ?? onTap,
+            showEdit: onIconTap != null,
           ),
-          if (!compact) ...[
-            const SizedBox(height: 6),
-            Container(width: 30, height: 1.5, color: p.text.withValues(alpha: 0.35)),
-            const SizedBox(height: 6),
-            Text(
-              cardTierLabel(tier).toUpperCase(),
-              style: TextStyle(
-                color: p.text.withValues(alpha: 0.75),
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
+        ),
+        // 5. OVR (Z1) + estrelas (+ ícone em M)
+        Positioned(
+          left: full ? 18 : (large ? 8 : 2),
+          top: full ? 30 : (large ? 16 : 6),
+          width: full ? 56 : (large ? 34 : 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$overall',
+                style: AppTheme.number(
+                  fontSize: full ? 40 : (large ? 26 : 14),
+                  fontWeight: FontWeight.w700,
+                  color: p.text,
+                ).copyWith(height: 1),
               ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIcon(CardPalette p) {
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
-
-    Widget fallback() => Center(
-          child: Text(
-            initial,
-            style: TextStyle(
-              color: p.text,
-              fontSize: 56,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        );
-
-    final Widget image = (iconPath != null && iconPath!.isNotEmpty)
-        ? Image.asset(
-            iconPath!,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => fallback(),
-          )
-        : fallback();
-
-    return Positioned(
-      left: compact ? 50 : 84,
-      top: compact ? 22 : 34,
-      width: compact ? 74 : 96,
-      height: compact ? 76 : 100,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onIconTap ?? onTap,
-        child: Stack(
-          children: [
-            Positioned.fill(child: image),
-            if (onIconTap != null)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    shape: BoxShape.circle,
+              if (full || large) ...[
+                const SizedBox(height: 2),
+                Text(
+                  cardTierLabel(tier).toUpperCase(),
+                  style: TextStyle(
+                    color: p.text.withValues(alpha: 0.85),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    height: 1,
                   ),
-                  child: const Icon(Icons.edit, size: 11, color: Colors.white),
                 ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildName(CardPalette p) {
-    return Positioned(
-      left: compact ? 6 : 14,
-      right: compact ? 6 : 14,
-      top: compact ? 104 : 146,
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 4 : 2,
-              vertical: compact ? 1.5 : 0,
-            ),
-            decoration: compact
-                ? BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(4),
-                  )
-                : null,
-            child: Text(
-              name.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: p.text,
-                fontSize: compact ? 14 : 19,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-                height: 1.1,
-                shadows: const [
-                  Shadow(
-                    color: Colors.black87,
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                  ),
-                ],
-              ),
-            ),
+              ],
+              if (cosmetic.stars > 0) ...[
+                SizedBox(height: full ? 6 : 2),
+                StarsBadge(
+                  stars: cosmetic.stars,
+                  compact: starsCompact,
+                  size: full ? 14 : 10,
+                ),
+              ],
+              // Em M cabe um ícone só (coroa > efeito), sob o OVR.
+              if (medium && primary != null) ...[
+                const SizedBox(height: 2),
+                CosmeticIcon(spec: primary, size: m.iconSize),
+              ],
+            ],
           ),
-          if (!compact) ...[
-            const SizedBox(height: 6),
-            Container(height: 1.5, color: p.text.withValues(alpha: 0.3)),
-          ],
-        ],
-      ),
+        ),
+        // Ícone principal (Z2) em full e L
+        if (!medium && primary != null)
+          Positioned(
+            top: full ? 14 : 8,
+            right: full ? 14 : 6,
+            child: CosmeticIcon(spec: primary, size: m.iconSize),
+          ),
+        // 5. Nome (Z4) — sem sombra
+        Positioned(
+          left: sideInset,
+          right: sideInset,
+          top: nameTop,
+          height: nameH,
+          child: Center(child: nameText),
+        ),
+        // 6. Divisória + atributos (só carta cheia)
+        if (full) _buildAttributes(p, nameTop + nameH),
+      ],
     );
   }
 
-  Widget _buildAttributes(CardPalette p) {
+  /// Caracteres do nome na carta M (campo).
+  static const _mediumNameChars = 12;
+
+  static String _shortName(String n) {
+    final t = n.trim().toUpperCase();
+    return t.length <= _mediumNameChars ? t : t.substring(0, _mediumNameChars);
+  }
+
+  /// Linha divisória e atributos **abaixo** dela. A distância base do nome →
+  /// linha é igual à da linha → topo dos atributos (4% da altura).
+  Widget _buildAttributes(CardPalette p, double nameBottom) {
+    final gap = designHeight * 0.04;
+    const rowH = 20.0;
+
     Widget row(String key) {
       final v = attributes?.valueOf(key);
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1.5),
+      return SizedBox(
+        height: rowH,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 28,
+              width: 30,
               child: Text(
-                v?.toString() ?? '–',
+                v?.toString() ?? '—',
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: p.text,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                  height: 1.1,
-                ),
+                style: AppTheme.number(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: p.nameText,
+                ).copyWith(height: 1.1),
               ),
             ),
             const SizedBox(width: 6),
             SizedBox(
-              width: 32,
+              width: 34,
               child: Text(
                 kAttributeLabels[key]!,
                 style: TextStyle(
-                  color: p.text.withValues(alpha: 0.75),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  color: p.nameText.withValues(alpha: 0.75),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   height: 1.1,
                 ),
               ),
@@ -361,22 +378,35 @@ class FifaCard extends StatelessWidget {
       );
     }
 
+    final lineColor = p.nameText.withValues(alpha: 0.3);
     return Positioned(
-      left: 16,
-      right: 16,
-      top: 164,
-      child: Row(
+      left: 20,
+      right: 20,
+      top: nameBottom + gap,
+      child: Column(
         children: [
-          Expanded(
-            child: Column(children: [row('pac'), row('sho'), row('pas')]),
-          ),
-          Container(
-            width: 1.5,
-            height: 68,
-            color: p.text.withValues(alpha: 0.3),
-          ),
-          Expanded(
-            child: Column(children: [row('dri'), row('def'), row('phy')]),
+          Container(key: const ValueKey('card-divider'), height: 1.5, color: lineColor),
+          SizedBox(
+            key: const ValueKey('card-attrs'),
+            height: gap + rowH * 3,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: gap),
+                    child: Column(children: [row('pac'), row('sho'), row('pas')]),
+                  ),
+                ),
+                Container(width: 1.5, color: lineColor),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: gap),
+                    child: Column(children: [row('dri'), row('def'), row('phy')]),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -384,119 +414,307 @@ class FifaCard extends StatelessWidget {
   }
 }
 
+/// Foto do jogador (PNG transparente) com fallback para a inicial.
+class _PlayerPhoto extends StatelessWidget {
+  final String name;
+  final String? iconPath;
+  final Color color;
+  final double fontSize;
+  final VoidCallback? onTap;
+  final bool showEdit;
+
+  const _PlayerPhoto({
+    required this.name,
+    required this.iconPath,
+    required this.color,
+    required this.fontSize,
+    required this.onTap,
+    required this.showEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    Widget fallback() => Center(
+          child: Text(initial,
+              style: AppTheme.number(
+                  fontSize: fontSize, fontWeight: FontWeight.w700, color: color)),
+        );
+
+    final Widget image = (iconPath != null && iconPath!.isNotEmpty)
+        ? Image.asset(iconPath!,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => fallback())
+        : fallback();
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Stack(
+        children: [
+          Positioned.fill(child: image),
+          if (showEdit)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: AppColors.cosmeticNamePlate,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.edit, size: 11, color: AppColors.textWhite),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Intensidade do swirl, igual na carta toda (a mais fraca da spec, 10–18%,
+/// para o texto manter contraste).
+const double _patternOpacity = 0.14;
+
+class _ShieldClipper extends CustomClipper<Path> {
+  const _ShieldClipper();
+  @override
+  Path getClip(Size size) => fifaShieldPath(size);
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+/// Textura ondulada (`swirl.png`) em tons do tier.
+///
+/// O PNG vira máscara de luminância e é mapeado (gradient map) entre o tier
+/// a −25% e +20% de luminosidade; a opacidade vai embutida na matriz para
+/// custar uma única camada.
+class _CardPattern extends StatelessWidget {
+  final Color color;
+  final double opacity;
+  const _CardPattern({required this.color, required this.opacity});
+
+  static ColorFilter _filterFor(Color tier, double opacity) {
+    final dark = shiftLightness(tier, -0.25);
+    final light = shiftLightness(tier, 0.20);
+    List<double> row(double d, double l) {
+      final k = l - d;
+      return [k * 0.2126, k * 0.7152, k * 0.0722, 0, d * 255];
+    }
+
+    return ColorFilter.matrix([
+      ...row(dark.r, light.r),
+      ...row(dark.g, light.g),
+      ...row(dark.b, light.b),
+      0, 0, 0, opacity, 0,
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ColorFiltered(
+        colorFilter: _filterFor(color, opacity),
+        child: Image(
+          image: FifaCard.patternImage,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+}
+
+/// Densidade S: chip com foto circular, OVR em badge, nome 10sp.
+class _SmallChip extends StatelessWidget {
+  final String name;
+  final String? iconPath;
+  final int overall;
+  final CardPalette palette;
+  final ResolvedCosmetic cosmetic;
+
+  const _SmallChip({
+    required this.name,
+    required this.iconPath,
+    required this.overall,
+    required this.palette,
+    required this.cosmetic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = cosmetic.primaryIcon;
+    final short = name.trim().toUpperCase();
+    final shortName = short.length <= 8 ? short : short.substring(0, 8);
+
+    final Widget photo = CosmeticFrame(
+      cosmetic: cosmetic,
+      thickness: 1.5,
+      gap: 1,
+      allowDouble: false,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: palette.gradient,
+          ),
+          border: palette.border == null
+              ? null
+              : Border.all(color: palette.border!, width: 1.5),
+        ),
+        child: ClipOval(
+          child: _PlayerPhoto(
+            name: name,
+            iconPath: iconPath,
+            color: palette.text,
+            fontSize: 18,
+            onTap: null,
+            showEdit: false,
+          ),
+        ),
+      ),
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(top: 0, left: 6, child: photo),
+        // OVR em badge + ícone único ao lado
+        Positioned(
+          top: 0,
+          left: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: palette.gradient[1],
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.cosmeticNamePlate, width: 1),
+            ),
+            child: Text('$overall',
+                style: AppTheme.number(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: palette.text)
+                    .copyWith(height: 1)),
+          ),
+        ),
+        if (primary != null)
+          Positioned(top: 0, right: 0, child: CosmeticIcon(spec: primary, size: 12)),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 46,
+          child: CosmeticName(
+            name: shortName,
+            cosmetic: cosmetic,
+            solid: true,
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+            textAlign: TextAlign.center,
+            style: AppTheme.number(fontSize: 10, fontWeight: FontWeight.w600)
+                .copyWith(height: 1.1),
+          ),
+        ),
+        if (cosmetic.stars > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 60,
+            child: Center(
+                child: StarsBadge(stars: cosmetic.stars, compact: true, size: 10)),
+          ),
+      ],
+    );
+  }
+}
+
+/// Escudo da carta; escala com a largura (desenhado para 200dp).
 Path fifaShieldPath(Size s) {
   final w = s.width, h = s.height;
+  final k = w / 200;
+  final r = 26 * k, tail = 64 * k;
   return Path()
-    ..moveTo(0, 26)
-    ..quadraticBezierTo(0, 0, 26, 0)
-    ..lineTo(w - 26, 0)
-    ..quadraticBezierTo(w, 0, w, 26)
-    ..lineTo(w, h - 64)
-    ..cubicTo(w, h - 26, w * 0.72, h - 10, w / 2, h)
-    ..cubicTo(w * 0.28, h - 10, 0, h - 26, 0, h - 64)
+    ..moveTo(0, r)
+    ..quadraticBezierTo(0, 0, r, 0)
+    ..lineTo(w - r, 0)
+    ..quadraticBezierTo(w, 0, w, r)
+    ..lineTo(w, h - tail)
+    ..cubicTo(w, h - 26 * k, w * 0.72, h - 10 * k, w / 2, h)
+    ..cubicTo(w * 0.28, h - 10 * k, 0, h - 26 * k, 0, h - tail)
     ..close();
 }
 
+/// Escudo + gradiente do tier (+ borda de 3dp na Platina). A moldura
+/// cosmética **não** é desenhada aqui: fica fora do escudo (`CosmeticFrame`).
 class FifaShieldPainter extends CustomPainter {
   final CardPalette palette;
-  final PlayerFrameInfo? frame;
-  FifaShieldPainter(this.palette, {this.frame});
-
-  /// Retorna as cores do gradiente de moldura para cada tipo de frame.
-  List<Color>? _frameColors() {
-    if (frame == null || frame!.type == PlayerFrameType.none) return null;
-    switch (frame!.type) {
-      case PlayerFrameType.bolaDeOuro:
-        return const [Color(0xFFFFF9A6), Color(0xFFFFD700), Color(0xFFFFA000), Color(0xFFFFD700)];
-      case PlayerFrameType.craqueDoMes:
-        return const [Color(0xFF00E5FF), Color(0xFF00B0FF), Color(0xFFFFD700), Color(0xFF00E5FF)];
-      case PlayerFrameType.artilheiro:
-        return const [Color(0xFFFFEA00), Color(0xFFFF5722), Color(0xFFD50000), Color(0xFFFF9100)];
-      case PlayerFrameType.gold:
-        return const [Color(0xFFFFF59D), Color(0xFFFFD700), Color(0xFFFFAB00), Color(0xFFFFD700)];
-      case PlayerFrameType.silver:
-        return const [Color(0xFFFFFFFF), Color(0xFFE0E0E0), Color(0xFFB0BEC5), Color(0xFFECEFF1)];
-      case PlayerFrameType.bronze:
-        return const [Color(0xFFFFB74D), Color(0xFFCD7F32), Color(0xFF8D6E63), Color(0xFFD7CCC8)];
-      case PlayerFrameType.diamond:
-        return const [Color(0xFFE2F1F8), Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF7DD3FC)];
-      case PlayerFrameType.none:
-        return null;
-    }
-  }
+  FifaShieldPainter(this.palette);
 
   @override
   void paint(Canvas canvas, Size size) {
     final path = fifaShieldPath(size);
+    final rect = Offset.zero & size;
 
-    canvas.drawShadow(path, Colors.black, 6, true);
+    canvas.drawShadow(path, AppColors.cardShadow, 4, true);
 
-    final fill = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: palette.gradient,
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(path, fill);
-
-    // Brilho suave no topo
-    final shine = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.center,
-        colors: [
-          Colors.white.withValues(alpha: 0.16),
-          Colors.white.withValues(alpha: 0.0),
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(path, shine);
-
-    // Moldura metálica de prestígio (quando o jogador tem frame)
-    final frameColors = _frameColors();
-    if (frameColors != null) {
-      // Borda metálica externa nítida e refinada (sem blur/neon)
-      final framePaint = Paint()
+    canvas.drawPath(
+      path,
+      Paint()
         ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: frameColors,
-        ).createShader(Offset.zero & size)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(path, framePaint);
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: palette.gradient,
+        ).createShader(rect),
+    );
 
-      // Traço interno metálico com chanfro sutil para efeito 3D
-      final framePaintInner = Paint()
-        ..color = frameColors[0].withValues(alpha: 0.45)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0
-        ..strokeJoin = StrokeJoin.round;
+    final border = palette.border;
+    final innerLine = palette.innerLine;
+    if (innerLine != null) {
+      // Lendária: linha interna de 2dp (traço de 4dp recortado para dentro).
       canvas.save();
-      canvas.translate(size.width * 0.015, size.height * 0.01);
-      canvas.scale(0.97, 0.98);
-      canvas.drawPath(fifaShieldPath(size), framePaintInner);
+      canvas.clipPath(path);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4 * (size.width / 200).clamp(0.5, 1.0)
+          ..strokeJoin = StrokeJoin.round
+          ..color = innerLine,
+      );
+      canvas.restore();
+    } else if (border != null) {
+      // Borda integrada ao escudo: traço de 6dp recortado para dentro = 3dp.
+      canvas.save();
+      canvas.clipPath(path);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6 * (size.width / 200).clamp(0.5, 1.0)
+          ..strokeJoin = StrokeJoin.round
+          ..color = border,
+      );
       canvas.restore();
     } else {
-      // Borda interna padrão (sem frame)
-      final inner = Path()
-        ..addPath(path, Offset.zero)
-        ..close();
+      // Filete interno sutil nos demais tiers.
       canvas.save();
       canvas.translate(size.width * 0.03, size.height * 0.02);
       canvas.scale(0.94, 0.96);
       canvas.drawPath(
-        inner,
+        path,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = palette.text.withValues(alpha: 0.35),
+          ..strokeWidth = 1.2
+          ..color = palette.text.withValues(alpha: 0.30),
       );
       canvas.restore();
     }
   }
 
   @override
-  bool shouldRepaint(covariant FifaShieldPainter old) =>
-      old.palette != palette || old.frame != frame;
+  bool shouldRepaint(covariant FifaShieldPainter old) => old.palette != palette;
 }

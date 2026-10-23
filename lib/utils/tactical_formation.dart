@@ -114,3 +114,80 @@ List<FormationSlot> _rowsOfThree(int n) {
   }
   return slots;
 }
+
+/// Fileiras de jogadores de linha, do goleiro para o meio-campo
+/// (docs/design/03-tela-partida.md §4.5). O goleiro não entra na lista.
+///
+/// 4 → 2-2 (5×5) · 5 → 2-2-1 (6×6) · 6 → 3-2-1 (7×7) · 10 → 4-4-2 (11×11).
+List<int> formationRows(int lineCount) {
+  final n = lineCount < 0 ? 0 : lineCount;
+  switch (n) {
+    case 0:
+      return const [];
+    case 1:
+      return const [1];
+    case 2:
+      return const [2];
+    case 3:
+      return const [1, 2];
+    case 4:
+      return const [2, 2];
+    case 5:
+      return const [2, 2, 1];
+    case 6:
+      return const [3, 2, 1];
+    case 7:
+      return const [3, 3, 1];
+    case 8:
+      return const [3, 3, 2];
+    case 9:
+      return const [4, 3, 2];
+    case 10:
+      return const [4, 4, 2];
+    default:
+      final rows = <int>[];
+      var left = n;
+      while (left > 0) {
+        final take = left > 4 ? 4 : left;
+        rows.add(take);
+        left -= take;
+      }
+      return rows;
+  }
+}
+
+/// Formações alternativas de jogadores de linha (sem goleiro), da primeira
+/// (padrão, igual a [formationRows]) às demais. Cada uma soma [lineCount].
+List<List<int>> formationPresets(int lineCount) {
+  final base = formationRows(lineCount);
+  final extra = switch (lineCount) {
+    3 => const [
+        [2, 1],
+        [3],
+      ],
+    4 => const [
+        [1, 2, 1],
+        [1, 1, 2],
+        [3, 1],
+      ],
+    5 => const [
+        [2, 1, 2],
+        [1, 2, 2],
+        [1, 1, 2, 1],
+      ],
+    6 => const [
+        [2, 3, 1],
+        [2, 2, 2],
+        [3, 1, 2],
+      ],
+    7 => const [
+        [3, 2, 2],
+        [2, 3, 2],
+        [3, 2, 1, 1],
+      ],
+    _ => const <List<int>>[],
+  };
+  return [base, ...extra];
+}
+
+String formationRowsLabel(List<int> rows) => rows.join('-');

@@ -24,6 +24,8 @@ import '../widgets/match/match_scoreboard.dart';
 import '../widgets/match/match_player_tile.dart';
 import '../widgets/match/tactical_pitch.dart';
 import '../widgets/match/match_events_panel.dart';
+import '../widgets/match/arrival_swipe.dart';
+import '../widgets/match/waiting_player_card.dart';
 import '../widgets/shared/player_name_text.dart';
 import '../widgets/shared/player_avatar_frame.dart';
 import 'draft_screen.dart';
@@ -62,6 +64,7 @@ class _MatchScreenState extends State<MatchScreen>
   List<Map<String, dynamic>> allSavedPlayers = [];
   Timer? _siteSyncTimer;
   List<Map<String, dynamic>> presentPlayers = [];
+  final Map<String, DateTime> _waitingSince = {};
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
 
@@ -91,6 +94,9 @@ class _MatchScreenState extends State<MatchScreen>
   DateTime? _lastStartTime;
 
   bool _showTacticalPitch = true;
+  bool _pitchUseChips = false;
+  // Jogador destacado no campo ao tocar num evento da timeline.
+  final ValueNotifier<String?> _highlightedPlayer = ValueNotifier(null);
   bool _requireGk = true;
 
   int get totalSecondsElapsed {
@@ -124,6 +130,7 @@ class _MatchScreenState extends State<MatchScreen>
       _triggerBackgroundSync();
     }
     _tabController.dispose();
+    _highlightedPlayer.dispose();
     _audioPlayer.dispose();
     _goalSoundPlayer.dispose();
     super.dispose();
@@ -317,6 +324,7 @@ class _MatchScreenState extends State<MatchScreen>
     final String id = widget.tournamentId;
 
     _showTacticalPitch = prefs.getBool('show_tactical_pitch') ?? true;
+    _pitchUseChips = prefs.getBool('pitch_use_chips') ?? false;
     _requireGk = prefs.getBool('require_gk') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
@@ -1554,6 +1562,24 @@ class _MatchScreenState extends State<MatchScreen>
             SwitchListTile(
               activeColor: AppColors.accentBlue,
               title: const Text(
+                "Jogadores como chips no campo",
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                "Desligado: cartas com OVR. Ligado: só foto (sempre assim no 11x11)",
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              value: _pitchUseChips,
+              onChanged: (val) async {
+                setState(() => _pitchUseChips = val);
+                setModalState(() => _pitchUseChips = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('pitch_use_chips', val);
+              },
+            ),
+            SwitchListTile(
+              activeColor: AppColors.accentBlue,
+              title: const Text(
                 "Obrigatório ter goleiro para começar",
                 style: TextStyle(color: Colors.white),
               ),
@@ -1779,7 +1805,13 @@ class _MatchScreenState extends State<MatchScreen>
     int total = activePlayers.length;
     int times = total ~/ widget.totalPlayers;
     int sobram = total % widget.totalPlayers;
-    String resumoText = "👥 $total Presentes | $times Times";
+    // "8/12 chegaram": meta = próximo múltiplo do tamanho do time (mín. 2 times).
+    final int meta = max(
+      widget.totalPlayers * 2,
+      ((total + widget.totalPlayers - 1) ~/ widget.totalPlayers) *
+          widget.totalPlayers,
+    );
+    String resumoText = "$total/$meta chegaram | $times Times";
     if (sobram > 0) resumoText += " | Restam $sobram";
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
@@ -1853,8 +1885,11 @@ class _MatchScreenState extends State<MatchScreen>
                       ],
                     ),
                   ),
-                Opacity(
-              opacity: desistiu ? 0.45 : 1.0,
+                ArrivalSwipe(
+                playerId: _pid(displayList[i]),
+                absent: desistiu,
+                onAbsent: () => _swipeAbsent(displayList[i]),
+                onArrived: () => _swipeArrived(displayList[i]),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
@@ -2008,8 +2043,13 @@ class _MatchScreenState extends State<MatchScreen>
       allStats[_pid(activeGkWhite!)] = s;
       checkMotm(activeGkWhite!, s);
     }
-    return SingleChildScrollView(
-      child: Column(
+    return LayoutBuilder(
+      builder: (context, box) => Stack(
+        children: [
+          Positioned.fill(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: MatchEventsPanel.peekHeight),
+              child: Column(
         children: [
           _buildPitchListToggle(),
           if (redWinStreak > 0 || whiteWinStreak > 0)
@@ -2082,6 +2122,9 @@ class _MatchScreenState extends State<MatchScreen>
                 }
               },
               eventIconsOf: _buildEventIconsList,
+              highlightedPlayerId: _highlightedPlayer,
+              availableHeight: box.maxHeight - MatchEventsPanel.peekHeight - 90,
+              useChips: _pitchUseChips,
             )
           else ...[
             Row(
@@ -2171,10 +2214,28 @@ class _MatchScreenState extends State<MatchScreen>
               ),
             ),
           ],
-          MatchEventsPanel(events: matchEvents),
+        ],
+      ),
+            ),
+          ),
+          Positioned.fill(
+            child: MatchEventsPanel(
+              events: matchEvents,
+              onEventTap: _highlightEventPlayer,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  void _highlightEventPlayer(Map<String, dynamic> event) {
+    final id = event['playerId']?.toString();
+    if (id == null) return;
+    _highlightedPlayer.value = id;
+    Future.delayed(const Duration(seconds: 2), () {
+      if (_highlightedPlayer.value == id) _highlightedPlayer.value = null;
+    });
   }
 
   Widget _buildPitchListToggle() {
@@ -2322,8 +2383,15 @@ class _MatchScreenState extends State<MatchScreen>
         ),
       );
     final int teamSize = widget.totalPlayers;
+    // Tempo no banco: marca a primeira vez que o jogador aparece na fila.
+    final waitingIds = {for (final p in waiting) _pid(p)};
+    _waitingSince.removeWhere((id, _) => !waitingIds.contains(id));
+    for (final id in waitingIds) {
+      _waitingSince.putIfAbsent(id, DateTime.now);
+    }
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
+      buildDefaultDragHandles: false,
       onReorder: (oldIndex, newIndex) {
         setState(() {
           if (newIndex > oldIndex) newIndex -= 1;
@@ -2414,113 +2482,24 @@ class _MatchScreenState extends State<MatchScreen>
     required bool isLastPlayerInTeam,
     required int teamBatch,
   }) {
-    final iconPath = player['icon'] as String?;
-    final rating = playerOverallOf(player);
-    Color teamColor = Colors.white12;
-    if (isCompleteTeam) {
-      if (teamBatch == 1)
-        teamColor = AppColors.accentBlue;
-      else if (teamBatch == 2)
-        teamColor = Colors.orangeAccent;
-      else if (teamBatch == 3)
-        teamColor = Colors.purpleAccent;
-      else
-        teamColor = Colors.greenAccent;
-    }
-    final EdgeInsets margin = EdgeInsets.only(
-      bottom: isLastPlayerInTeam ? 16 : 2,
-    );
-    return Container(
+    const batchColors = [
+      AppColors.accentBlue,
+      AppColors.orangeStreak,
+      AppColors.goldAccent,
+      AppColors.success,
+    ];
+    return WaitingPlayerCard(
       key: ValueKey(_pid(player)),
-      margin: margin,
-      decoration: BoxDecoration(
-        color: AppColors.headerBlue,
-        borderRadius: BorderRadius.vertical(
-          top: isFirstPlayerInTeam
-              ? const Radius.circular(12)
-              : const Radius.circular(4),
-          bottom: isLastPlayerInTeam
-              ? const Radius.circular(12)
-              : const Radius.circular(4),
-        ),
-        border: Border.all(
-          color: isCompleteTeam
-              ? teamColor.withOpacity(0.6)
-              : Colors.white.withOpacity(0.05),
-          width: isCompleteTeam ? 1.5 : 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        leading: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.bottomRight,
-          children: [
-            PlayerAvatarFrame(
-              frame: resolvePlayerFrame(player),
-              compact: true,
-              isCircular: true,
-              child: CircleAvatar(
-                backgroundColor: isCompleteTeam
-                    ? teamColor.withOpacity(0.2)
-                    : AppColors.deepBlue,
-                backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
-                child: iconPath == null
-                    ? Text(
-                        player['name'][0].toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: isCompleteTeam ? teamColor : Colors.white30,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  "${index + 1}",
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: PlayerNameText(
-                name: player['name'].toString(),
-                nameEffect: player['name_effect']?.toString(),
-                style: TextStyle(
-                  color: isCompleteTeam ? Colors.white : Colors.white70,
-                  fontWeight: isCompleteTeam
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (rating > 0) _overallBadge(player),
-          ],
-        ),
-        trailing: const Icon(Icons.drag_handle, color: Colors.white24),
-        onTap: () => _showChegadaOptions(player),
-      ),
-      ),
+      player: player,
+      position: index + 1,
+      dragIndex: index,
+      waitingSince: _waitingSince[_pid(player)] ?? DateTime.now(),
+      frame: resolvePlayerFrame(player),
+      batchColor:
+          isCompleteTeam ? batchColors[(teamBatch - 1) % batchColors.length] : null,
+      isFirstInBatch: isFirstPlayerInTeam,
+      isLastInBatch: isLastPlayerInTeam,
+      onTap: () => _showChegadaOptions(player),
     );
   }
 
@@ -2579,6 +2558,67 @@ class _MatchScreenState extends State<MatchScreen>
               ],
       ),
     );
+  }
+
+  /// Marca como desistente (sai dos times/fila, continua na lista). Devolve
+  /// o desfazer, que restaura times, goleiros e posição na lista.
+  VoidCallback _markAbsent(Map<String, dynamic> player) {
+    final String pid = _pid(player);
+    final prevPresent = [...presentPlayers];
+    final prevRed = [...teamRed];
+    final prevWhite = [...teamWhite];
+    final prevGkRed = activeGkRed;
+    final prevGkWhite = activeGkWhite;
+    setState(() {
+      teamRed.removeWhere((p) => _pid(p) == pid);
+      teamWhite.removeWhere((p) => _pid(p) == pid);
+      // Quem desiste também deixa de ser o goleiro em campo. (O `firstGk*` é
+      // histórico da partida atual e não é mexido.)
+      if (activeGkRed != null && _pid(activeGkRed!) == pid) activeGkRed = null;
+      if (activeGkWhite != null && _pid(activeGkWhite!) == pid) {
+        activeGkWhite = null;
+      }
+      final idx = presentPlayers.indexWhere((p) => _pid(p) == pid);
+      if (idx != -1) {
+        presentPlayers[idx] = {...presentPlayers[idx], 'desistiu': true};
+      }
+    });
+    _saveMatchState();
+    return () {
+      if (!mounted) return;
+      setState(() {
+        presentPlayers = prevPresent;
+        teamRed = prevRed;
+        teamWhite = prevWhite;
+        activeGkRed = prevGkRed;
+        activeGkWhite = prevGkWhite;
+      });
+      _saveMatchState();
+    };
+  }
+
+  void _showUndoSnackBar(String message, VoidCallback undo) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(label: 'DESFAZER', onPressed: undo),
+      ),
+    );
+  }
+
+  void _swipeAbsent(Map<String, dynamic> player) {
+    final undo = _markAbsent(player);
+    _showUndoSnackBar("${player['name']} marcado como faltou", undo);
+  }
+
+  void _swipeArrived(Map<String, dynamic> player) {
+    _reactivatePlayer(player);
+    _showUndoSnackBar("${player['name']} chegou", () {
+      _markAbsent(player);
+    });
   }
 
   void _showRemovePopup(Map<String, dynamic> player) {
@@ -2644,29 +2684,7 @@ class _MatchScreenState extends State<MatchScreen>
               style: TextStyle(color: Colors.redAccent),
             ),
             onPressed: () {
-              setState(() {
-                final String pid = _pid(player);
-                teamRed.removeWhere((p) => _pid(p) == pid);
-                teamWhite.removeWhere((p) => _pid(p) == pid);
-                // Quem desiste também deixa de ser o goleiro em campo. (O
-                // `firstGk*` é histórico da partida atual e não é mexido.)
-                if (activeGkRed != null && _pid(activeGkRed!) == pid) {
-                  activeGkRed = null;
-                }
-                if (activeGkWhite != null && _pid(activeGkWhite!) == pid) {
-                  activeGkWhite = null;
-                }
-                final idx = presentPlayers.indexWhere(
-                  (p) => _pid(p) == pid,
-                );
-                if (idx != -1) {
-                  presentPlayers[idx] = {
-                    ...presentPlayers[idx],
-                    'desistiu': true,
-                  };
-                }
-              });
-              _saveMatchState();
+              _markAbsent(player);
               Navigator.pop(c);
               Navigator.pop(context);
             },
@@ -3117,108 +3135,94 @@ class _MatchScreenState extends State<MatchScreen>
       );
   }
 
-  void _showInGameOptions(Map<String, dynamic> player, bool isRedTeam, {bool isGk = false}) {
-    bool isLinePlayer =
+  void _showInGameOptions(
+    Map<String, dynamic> player,
+    bool isRedTeam, {
+    bool isGk = false,
+  }) {
+    final bool isLinePlayer =
         teamRed.any((p) => _pid(p) == _pid(player)) ||
         teamWhite.any((p) => _pid(p) == _pid(player));
+
+    Widget chip(
+      IconData icon,
+      Color color,
+      String label,
+      VoidCallback onTap, {
+      required BuildContext ctx,
+    }) {
+      return ActionChip(
+        backgroundColor: AppColors.surfaceSubtle,
+        side: const BorderSide(color: AppColors.borderSubtle),
+        avatar: Icon(icon, color: color, size: 18),
+        label: Text(
+          label,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+        ),
+        onPressed: () {
+          Navigator.pop(ctx);
+          onTap();
+        },
+      );
+    }
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.deepBlue,
-      builder: (ctx) {
-        return Wrap(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                "Ações para ${player['name']}",
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.sports_soccer,
-                color: Colors.greenAccent,
-              ),
-              title: const Text(
-                "Fez Gol",
-                style: TextStyle(color: AppColors.textWhite),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _handleGoal(player, isRedTeam);
-              },
-            ),
-            if (isGk)
-              ListTile(
-                leading: const Icon(
-                  Icons.swap_horiz_rounded,
-                  color: Colors.orangeAccent,
+      backgroundColor: AppColors.surfaceElevated,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "${player['name']}",
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-                title: const Text(
-                  "Trocar Goleiro",
-                  style: TextStyle(color: AppColors.textWhite),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
-                    setState(() {
-                      if (isRedTeam) activeGkRed = selectedGk;
-                      else activeGkWhite = selectedGk;
-                    });
-                    _saveMatchState();
-                  });
-                },
               ),
-            ListTile(
-              leading: const Icon(Icons.error_outline, color: Colors.redAccent),
-              title: const Text(
-                "Gol Contra",
-                style: TextStyle(color: AppColors.textWhite),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmEventDialog("own_goal", player, isRedTeam);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.style, color: Colors.yellowAccent),
-              title: const Text(
-                "Cartão Amarelo",
-                style: TextStyle(color: AppColors.textWhite),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmEventDialog("yellow_card", player, isRedTeam);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.style, color: Colors.redAccent),
-              title: const Text(
-                "Cartão Vermelho",
-                style: TextStyle(color: AppColors.textWhite),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmEventDialog("red_card", player, isRedTeam);
-              },
-            ),
-            if (isLinePlayer) ...[
-              const Divider(color: Colors.white24),
-              ListTile(
-                leading: const Icon(Icons.person_remove, color: Colors.grey),
-                title: const Text(
-                  "Substituir / Remover",
-                  style: TextStyle(color: AppColors.textWhite),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showRemovePopup(player);
-                },
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  chip(Icons.sports_soccer, AppColors.success, 'Gol',
+                      () => _handleGoal(player, isRedTeam), ctx: ctx),
+                  chip(Icons.error_outline, AppColors.danger, 'Gol contra',
+                      () => _confirmEventDialog("own_goal", player, isRedTeam),
+                      ctx: ctx),
+                  chip(Icons.style, AppColors.yellowWarning, 'Amarelo',
+                      () => _confirmEventDialog("yellow_card", player, isRedTeam),
+                      ctx: ctx),
+                  chip(Icons.style, AppColors.danger, 'Vermelho',
+                      () => _confirmEventDialog("red_card", player, isRedTeam),
+                      ctx: ctx),
+                  if (isGk)
+                    chip(Icons.swap_horiz_rounded, AppColors.orangeStreak,
+                        'Trocar goleiro', () {
+                      _showGoalkeeperSelectionDialog(isRedTeam, (selectedGk) {
+                        setState(() {
+                          if (isRedTeam) {
+                            activeGkRed = selectedGk;
+                          } else {
+                            activeGkWhite = selectedGk;
+                          }
+                        });
+                        _saveMatchState();
+                      });
+                    }, ctx: ctx),
+                  if (isLinePlayer)
+                    chip(Icons.sync_alt, AppColors.textMuted, 'Substituir',
+                        () => _showRemovePopup(player), ctx: ctx),
+                ],
               ),
             ],
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 
