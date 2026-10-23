@@ -2,7 +2,9 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
+import '../models/cosmetic_effect.dart';
 import '../models/player_model.dart';
+import '../utils/overall_calculator.dart';
 import '../models/player_badge_model.dart';
 import '../services/cache_store.dart';
 import 'group_members_repository.dart';
@@ -43,7 +45,8 @@ class PlayersRepository {
       final response = await _client
           .from('group_members')
           .select('players(*)')
-          .eq('group_id', groupId);
+          .eq('group_id', groupId)
+          .timeout(const Duration(seconds: 8));
 
       final List<Map<String, dynamic>> rawPlayers = [];
       for (final item in (response as List)) {
@@ -161,6 +164,57 @@ class PlayersRepository {
 
     return PlayerModel.fromMap(Map<String, dynamic>.from(response));
   }
+
+  /// Atualiza o ícone de um jogador.
+  /// Chamado tanto por admins quanto pelo próprio jogador em seu perfil.
+  Future<PlayerModel> setPlayerIcon({
+    required String playerId,
+    required String? iconPath,
+  }) async {
+    final response = await _client
+        .from('players')
+        .update({'icon': iconPath})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    return PlayerModel.fromMap(Map<String, dynamic>.from(response));
+  }
+
+  /// Define ou limpa o áudio customizado de gol de um jogador (nome do asset em assets/audio/).
+  /// Se [audioFileName] for null ou vazio, o campo goal_sound_url é definido como null (padrão).
+  Future<PlayerModel> setGoalSound({
+    required String playerId,
+    required String? audioFileName,
+    String? groupId,
+  }) async {
+    final soundVal = (audioFileName != null && audioFileName.isNotEmpty)
+        ? audioFileName
+        : null;
+
+    final response = await _client
+        .from('players')
+        .update({'goal_sound_url': soundVal})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+
+    if (groupId != null && groupId.isNotEmpty) {
+      await _logs.log(
+        groupId: groupId,
+        action: soundVal != null
+            ? ActionLogsRepository.actionGoalSoundSet
+            : ActionLogsRepository.actionGoalSoundClear,
+        targetPlayerId: playerId,
+        details: soundVal != null ? {'audio': soundVal} : const {},
+      );
+    }
+
+    return updated;
+  }
+
 
   /// Unlinks a player from a group.
   Future<void> removePlayerFromGroup({
@@ -367,6 +421,100 @@ class PlayersRepository {
     return updated;
   }
 
+  /// Grava os cosméticos nas colunas novas (`golden_ball`, `name_effect`,
+  /// `monthly_star_count`). **Depende da migração 001_cosmetics.sql**: antes
+  /// dela, o Supabase rejeita o update. Somente admins do grupo.
+  Future<PlayerModel> setCosmetics({
+    required String groupId,
+    required String playerId,
+    required bool goldenBall,
+    required CosmeticEffect nameEffect,
+    required int monthlyStarCount,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem definir cosméticos.');
+    }
+    if (monthlyStarCount < 0 || monthlyStarCount > 6) {
+      throw ArgumentError('Estrelas do Craque do Mês devem estar entre 0 e 6.');
+    }
+
+    final payload = <String, dynamic>{
+      'golden_ball': goldenBall,
+      'name_effect': nameEffect.dbValue,
+      'monthly_star_count': monthlyStarCount,
+    };
+    final response = await _client
+        .from('players')
+        .update(payload)
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: 'cosmetics_set',
+      targetPlayerId: playerId,
+      details: payload,
+    );
+    return updated;
+  }
+
+  /// Define (ou limpa) os atributos da comunidade de um jogador (PAC, SHO,
+  /// PAS, DRI, DEF, PHY de 0 a 100 + override opcional da Nota da Comunidade).
+  /// Somente admins do grupo podem chamar isso -- a checagem aqui é só para a
+  /// UI reagir rápido; a garantia real é a policy de RLS de `players`.
+  ///
+  /// Campos nulos limpam a coluna correspondente.
+  Future<PlayerModel> setCommunityAttributes({
+    required String groupId,
+    required String playerId,
+    required CommunityAttributes attributes,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem editar os atributos da comunidade.');
+    }
+
+    for (final key in kAttributeKeys) {
+      final v = attributes.valueOf(key);
+      if (v != null && (v < 0 || v > 100)) {
+        throw ArgumentError('${kAttributeLabels[key]} deve estar entre 0 e 100.');
+      }
+    }
+    final o = attributes.ratingOverride;
+    if (o != null && (o < 0 || o > 100)) {
+      throw ArgumentError('A nota da comunidade (override) deve estar entre 0 e 100.');
+    }
+
+    final payload = <String, dynamic>{
+      'community_pac': attributes.pac,
+      'community_sho': attributes.sho,
+      'community_pas': attributes.pas,
+      'community_dri': attributes.dri,
+      'community_def': attributes.def,
+      'community_phy': attributes.phy,
+      'community_rating_override': attributes.ratingOverride,
+    };
+
+    final response = await _client
+        .from('players')
+        .update(payload)
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: ActionLogsRepository.actionCommunityAttributesSet,
+      targetPlayerId: playerId,
+      details: payload,
+    );
+    return updated;
+  }
+
   /// Fetches a specific player by its internal UUID.
   Future<PlayerModel?> getPlayerById(String playerId) async {
     final response = await _client
@@ -377,5 +525,47 @@ class PlayersRepository {
 
     if (response == null) return null;
     return PlayerModel.fromMap(Map<String, dynamic>.from(response));
+  }
+
+  /// Atualiza um ou mais campos dentro do jsonb `advanced_stats` do jogador.
+  ///
+  /// Usa merge (JSONB ||) para preservar chaves existentes não mencionadas.
+  /// Suporta: `name_effect_extra` ('fire'|'diamond'), `craque_mes_count` (int).
+  ///
+  /// Somente admins do grupo podem chamar isso.
+  Future<PlayerModel> setAdvancedStat({
+    required String groupId,
+    required String playerId,
+    required Map<String, dynamic> patch,
+  }) async {
+    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
+    if (!isAdmin) {
+      throw Exception('Acesso negado: somente administradores podem editar advanced_stats.');
+    }
+
+    // Busca o valor atual para fazer o merge manual (Supabase REST não suporta || diretamente)
+    final current = await getPlayerById(playerId);
+    final merged = {
+      ...Map<String, dynamic>.from(current?.advancedStats ?? {}),
+      ...patch,
+    };
+    // Remove chaves cujo valor é null (limpeza)
+    merged.removeWhere((_, v) => v == null);
+
+    final response = await _client
+        .from('players')
+        .update({'advanced_stats': merged})
+        .eq('id', playerId)
+        .select()
+        .single();
+
+    final updated = PlayerModel.fromMap(Map<String, dynamic>.from(response));
+    await _logs.log(
+      groupId: groupId,
+      action: 'advanced_stat_set',
+      targetPlayerId: playerId,
+      details: patch,
+    );
+    return updated;
   }
 }
