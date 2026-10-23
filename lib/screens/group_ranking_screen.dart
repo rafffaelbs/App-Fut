@@ -1,3 +1,4 @@
+import '../widgets/shared/ranking_player_bits.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:app_do_fut/constants/app_colors.dart';
@@ -798,7 +799,6 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
       radius = 26;
     } // Bronze
 
-    final String? iconPath = _playersMap[player['id']]?['icon'];
     String valText = '';
     if (metric == 'nota')
       valText = (player['nota'] as double).toStringAsFixed(1);
@@ -824,26 +824,12 @@ class _GroupRankingScreenState extends State<GroupRankingScreen>
           child: Stack(
             alignment: Alignment.bottomCenter,
             children: [
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: borderColor,
-                    width: position == 1 ? 3 : 2,
-                  ),
-                ),
-                child: CircleAvatar(
-                  radius: radius,
-                  backgroundColor: AppColors.deepBlue,
-                  child: iconPath != null
-                      ? ClipOval(
-                          child: Padding(
-                            padding: EdgeInsets.all(position == 1 ? 8.0 : 6.0),
-                            child: Image.asset(iconPath),
-                          ),
-                        )
-                      : const Icon(Icons.person, color: Colors.white38),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: RankAvatar(
+                  player: {...?_playersMap[player['id']], ...player},
+                  size: radius * 2,
+                  glow: true,
                 ),
               ),
               Container(

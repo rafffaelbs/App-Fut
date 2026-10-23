@@ -161,22 +161,32 @@ double playerOverallOf(Map<String, dynamic> player) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Faixas visuais do card (bronze / prata / ouro / elite)
+// Faixas visuais do card (bronze / prata / ouro / platina / lendária)
 // ─────────────────────────────────────────────────────────────
 
-enum CardTier { bronze, silver, gold, elite }
+/// Menor Overall de cada faixa (docs/design/01, seção 2.5). Bronze é tudo
+/// abaixo de [kSilverMin]. Nenhuma tela compara Overall com número solto.
+const int kSilverMin = 65;
+const int kGoldMin = 75;
+const int kPlatinumMin = 80;
+const int kLegendaryMin = 85;
 
-CardTier cardTierFor(int overall) {
-  if (overall >= 85) return CardTier.elite;
-  if (overall >= 75) return CardTier.gold;
-  if (overall >= 65) return CardTier.silver;
+enum CardTier { bronze, silver, gold, platinum, legendary }
+
+CardTier tierForOverall(int overall) {
+  if (overall >= kLegendaryMin) return CardTier.legendary;
+  if (overall >= kPlatinumMin) return CardTier.platinum;
+  if (overall >= kGoldMin) return CardTier.gold;
+  if (overall >= kSilverMin) return CardTier.silver;
   return CardTier.bronze;
 }
 
 String cardTierLabel(CardTier tier) {
   switch (tier) {
-    case CardTier.elite:
-      return 'Elite';
+    case CardTier.legendary:
+      return 'Lendária';
+    case CardTier.platinum:
+      return 'Platina';
     case CardTier.gold:
       return 'Ouro';
     case CardTier.silver:
@@ -188,50 +198,100 @@ String cardTierLabel(CardTier tier) {
 
 /// Cor de destaque do Overall (usada em tiles/listas fora do card FIFA).
 Color overallColor(num overall) {
-  switch (cardTierFor(overall.round())) {
-    case CardTier.elite:
-      return AppColors.highlightGreen;
+  switch (tierForOverall(overall.round())) {
+    case CardTier.legendary:
+      return AppColors.tierLegendaryFrom;
+    case CardTier.platinum:
+      return AppColors.tierPlatinumBorder;
     case CardTier.gold:
-      return const Color(0xFFD9A93A);
+      return AppColors.tierGold;
     case CardTier.silver:
-      return const Color(0xFFB4BCC6);
+      return AppColors.tierSilver;
     case CardTier.bronze:
-      return const Color(0xFFC98A55);
+      return AppColors.tierBronzeAccent;
   }
 }
 
 class CardPalette {
   final List<Color> gradient;
+
+  /// Cor do OVR/tier.
   final Color text;
-  final Color accent;
-  const CardPalette(this.gradient, this.text, this.accent);
+
+  /// Cor do nome (Platina usa texto claro; os demais, o texto do tier).
+  final Color nameText;
+
+  /// Borda de 3dp integrada ao escudo (só Platina).
+  final Color? border;
+
+  /// Linha interna de 2dp (só Lendária).
+  final Color? innerLine;
+
+  /// Cor-base da textura de fundo da foto.
+  final Color pattern;
+
+  const CardPalette({
+    required this.gradient,
+    required this.text,
+    required this.nameText,
+    required this.pattern,
+    this.border,
+    this.innerLine,
+  });
 }
+
+/// Ajusta a luminosidade (HSL) de [c] em [delta] (-1..1).
+Color shiftLightness(Color c, double delta) {
+  final hsl = HSLColor.fromColor(c);
+  return hsl.withLightness((hsl.lightness + delta).clamp(0.0, 1.0)).toColor();
+}
+
+/// Gradiente vertical sutil: topo +6% de luminosidade, base -6%.
+List<Color> _tierGradient(Color base) =>
+    [shiftLightness(base, 0.06), base, shiftLightness(base, -0.06)];
 
 CardPalette cardPaletteFor(CardTier tier) {
   switch (tier) {
-    case CardTier.elite:
-      return const CardPalette(
-        [Color(0xFF0B3A8C), Color(0xFF001C55), Color(0xFF00072D)],
-        Color(0xFFE8FFF3),
-        AppColors.highlightGreen,
+    case CardTier.legendary:
+      return CardPalette(
+        gradient: [
+          AppColors.tierLegendaryFrom,
+          Color.lerp(AppColors.tierLegendaryFrom, AppColors.tierLegendaryTo, 0.5)!,
+          AppColors.tierLegendaryTo,
+        ],
+        text: AppColors.tierLegendaryAccent,
+        nameText: AppColors.tierLegendaryText,
+        innerLine: AppColors.tierLegendaryLine,
+        pattern: AppColors.tierLegendaryTo,
+      );
+    case CardTier.platinum:
+      return CardPalette(
+        gradient: _tierGradient(AppColors.tierPlatinum),
+        text: AppColors.tierPlatinumBorder,
+        nameText: AppColors.tierPlatinumText,
+        border: AppColors.tierPlatinumBorder,
+        pattern: AppColors.tierPlatinumBorder,
       );
     case CardTier.gold:
-      return const CardPalette(
-        [Color(0xFFF8E08E), Color(0xFFD9A93A), Color(0xFF9C6F1B)],
-        Color(0xFF3B2A06),
-        Color(0xFF3B2A06),
+      return CardPalette(
+        gradient: _tierGradient(AppColors.tierGold),
+        text: AppColors.tierGoldText,
+        nameText: AppColors.tierGoldText,
+        pattern: AppColors.tierGold,
       );
     case CardTier.silver:
-      return const CardPalette(
-        [Color(0xFFF1F3F5), Color(0xFFB4BCC6), Color(0xFF7D8793)],
-        Color(0xFF1F2933),
-        Color(0xFF1F2933),
+      return CardPalette(
+        gradient: _tierGradient(AppColors.tierSilver),
+        text: AppColors.tierSilverText,
+        nameText: AppColors.tierSilverText,
+        pattern: AppColors.tierSilver,
       );
     case CardTier.bronze:
-      return const CardPalette(
-        [Color(0xFFE0A877), Color(0xFFA9703F), Color(0xFF6B4222)],
-        Color(0xFF2E1A0A),
-        Color(0xFF2E1A0A),
+      return CardPalette(
+        gradient: _tierGradient(AppColors.tierBronze),
+        text: AppColors.tierBronzeText,
+        nameText: AppColors.tierBronzeText,
+        pattern: AppColors.tierBronze,
       );
   }
 }

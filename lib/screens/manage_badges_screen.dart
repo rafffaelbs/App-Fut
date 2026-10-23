@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../constants/app_colors.dart';
 import '../repositories/supabase_service.dart';
+import '../models/cosmetic_effect.dart';
 import '../utils/constants.dart';
+import '../utils/cosmetic_resolver.dart';
 import '../widgets/shared/player_name_text.dart';
 import '../widgets/shared/player_avatar_frame.dart';
 
@@ -586,11 +588,11 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
 
                     // Ordem lógica e hierárquica dos efeitos:
                     effectRadio(null, "Padrão (Sem efeito)", Colors.white54, "Sem contorno ou brilho extra"),
-                    effectRadio('diamond', "Diamante 💎", PlayerNameEffectColors.diamond, "Ciano cristalino (Jogador Lendário / MVP)"),
-                    effectRadio('gold', "Dourado 🏆", PlayerNameEffectColors.gold, "Ouro reluzente (Campeão / Destaque)"),
-                    effectRadio('fire', "Fogo 🔥", PlayerNameEffectColors.fire, "Chamas vivas (Artilheiro da temporada)"),
-                    effectRadio('silver', "Prata 🥈", PlayerNameEffectColors.silver, "Cromo prateado (Vice-artilheiro / Garçom)"),
-                    effectRadio('bronze', "Bronze 🥉", PlayerNameEffectColors.bronze, "Cobre nobre (3º colocado / Revelação)"),
+                    effectRadio('diamond', "Diamante 💎", cosmeticEffectColor(CosmeticEffect.diamond)!, "Ciano cristalino (Jogador Lendário / MVP)"),
+                    effectRadio('gold', "Dourado 🏆", cosmeticEffectColor(CosmeticEffect.gold)!, "Ouro reluzente (Campeão / Destaque)"),
+                    effectRadio('fire', "Fogo 🔥", cosmeticEffectColor(CosmeticEffect.fire)!, "Chamas vivas (Artilheiro da temporada)"),
+                    effectRadio('silver', "Prata 🥈", cosmeticEffectColor(CosmeticEffect.silver)!, "Cromo prateado (Vice-artilheiro / Garçom)"),
+                    effectRadio('bronze', "Bronze 🥉", cosmeticEffectColor(CosmeticEffect.bronze)!, "Cobre nobre (3º colocado / Revelação)"),
 
                     const Divider(color: Colors.white12),
 
@@ -897,7 +899,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                             : player['name_effect'] as String?;
                         final bool highlight = player['monthly_highlight'] == true;
                         final bool isSaving = _savingEffectPlayerId == playerId;
-                        final effectColor = PlayerNameEffectColors.forEffect(effect) ?? Colors.amber;
+                        final effectColor = cosmeticEffectColor(CosmeticEffect.fromDb(effect)) ?? Colors.amber;
                         final frame = resolvePlayerFrame(player);
                         final craqueCount = _resolveCraqueCountLocal(player);
 

@@ -1,9 +1,18 @@
-import 'package:app_do_fut/constants/app_colors.dart';
-import 'package:flutter/material.dart';
-import 'team_logo.dart'; // Import the widget we just created
+import 'dart:async';
 
-class MatchScoreboard extends StatelessWidget {
-  // Data needed for display
+import 'package:flutter/material.dart';
+
+import '../../constants/app_colors.dart';
+import '../../theme/app_theme.dart';
+
+/// Header da partida estilo SofaScore: 72dp fixos, três colunas
+/// (Time A · tempo + play/pause · Time B).
+///
+/// Os botões −/+ do placar ficam escondidos: toque longo no placar mostra
+/// por alguns segundos (evita toque errado durante o jogo).
+class MatchScoreboard extends StatefulWidget {
+  static const double height = 72;
+
   final int scoreRed;
   final int scoreWhite;
   final double redTeamRating;
@@ -13,7 +22,6 @@ class MatchScoreboard extends StatelessWidget {
   final bool isOvertime;
   final bool isReadyToStart;
 
-  // Actions (Callbacks) that the Main Screen will handle
   final Function(bool isRed, int delta) onUpdateScore;
   final VoidCallback onStart;
   final VoidCallback onPause;
@@ -36,233 +44,214 @@ class MatchScoreboard extends StatelessWidget {
   });
 
   @override
+  State<MatchScoreboard> createState() => _MatchScoreboardState();
+}
+
+class _MatchScoreboardState extends State<MatchScoreboard> {
+  bool _showAdjust = false;
+  Timer? _hideTimer;
+
+  void _reveal() {
+    _hideTimer?.cancel();
+    setState(() => _showAdjust = true);
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showAdjust = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _adjust(bool isRed, int delta) {
+    widget.onUpdateScore(isRed, delta);
+    _reveal(); // renova o tempo de exibição
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ratingColor = Colors.amber.withOpacity(0.86);
-
     return Container(
-      padding: const EdgeInsets.fromLTRB(0, 10, 0, 20),
-      color: AppColors.headerBlue,
-      child: Column(
+      height: MatchScoreboard.height,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: AppColors.headerBlue,
+        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // --- RED TEAM ---
-              Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.star, color: ratingColor, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        redTeamRating.toStringAsFixed(
-                          1,
-                        ), // Rounds to 1 decimal (e.g., 4.2)
-                        style: TextStyle(
-                          color: ratingColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const TeamLogo(
-                    label: "Barcelona",
-                    assetPath: "assets/images/vermelho.png",
-                  ),
-                  Container(
-                    margin: const EdgeInsets.only(top: 2, bottom: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 1),
-                    ),
-                    child: const Text(
-                      "🔴 CIMA",
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.white24),
-                        onPressed: () => onUpdateScore(true, -1),
-                      ),
-                      Text(
-                        "$scoreRed",
-                        style: TextStyle(
-                          color: AppColors.textWhite,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.add, color: AppColors.accentBlue),
-                        onPressed: () => onUpdateScore(true, 1),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              // --- TIMER ---
-              Column(
-                children: [
-                  Icon(
-                    Icons.sports_soccer,
-                    color: isMatchRunning ? AppColors.highlightGreen : AppColors.textDim,
-                    size: 28,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    timeString,
-                    style: TextStyle(
-                      color: isOvertime
-                          ? AppColors.redTeam
-                          : (isMatchRunning ? AppColors.highlightGreen : AppColors.textMuted),
-                      fontSize: 28,
-                      fontFamily: 'Courier',
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (isOvertime)
-                    const Text(
-                      "ACRÉSCIMO",
-                      style: TextStyle(
-                        color: AppColors.redTeam,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                ],
-              ),
-
-              // --- WHITE TEAM ---
-              Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.star, color: ratingColor, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        whiteTeamRating.toStringAsFixed(
-                          1,
-                        ), // Rounds to 1 decimal (e.g., 4.2)
-                        style: TextStyle(
-                          color: ratingColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const TeamLogo(
-                    label: "Real Madrid",
-                    assetPath: "assets/images/branco.png",
-                  ),
-                  Container(
-                    margin: const EdgeInsets.only(top: 2, bottom: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.whiteTeamBorder, width: 1),
-                    ),
-                    child: const Text(
-                      "⚪ BAIXO",
-                      style: TextStyle(
-                        color: AppColors.whiteTeam,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.white24),
-                        onPressed: () => onUpdateScore(false, -1),
-                      ),
-                      Text(
-                        "$scoreWhite",
-                        style: const TextStyle(
-                          color: AppColors.textWhite,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add, color: AppColors.accentBlue),
-                        onPressed: () => onUpdateScore(false, 1),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          // --- BUTTONS LOGIC ---
-          if (!isMatchRunning)
-            Container(
-              decoration: BoxDecoration(
-                color: isReadyToStart
-                    ? AppColors.highlightGreen
-                    : AppColors.surfaceSubtle,
-                shape: BoxShape.circle,
-                boxShadow: isReadyToStart
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : [],
-              ),
-              child: IconButton(
-                iconSize: 40,
-                icon: Icon(
-                  Icons.play_arrow,
-                  color: isReadyToStart ? Colors.white : AppColors.textDim,
-                ),
-                onPressed: isReadyToStart ? onStart : null,
-              ),
-            )
-          else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildCircleBtn(AppColors.orangeStreak, Icons.pause, onPause),
-                const SizedBox(width: 40),
-                _buildCircleBtn(AppColors.redTeam, Icons.stop, onStop),
-              ],
+          Expanded(
+            child: _team(
+              name: 'Time Vermelho',
+              asset: 'assets/images/vermelho.png',
+              rating: widget.redTeamRating,
+              isRed: true,
             ),
+          ),
+          _score(widget.scoreRed, true),
+          SizedBox(width: 108, child: _center()),
+          _score(widget.scoreWhite, false),
+          Expanded(
+            child: _team(
+              name: 'Time Branco',
+              asset: 'assets/images/branco.png',
+              rating: widget.whiteTeamRating,
+              isRed: false,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCircleBtn(Color color, IconData icon, VoidCallback onPressed) {
-    return Container(
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  Widget _team({
+    required String name,
+    required String asset,
+    required double rating,
+    required bool isRed,
+  }) {
+    final logo = Image.asset(
+      asset,
+      width: 32,
+      height: 32,
+      errorBuilder: (_, _, _) => Icon(
+        Icons.checkroom,
+        size: 28,
+        color: isRed ? AppColors.redTeam : AppColors.whiteTeam,
+      ),
+    );
+    final info = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+          isRed ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.star, color: AppColors.warning, size: 12),
+            const SizedBox(width: 2),
+            Text(
+              rating.toStringAsFixed(1),
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+    final children = isRed
+        ? [logo, const SizedBox(width: 6), Flexible(child: info)]
+        : [Flexible(child: info), const SizedBox(width: 6), logo];
+    return Row(
+      mainAxisAlignment:
+          isRed ? MainAxisAlignment.start : MainAxisAlignment.end,
+      children: children,
+    );
+  }
+
+  Widget _score(int value, bool isRed) {
+    final number = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: _reveal,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Text(
+          '$value',
+          style: AppTheme.number(
+            fontSize: 40,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textWhite,
+          ),
+        ),
+      ),
+    );
+    if (!_showAdjust) return number;
+    final minus = _adjustBtn(Icons.remove, () => _adjust(isRed, -1));
+    final plus = _adjustBtn(Icons.add, () => _adjust(isRed, 1));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [minus, number, plus],
+    );
+  }
+
+  Widget _adjustBtn(IconData icon, VoidCallback onTap) {
+    return SizedBox(
+      width: 28,
+      height: 28,
       child: IconButton(
-        iconSize: 32,
-        icon: Icon(icon, color: Colors.white),
-        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        iconSize: 18,
+        color: AppColors.highlightBlue,
+        icon: Icon(icon),
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  Widget _center() {
+    final timeColor = widget.isOvertime
+        ? AppColors.redTeam
+        : (widget.isMatchRunning
+            ? AppColors.highlightGreen
+            : AppColors.textMuted);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          widget.isOvertime ? '${widget.timeString} +' : widget.timeString,
+          style: AppTheme.number(fontSize: 20, color: timeColor),
+        ),
+        const SizedBox(height: 2),
+        if (!widget.isMatchRunning)
+          _circle(
+            AppColors.highlightGreen,
+            Icons.play_arrow,
+            widget.isReadyToStart ? widget.onStart : null,
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _circle(AppColors.orangeStreak, Icons.pause, widget.onPause),
+              const SizedBox(width: 12),
+              _circle(AppColors.redTeam, Icons.stop, widget.onStop),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _circle(Color color, IconData icon, VoidCallback? onPressed) {
+    final enabled = onPressed != null;
+    return Material(
+      color: enabled ? color : AppColors.surfaceSubtle,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            icon,
+            size: 22,
+            color: enabled ? AppColors.textWhite : AppColors.textDim,
+          ),
+        ),
       ),
     );
   }

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
+import 'package:app_do_fut/theme/app_theme.dart';
+import 'package:app_do_fut/widgets/player/fifa_card.dart';
 import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/sync_screen.dart';
@@ -38,16 +40,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Pelada Manager',
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: AppColors.deepBlue,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.accentBlue,
-          brightness: Brightness.dark,
-          surface: AppColors.headerBlue,
-        ),
-      ),
+      theme: AppTheme.dark,
       navigatorObservers: [routeObserver],
+      builder: (context, child) {
+        FifaCard.precache(context); // swirl decodificado uma vez
+        return child ?? const SizedBox.shrink();
+      },
       home: const AuthGate(),
     );
   }

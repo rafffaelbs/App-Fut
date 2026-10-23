@@ -2227,7 +2227,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     series[i]['label'],
-                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
                   ),
                 );
               },
@@ -2343,7 +2343,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     series[i]['label'],
-                    style: const TextStyle(color: Colors.white54, fontSize: 9),
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
                   ),
                 );
               },
@@ -2655,7 +2655,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               if (!isManual)
                 Text(
                   badge['desc'],
-                  style: const TextStyle(color: Colors.white54, fontSize: 8),
+                  style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
             ],
           ),
@@ -3440,10 +3440,15 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       },
     );
 
-    for (final c in ctrls.values) {
-      c.dispose();
-    }
-    overrideCtrl.dispose();
+    // O Future do sheet completa ao dar pop, mas os TextFields seguem na árvore
+    // durante a animação de saída: descartar já causa "controller used after
+    // being disposed". Espera a animação terminar.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      for (final c in ctrls.values) {
+        c.dispose();
+      }
+      overrideCtrl.dispose();
+    });
   }
 
   @override

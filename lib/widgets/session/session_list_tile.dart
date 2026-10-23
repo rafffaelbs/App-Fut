@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../models/session_model.dart';
+import 'stacked_avatars.dart';
 
 class SessionListTile extends StatelessWidget {
   final SessionModel session;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final List<Map<String, dynamic>> participants;
 
   const SessionListTile({
     super.key,
@@ -14,40 +16,31 @@ class SessionListTile extends StatelessWidget {
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
+    this.participants = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isLive = session.isLive;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.headerBlue,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isLive ? AppColors.accentBlue : AppColors.borderSubtle,
-          width: isLive ? 1.5 : 1,
-        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           onTap: onOpen,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: isLive
-                      ? AppColors.accentBlue
-                      : AppColors.surfaceSubtle,
-                  child: Icon(
-                    Icons.sports_soccer,
-                    color: isLive ? Colors.white : AppColors.textMuted,
-                  ),
+                  backgroundColor: AppColors.surfaceSubtle,
+                  child: Icon(Icons.sports_soccer, color: AppColors.textMuted),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -67,24 +60,6 @@ class SessionListTile extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (isLive)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.highlightGreen.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: AppColors.highlightGreen),
-                              ),
-                              child: const Text(
-                                "AO VIVO",
-                                style: TextStyle(
-                                  color: AppColors.highlightGreen,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -113,6 +88,10 @@ class SessionListTile extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (participants.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        StackedAvatars(players: participants),
+                      ],
                     ],
                   ),
                 ),

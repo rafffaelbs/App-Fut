@@ -61,7 +61,7 @@ class MatchPitchPlayer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4), 
                     border: Border.all(color: Colors.black87, width: 1)
                   ), 
-                  child: Text(stats['nota'].toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))
+                  child: Text(stats['nota'].toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))
                 )
               ),
             ],

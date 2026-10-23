@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/rating_calculator.dart';
+import '../shared/cosmetic_name.dart';
+import '../shared/player_avatar_frame.dart';
+import '../shared/stars_badge.dart';
 
 class PlayerCard extends StatelessWidget {
   final Map<String, dynamic> player;
@@ -22,6 +25,7 @@ class PlayerCard extends StatelessWidget {
     final int games = player['totalGames'] ?? 0;
     final String? iconPath = player['icon'];
     final Color rColor = getRatingColor(rating);
+    final frame = resolvePlayerFrame(player);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -39,19 +43,40 @@ class PlayerCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.deepBlue,
-                  radius: 26,
-                  child: iconPath != null
-                      ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(iconPath, fit: BoxFit.contain)))
-                      : Text(initial, style: TextStyle(color: rColor, fontWeight: FontWeight.bold, fontSize: 20)),
+                PlayerAvatarFrame(
+                  frame: frame,
+                  compact: true,
+                  child: CircleAvatar(
+                    backgroundColor: AppColors.deepBlue,
+                    radius: 26,
+                    child: iconPath != null
+                        ? ClipOval(child: Padding(padding: const EdgeInsets.all(6), child: Image.asset(iconPath, fit: BoxFit.contain)))
+                        : Text(initial, style: TextStyle(color: rColor, fontWeight: FontWeight.bold, fontSize: 20)),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: CosmeticName(
+                              name: name,
+                              cosmetic: frame.cosmetic,
+                              showIcon: true,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: AppColors.textWhite, fontSize: 15, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          if (frame.count > 0) ...[
+                            const SizedBox(width: 6),
+                            StarsBadge(stars: frame.count, size: 12),
+                          ],
+                        ],
+                      ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
@@ -85,7 +110,7 @@ class PlayerCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(rating.toStringAsFixed(1), style: TextStyle(color: rColor, fontSize: 13, fontWeight: FontWeight.bold, height: 1)),
-                      Text('/10', style: TextStyle(color: rColor.withValues(alpha: 0.5), fontSize: 9)),
+                      Text('/10', style: TextStyle(color: rColor.withValues(alpha: 0.5), fontSize: 10)),
                     ],
                   ),
                 ),
@@ -95,10 +120,10 @@ class PlayerCard extends StatelessWidget {
                   child: Container(
                     width: 34, height: 34,
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.08),
+                      color: AppColors.danger.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 17),
+                    child: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 17),
                   ),
                 ),
               ],

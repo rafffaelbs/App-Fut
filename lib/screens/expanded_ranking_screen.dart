@@ -1,6 +1,7 @@
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:flutter/material.dart';
+import '../widgets/shared/ranking_player_bits.dart';
 
 class ExpandedRankingScreen extends StatefulWidget {
   final String groupId;
@@ -69,7 +70,7 @@ class _ExpandedRankingScreenState extends State<ExpandedRankingScreen> {
             style: TextStyle(
               color: active ? Colors.white : color,
               fontWeight: FontWeight.w600,
-              fontSize: 11,
+              fontSize: 12,
               letterSpacing: 0.4,
             ),
           ),
@@ -78,8 +79,8 @@ class _ExpandedRankingScreenState extends State<ExpandedRankingScreen> {
             active
                 ? (_sortDescending ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)
                 : Icons.unfold_more_rounded,
-            size: 11,
-            color: active ? Colors.white54 : color.withValues(alpha: 0.35),
+            size: 12,
+            color: active ? AppColors.textMuted : color.withValues(alpha: 0.35),
           ),
         ],
       ),
@@ -90,7 +91,7 @@ class _ExpandedRankingScreenState extends State<ExpandedRankingScreen> {
     if (index == 0) return const Text('🥇', style: TextStyle(fontSize: 16));
     if (index == 1) return const Text('🥈', style: TextStyle(fontSize: 16));
     if (index == 2) return const Text('🥉', style: TextStyle(fontSize: 16));
-    return Text('${index + 1}', style: const TextStyle(color: Colors.white30, fontSize: 12));
+    return Text('${index + 1}', style: const TextStyle(color: AppColors.textDim, fontSize: 12));
   }
 
   @override
@@ -129,20 +130,21 @@ class _ExpandedRankingScreenState extends State<ExpandedRankingScreen> {
                   horizontalInside: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
                 ),
                 columns: [
-                  const DataColumn(label: Text('#', style: TextStyle(color: Colors.white24, fontSize: 11))),
-                  const DataColumn(label: Text('JOGADOR', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600, fontSize: 11))),
-                  DataColumn(numeric: true, label: _sortHeader('NOTA', 'nota', Colors.amber)),
+                  const DataColumn(label: Text('#', style: TextStyle(color: AppColors.textDim, fontSize: 12))),
+                  const DataColumn(label: Text('JOGADOR', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                  DataColumn(numeric: true, label: _sortHeader('NOTA', 'nota', AppColors.goldAccent)),
                   DataColumn(numeric: true, label: _sortHeader('G+A', 'ga', AppColors.highlightGreen)),
-                  DataColumn(numeric: true, label: _sortHeader('GOLS', 'goals', Colors.white54)),
-                  DataColumn(numeric: true, label: _sortHeader('ASSIST', 'assists', Colors.white54)),
-                  DataColumn(numeric: true, label: _sortHeader('VIT', 'wins', Colors.greenAccent)),
-                  DataColumn(numeric: true, label: _sortHeader('EMP', 'draws', Colors.orangeAccent)),
-                  DataColumn(numeric: true, label: _sortHeader('DER', 'losses', Colors.redAccent)),
+                  DataColumn(numeric: true, label: _sortHeader('GOLS', 'goals', AppColors.textMuted)),
+                  DataColumn(numeric: true, label: _sortHeader('ASSIST', 'assists', AppColors.textMuted)),
+                  DataColumn(numeric: true, label: _sortHeader('VIT', 'wins', AppColors.success)),
+                  DataColumn(numeric: true, label: _sortHeader('EMP', 'draws', AppColors.textMuted)),
+                  DataColumn(numeric: true, label: _sortHeader('DER', 'losses', AppColors.danger)),
                   DataColumn(numeric: true, label: _sortHeader('JOGOS', 'games', Colors.grey)),
                 ],
                 rows: List<DataRow>.generate(_sortedList.length, (index) {
                   final p = _sortedList[index];
                   final String? iconPath = widget.playersMap[p['id']]?['icon'];
+                  final row = {...?widget.playersMap[p['id']] as Map<String, dynamic>?, ...p, 'icon': iconPath};
                   return DataRow(
                     color: WidgetStateProperty.all(index.isOdd ? Colors.white.withValues(alpha: 0.02) : Colors.transparent),
                     onSelectChanged: (_) {
@@ -163,39 +165,19 @@ class _ExpandedRankingScreenState extends State<ExpandedRankingScreen> {
                       DataCell(Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (iconPath != null) ...[
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.deepBlue,
-                              child: ClipOval(child: Padding(padding: const EdgeInsets.all(2), child: Image.asset(iconPath))),
-                            ),
-                            const SizedBox(width: 8),
-                          ] else ...[
-                            const CircleAvatar(
-                              radius: 14,
-                              backgroundColor: AppColors.deepBlue,
-                              child: Icon(Icons.person, size: 16, color: Colors.white54),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(
-                            p['name'],
-                            style: TextStyle(
-                              color: index < 3 ? Colors.white : Colors.white60,
-                              fontWeight: index < 3 ? FontWeight.w600 : FontWeight.normal,
-                              fontSize: 13,
-                            ),
-                          ),
+                          RankAvatar(player: row, size: 28),
+                          const SizedBox(width: 8),
+                          RankName(player: row, style: const TextStyle(fontSize: 13)),
                         ],
                       )),
-                      DataCell(Text((p['nota'] as double).toStringAsFixed(1), style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 13))),
+                      DataCell(RatingPill(rating: p['nota'] as double, fontSize: 13)),
                       DataCell(Text('${p['ga']}', style: const TextStyle(color: AppColors.highlightGreen, fontWeight: FontWeight.w600, fontSize: 13))),
-                      DataCell(Text('${p['goals']}', style: const TextStyle(color: Colors.white60, fontSize: 13))),
-                      DataCell(Text('${p['assists']}', style: const TextStyle(color: Colors.white60, fontSize: 13))),
-                      DataCell(Text('${p['wins']}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13))),
-                      DataCell(Text('${p['draws']}', style: const TextStyle(color: Colors.orangeAccent, fontSize: 13))),
-                      DataCell(Text('${p['losses']}', style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
-                      DataCell(Text('${p['games']}', style: const TextStyle(color: Colors.white30, fontSize: 12))),
+                      DataCell(Text('${p['goals']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13))),
+                      DataCell(Text('${p['assists']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13))),
+                      DataCell(Text('${p['wins']}', style: const TextStyle(color: AppColors.success, fontSize: 13))),
+                      DataCell(Text('${p['draws']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13))),
+                      DataCell(Text('${p['losses']}', style: const TextStyle(color: AppColors.danger, fontSize: 13))),
+                      DataCell(Text('${p['games']}', style: const TextStyle(color: AppColors.textDim, fontSize: 12))),
                     ],
                   );
                 }),

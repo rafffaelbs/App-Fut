@@ -1,12 +1,16 @@
-import 'dart:async';
-import 'dart:math';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/models/player_model.dart';
 import 'package:app_do_fut/models/match_model.dart';
 import 'package:app_do_fut/models/season_model.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:app_do_fut/services/group_bootstrap.dart';
+import 'package:app_do_fut/utils/rating_calculator.dart';
+import 'package:app_do_fut/widgets/stats/duos_donut.dart';
+import 'package:app_do_fut/widgets/stats/evolution_chart.dart';
+import 'package:app_do_fut/widgets/stats/full_ranking_sheet.dart';
+import 'package:app_do_fut/widgets/stats/stat_board_card.dart';
+import 'package:app_do_fut/widgets/stats/stat_row.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -22,7 +26,6 @@ class _Vs {
   static const border = Color(0xFF1E3A6E); // tom intermediário entre headerBlue e accentBlue
   static const accent = AppColors.accentBlue;
   static const accentLight = AppColors.highlightBlue;
-  static const rowHover = Color(0xFF072055); // headerBlue levemente mais claro
   static const textMuted = Colors.white54;
   static const text = AppColors.textWhite;
   static const textStrong = Colors.white70;
@@ -33,19 +36,6 @@ class _Vs {
   static const silver = Color(0xFFC0C0C0);
   static const bronze = Color(0xFFCD7F32);
 }
-
-const List<Color> _chartColors = [
-  Color(0xFFFF5733),
-  Color(0xFF4FC3F7),
-  Color(0xFF33FF8C),
-  Color(0xFFF033FF),
-  Color(0xFFFF33A1),
-  Color(0xFFF0FF33),
-  Color(0xFFFF8C33),
-  Color(0xFF33FFF0),
-  Color(0xFF8C33FF),
-  Color(0xFF33FF57),
-];
 
 enum StatKey {
   ga,
@@ -160,10 +150,10 @@ class PlayerStatsAgg {
 }
 
 class DuoStat {
-  final String p1Name;
-  final String p2Name;
+  final String p1Id;
+  final String p2Id;
   final int count;
-  const DuoStat(this.p1Name, this.p2Name, this.count);
+  const DuoStat(this.p1Id, this.p2Id, this.count);
 }
 
 class SeasonStatsScreen extends StatefulWidget {
@@ -188,23 +178,15 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   DateTime? _customFrom;
   DateTime? _customTo;
 
-  // Chart state
-  String _chartMetric = 'ga'; // 'ga', 'goals', 'assists'
-  bool _chartGroupByDate = false;
-  int? _animationIndex;
-  bool _isPlaying = false;
-  Timer? _animationTimer;
+  // Mapas no formato de GroupBootstrap.playerSnapshotMap (RankName/RankAvatar)
+  Map<String, Map<String, dynamic>> _playerMaps = {};
+  List<Map<String, dynamic>> _playerMapList = [];
+  DateTime _now = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _animationTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -228,6 +210,12 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       _allMatches = matchesList;
       _allPlayers = playersList;
       _allSeasons = seasonsList;
+      _now = DateTime.now();
+      _playerMapList = [
+        for (final p in playersList)
+          GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase),
+      ];
+      _playerMaps = {for (final m in _playerMapList) m['id'] as String: m};
 
       // If there's an active season, set it as the default
       if (seasonsList.isNotEmpty) {
@@ -438,18 +426,14 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
     final parsedDuos = duosMap.entries.map((e) {
       final parts = e.key.split('|');
-      final name1 = playersMap[parts[0]]?.name ?? parts[0];
-      final name2 = playersMap[parts[1]]?.name ?? parts[1];
-      return DuoStat(name1, name2, e.value);
+      return DuoStat(parts[0], parts[1], e.value);
     }).toList()
       ..sort((a, b) => b.count.compareTo(a.count));
 
     if (!mounted) return; // usuário já saiu da tela enquanto calculava
     setState(() {
       stats = map.values.where((s) => s.matches > 0 || s.gkGames > 0).toList();
-      dynamicDuos = parsedDuos.take(5).toList();
-      _animationIndex = null;
-      _isPlaying = false;
+      dynamicDuos = parsedDuos;
     });
   }
 
@@ -647,391 +631,6 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // EVOLUÇÃO DE DESEMPENHO (LINE CHART & ANIMAÇÃO)
-  // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildPerformanceEvolutionChart() {
-    final sortedMatches = List<MatchModel>.from(_filteredPartidas)
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-    if (sortedMatches.isEmpty || _allPlayers.isEmpty) return const SizedBox.shrink();
-
-    // Calcula acumulado por player
-    final Map<String, int> cumulativeGA = {};
-    final Map<String, int> cumulativeGoals = {};
-    final Map<String, int> cumulativeAssists = {};
-    for (final j in _allPlayers) {
-      cumulativeGA[j.id] = 0;
-      cumulativeGoals[j.id] = 0;
-      cumulativeAssists[j.id] = 0;
-    }
-
-    // Lista de pontos temporais
-    final List<Map<String, dynamic>> points = [];
-    final Map<String, dynamic> initialPoint = {'name': 'Início'};
-    for (final j in _allPlayers) initialPoint[j.id] = 0;
-    points.add(initialPoint);
-
-    if (_chartGroupByDate) {
-      final Map<String, List<MatchModel>> matchesByDate = {};
-      for (final m in sortedMatches) {
-        final dStr = DateFormat('dd/MM').format(m.timestamp);
-        matchesByDate.putIfAbsent(dStr, () => []).add(m);
-      }
-
-      matchesByDate.forEach((dateStr, matchesOnDate) {
-        for (final m in matchesOnDate) {
-          for (final ev in m.events) {
-            if (ev.isGoal && ev.playerId.isNotEmpty) {
-              cumulativeGoals[ev.playerId] = (cumulativeGoals[ev.playerId] ?? 0) + 1;
-              cumulativeGA[ev.playerId] = (cumulativeGA[ev.playerId] ?? 0) + 1;
-            }
-            if (ev.isGoal && ev.assistJogadorId != null && ev.assistJogadorId!.isNotEmpty) {
-              cumulativeAssists[ev.assistJogadorId!] = (cumulativeAssists[ev.assistJogadorId!] ?? 0) + 1;
-              cumulativeGA[ev.assistJogadorId!] = (cumulativeGA[ev.assistJogadorId!] ?? 0) + 1;
-            }
-          }
-        }
-        final Map<String, dynamic> pt = {'name': dateStr};
-        for (final j in _allPlayers) {
-          pt[j.id] = _chartMetric == 'ga'
-              ? (cumulativeGA[j.id] ?? 0)
-              : (_chartMetric == 'goals'
-                  ? (cumulativeGoals[j.id] ?? 0)
-                  : (cumulativeAssists[j.id] ?? 0));
-        }
-        points.add(pt);
-      });
-    } else {
-      for (int i = 0; i < sortedMatches.length; i++) {
-        final m = sortedMatches[i];
-        for (final ev in m.events) {
-          if (ev.isGoal && ev.playerId.isNotEmpty) {
-            cumulativeGoals[ev.playerId] = (cumulativeGoals[ev.playerId] ?? 0) + 1;
-            cumulativeGA[ev.playerId] = (cumulativeGA[ev.playerId] ?? 0) + 1;
-          }
-          if (ev.isGoal && ev.assistJogadorId != null && ev.assistJogadorId!.isNotEmpty) {
-            cumulativeAssists[ev.assistJogadorId!] = (cumulativeAssists[ev.assistJogadorId!] ?? 0) + 1;
-            cumulativeGA[ev.assistJogadorId!] = (cumulativeGA[ev.assistJogadorId!] ?? 0) + 1;
-          }
-        }
-        final Map<String, dynamic> pt = {'name': 'P${i + 1}'};
-        for (final j in _allPlayers) {
-          pt[j.id] = _chartMetric == 'ga'
-              ? (cumulativeGA[j.id] ?? 0)
-              : (_chartMetric == 'goals'
-                  ? (cumulativeGoals[j.id] ?? 0)
-                  : (cumulativeAssists[j.id] ?? 0));
-        }
-        points.add(pt);
-      }
-    }
-
-    // Top 10 players with score > 0 on the selected metric
-    final topPlayers = _allPlayers.where((p) {
-      final total = _chartMetric == 'ga'
-          ? (cumulativeGA[p.id] ?? 0)
-          : (_chartMetric == 'goals'
-              ? (cumulativeGoals[p.id] ?? 0)
-              : (cumulativeAssists[p.id] ?? 0));
-      return total > 0;
-    }).toList()
-      ..sort((a, b) {
-        final valA = _chartMetric == 'ga'
-            ? (cumulativeGA[a.id] ?? 0)
-            : (_chartMetric == 'goals'
-                ? (cumulativeGoals[a.id] ?? 0)
-                : (cumulativeAssists[a.id] ?? 0));
-        final valB = _chartMetric == 'ga'
-            ? (cumulativeGA[b.id] ?? 0)
-            : (_chartMetric == 'goals'
-                ? (cumulativeGoals[b.id] ?? 0)
-                : (cumulativeAssists[b.id] ?? 0));
-        return valB.compareTo(valA);
-      });
-
-    final displayTop = topPlayers.take(10).toList();
-    if (displayTop.isEmpty) return const SizedBox.shrink();
-
-    final activePoints = _animationIndex != null
-        ? points.sublist(0, min(_animationIndex!, points.length))
-        : points;
-
-    // Constrói LineChartBarData para cada player do Top 10
-    double maxY = 1.0;
-    final List<LineChartBarData> lineBars = [];
-    for (int i = 0; i < displayTop.length; i++) {
-      final p = displayTop[i];
-      final color = _chartColors[i % _chartColors.length];
-      final List<FlSpot> spots = [];
-      for (int x = 0; x < activePoints.length; x++) {
-        final yVal = (activePoints[x][p.id] as int? ?? 0).toDouble();
-        if (yVal > maxY) maxY = yVal;
-        spots.add(FlSpot(x.toDouble(), yVal));
-      }
-      lineBars.add(
-        LineChartBarData(
-          spots: spots,
-          isCurved: true,
-          color: color,
-          barWidth: 2.5,
-          dotData: const FlDotData(show: false),
-        ),
-      );
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _Vs.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _Vs.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.trending_up, color: _Vs.accentLight, size: 20),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Evolução de Desempenho',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Controles de métrica, agrupamento e animação
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: _Vs.bg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _Vs.border),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _metricChip('ga', 'G+A'),
-                    _metricChip('goals', 'Gols'),
-                    _metricChip('assists', 'Assist.'),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () => setState(() => _chartGroupByDate = !_chartGroupByDate),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Checkbox(
-                      value: _chartGroupByDate,
-                      onChanged: (v) => setState(() => _chartGroupByDate = v ?? false),
-                      activeColor: _Vs.accent,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    const Text('Por data', style: TextStyle(color: _Vs.textMuted, fontSize: 12)),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  if (_isPlaying) {
-                    _animationTimer?.cancel();
-                    setState(() => _isPlaying = false);
-                  } else {
-                    if (_animationIndex == points.length) {
-                      _animationIndex = 1;
-                    }
-                    setState(() => _isPlaying = true);
-                    _animationTimer?.cancel();
-                    _animationTimer = Timer.periodic(
-                      Duration(milliseconds: _chartGroupByDate ? 300 : 150),
-                      (timer) {
-                        setState(() {
-                          final current = _animationIndex ?? 1;
-                          if (current >= points.length) {
-                            _isPlaying = false;
-                            timer.cancel();
-                          } else {
-                            _animationIndex = current + 1;
-                          }
-                        });
-                      },
-                    );
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _isPlaying
-                        ? const Color(0xFF2D1B1B)
-                        : const Color(0xFF1A2E20),
-                    border: Border.all(
-                      color: _isPlaying
-                          ? const Color(0xFFFF5757).withOpacity(0.3)
-                          : const Color(0xFF4CAF50).withOpacity(0.3),
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isPlaying
-                            ? Icons.stop
-                            : (_animationIndex == points.length ? Icons.replay : Icons.play_arrow),
-                        size: 14,
-                        color: _isPlaying ? const Color(0xFFFF5757) : const Color(0xFF4CAF50),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isPlaying
-                            ? 'Parar'
-                            : (_animationIndex == points.length ? 'Replay' : 'Animar'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: _isPlaying ? const Color(0xFFFF5757) : const Color(0xFF4CAF50),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Gráfico
-          SizedBox(
-            height: 260,
-            child: LineChart(
-              LineChartData(
-                minX: 0,
-                maxX: max(1.0, (activePoints.length - 1).toDouble()),
-                minY: 0,
-                maxY: maxY + 1,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (val) => FlLine(color: _Vs.border.withOpacity(0.5), strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      interval: max(1.0, (maxY / 4).floorToDouble()),
-                      getTitlesWidget: (val, meta) => Text(
-                        val.toInt().toString(),
-                        style: const TextStyle(color: _Vs.textMuted, fontSize: 10),
-                      ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      interval: max(1.0, (activePoints.length / 6).floorToDouble()),
-                      getTitlesWidget: (val, meta) {
-                        final idx = val.toInt();
-                        if (idx >= 0 && idx < activePoints.length) {
-                          return Text(
-                            activePoints[idx]['name']?.toString() ?? '',
-                            style: const TextStyle(color: _Vs.textMuted, fontSize: 10),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: lineBars,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Chips de legenda com foto e cor
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: displayTop.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final p = entry.value;
-              final color = _chartColors[idx % _chartColors.length];
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _Vs.bg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _Vs.border),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: color, width: 2),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        _initials(p.name),
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      p.name,
-                      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _metricChip(String key, String label) {
-    final selected = _chartMetric == key;
-    return GestureDetector(
-      onTap: () => setState(() => _chartMetric = key),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? _Vs.accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : _Vs.textMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // PÓDIOS
@@ -1243,259 +842,164 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 4 TABELAS AUXILIARES (Gols Contra, Nota Média, Taxa de Vitórias, Duplas)
+  // QUADROS (Gols Contra, Nota Média, Taxa de Vitórias, Duplas Dinâmicas)
   // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildAuxiliaryTables() {
-    final ownGoalsPlayers = List<PlayerStatsAgg>.from(stats)
-        .where((s) => s.ownGoals > 0)
-        .toList()
+  Map<String, dynamic> _mapFor(PlayerModel p) =>
+      _playerMaps[p.id] ??
+      GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase);
+
+  Map<String, dynamic> _mapForId(String id) =>
+      _playerMaps[id] ?? {'id': id, 'name': id};
+
+  void _openPlayerById(StatRow row) {
+    for (final s in stats) {
+      if (s.player.id == row.player['id']) {
+        _openPlayer(s);
+        return;
+      }
+    }
+  }
+
+  List<StatRow> _ownGoalsRows() {
+    final l = stats.where((s) => s.ownGoals > 0).toList()
       ..sort((a, b) => b.ownGoals.compareTo(a.ownGoals));
+    return [
+      for (final s in l)
+        StatRow(
+          player: _mapFor(s.player),
+          primary: '${s.ownGoals}',
+          secondary: s.ownGoals == 1 ? 'gol contra' : 'gols contra',
+          tieValue: s.ownGoals,
+        ),
+    ];
+  }
 
-    final topRatingPlayers = List<PlayerStatsAgg>.from(stats)
-        .where((s) => s.matches >= 5)
-        .toList()
+  List<StatRow> _avgRatingRows() {
+    final l = stats.where((s) => s.matches >= 5).toList()
       ..sort((a, b) => b.formLast10.compareTo(a.formLast10));
+    return [
+      for (final s in l)
+        StatRow(
+          player: _mapFor(s.player),
+          primary: s.formLast10.toStringAsFixed(2),
+          primaryColor: AppColors.ratingPill(s.formLast10),
+          secondary: '${s.matches} partidas',
+          tieValue: double.parse(s.formLast10.toStringAsFixed(2)),
+        ),
+    ];
+  }
 
-    final topWinRatePlayers = List<PlayerStatsAgg>.from(stats)
-        .where((s) => s.matches >= 10)
-        .toList()
+  List<StatRow> _winRateRows() {
+    final l = stats.where((s) => s.matches >= 10).toList()
       ..sort((a, b) => b.winRate.compareTo(a.winRate));
+    return [
+      for (final s in l)
+        StatRow(
+          player: _mapFor(s.player),
+          primary: '${s.winRate.toStringAsFixed(1)}%',
+          primaryColor: AppColors.success,
+          secondary: '${s.wins}V em ${s.matches}',
+          tieValue: double.parse(s.winRate.toStringAsFixed(1)),
+        ),
+    ];
+  }
 
+  List<StatRow> _duoRows() => [
+        for (final d in dynamicDuos)
+          StatRow(
+            player: _mapForId(d.p1Id),
+            player2: _mapForId(d.p2Id),
+            primary: '${d.count}',
+            secondary: d.count == 1 ? 'gol' : 'gols',
+            tieValue: d.count,
+          ),
+      ];
+
+  Widget _buildBoards() {
+    final wide = MediaQuery.of(context).size.width >= 600;
+
+    final ownGoals = _ownGoalsRows();
+    final rating = _avgRatingRows();
+    final winRate = _winRateRows();
+    final duoRows = _duoRows();
+
+    Widget ownGoalsCard(bool fill) => StatBoardCard(
+          title: 'Quadro de Gols Contra',
+          rows: ownGoals,
+          emptyText: 'Nenhum gol contra registrado.',
+          fillHeight: fill,
+          onTapRow: _openPlayerById,
+          onMore: () => showFullRanking(context,
+              title: 'Quadro de Gols Contra', rows: ownGoals, onTapRow: _openPlayerById),
+        );
+    Widget ratingCard(bool fill) => StatBoardCard(
+          title: 'Nota média recebida',
+          subtitle: 'Escala 0–10 · mín. 5 partidas',
+          rows: rating,
+          emptyText: 'Mínimo 5 partidas para qualificação.',
+          fillHeight: fill,
+          onTapRow: _openPlayerById,
+          onMore: () => showFullRanking(context,
+              title: 'Nota média recebida',
+              rows: rating,
+              footer: 'Jogadores com menos de 5 partidas não entram.',
+              onTapRow: _openPlayerById),
+        );
+    Widget winRateCard(bool fill) => StatBoardCard(
+          title: 'Taxa de Vitórias',
+          subtitle: 'Mín. 10 partidas',
+          rows: winRate,
+          emptyText: 'Mínimo 10 partidas para qualificação.',
+          fillHeight: fill,
+          onTapRow: _openPlayerById,
+          onMore: () => showFullRanking(context,
+              title: 'Taxa de Vitórias',
+              rows: winRate,
+              footer: 'Jogadores com menos de 10 partidas não entram.',
+              onTapRow: _openPlayerById),
+        );
+    Widget duosCard(bool fill) => DuosDonutCard(
+          duos: [
+            for (final d in dynamicDuos)
+              DuoSlice(_mapForId(d.p1Id)['name'].toString(),
+                  _mapForId(d.p2Id)['name'].toString(), d.count),
+          ],
+          fillHeight: fill,
+          onMore: () => showFullRanking(context,
+              title: 'Duplas Dinâmicas',
+              rows: duoRows,
+              footer: 'A rosca mostra só as 5 primeiras.'),
+        );
+
+    if (!wide) {
+      return Column(
+        children: [
+          ownGoalsCard(false),
+          const SizedBox(height: 16),
+          ratingCard(false),
+          const SizedBox(height: 16),
+          winRateCard(false),
+          const SizedBox(height: 16),
+          duosCard(false),
+        ],
+      );
+    }
+    Widget pair(Widget a, Widget b) => IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: a),
+              const SizedBox(width: 16),
+              Expanded(child: b),
+            ],
+          ),
+        );
     return Column(
       children: [
-        // Gols Contra
-        _buildSimpleCard(
-          title: '⛔ Quadro de Gols Contra',
-          child: Column(
-            children: [
-              _buildTableHeader(['#', 'Jogador', 'Gols Contra']),
-              if (ownGoalsPlayers.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Nenhum gol contra registrado.', style: TextStyle(color: _Vs.textMuted, fontSize: 12)),
-                )
-              else
-                ...ownGoalsPlayers.take(5).toList().asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final p = entry.value;
-                  return _buildTableRow(
-                    index: i + 1,
-                    player: p.player.name,
-                    values: [p.ownGoals.toString()],
-                    onTap: () => _openPlayer(p),
-                  );
-                }),
-            ],
-          ),
-        ),
+        pair(ownGoalsCard(true), ratingCard(true)),
         const SizedBox(height: 16),
-
-        // Nota Média Recebida
-        _buildSimpleCard(
-          title: '⭐ Nota média recebida (escala 0-10)',
-          child: Column(
-            children: [
-              _buildTableHeader(['#', 'Jogador', 'Média', 'Partidas']),
-              if (topRatingPlayers.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Mínimo 5 partidas para qualificação.', style: TextStyle(color: _Vs.textMuted, fontSize: 12)),
-                )
-              else
-                ...topRatingPlayers.take(5).toList().asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final p = entry.value;
-                  return _buildTableRow(
-                    index: i + 1,
-                    player: p.player.name,
-                    values: [p.formLast10.toStringAsFixed(2), p.matches.toString()],
-                    onTap: () => _openPlayer(p),
-                  );
-                }),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Taxa de Vitórias
-        _buildSimpleCard(
-          title: '🏅 Taxa de Vitórias (mín. 10 partidas)',
-          child: Column(
-            children: [
-              _buildTableHeader(['#', 'Jogador', 'Win %', 'Vitórias', 'Partidas']),
-              if (topWinRatePlayers.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Mínimo 10 partidas para qualificação.', style: TextStyle(color: _Vs.textMuted, fontSize: 12)),
-                )
-              else
-                ...topWinRatePlayers.take(5).toList().asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final p = entry.value;
-                  return _buildTableRow(
-                    index: i + 1,
-                    player: p.player.name,
-                    values: ['${p.winRate.toStringAsFixed(1)}%', p.wins.toString(), p.matches.toString()],
-                    isHighlightFirst: true,
-                    onTap: () => _openPlayer(p),
-                  );
-                }),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Duplas Dinâmicas
-        _buildSimpleCard(
-          title: '🤝 Duplas Dinâmicas (Gols em parceria)',
-          child: Column(
-            children: [
-              _buildTableHeader(['#', 'Jogador 1', 'Jogador 2', 'Gols']),
-              if (dynamicDuos.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Nenhuma parceria registrada.', style: TextStyle(color: _Vs.textMuted, fontSize: 12)),
-                )
-              else
-                ...dynamicDuos.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final duo = entry.value;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: _Vs.border)),
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              color: i == 0 ? _Vs.gold : (i == 1 ? _Vs.silver : (i == 2 ? _Vs.bronze : _Vs.textMuted)),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Expanded(child: Text(duo.p1Name, style: const TextStyle(color: Colors.white, fontSize: 13))),
-                        Expanded(child: Text(duo.p2Name, style: const TextStyle(color: Colors.white, fontSize: 13))),
-                        Text('${duo.count}', style: const TextStyle(color: _Vs.good, fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
-                    ),
-                  );
-                }),
-            ],
-          ),
-        ),
+        pair(winRateCard(true), duosCard(true)),
       ],
-    );
-  }
-
-  Widget _buildSimpleCard({required String title, required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _Vs.panel,
-        border: Border.all(color: _Vs.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const Divider(color: _Vs.border, height: 1),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTableHeader(List<String> titles) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: _Vs.header,
-      child: Row(
-        children: titles.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final title = entry.value;
-          if (idx == 0) {
-            return SizedBox(
-              width: 24,
-              child: Text(title, style: const TextStyle(color: _Vs.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
-            );
-          }
-          if (idx == 1) {
-            return Expanded(
-              child: Text(title, style: const TextStyle(color: _Vs.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
-            );
-          }
-          return SizedBox(
-            width: 70,
-            child: Text(
-              title,
-              textAlign: TextAlign.right,
-              style: const TextStyle(color: _Vs.textMuted, fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildTableRow({
-    required int index,
-    required String player,
-    required List<String> values,
-    bool isHighlightFirst = false,
-    VoidCallback? onTap,
-  }) {
-    final color = index == 1 ? _Vs.gold : (index == 2 ? _Vs.silver : (index == 3 ? _Vs.bronze : _Vs.textMuted));
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: _Vs.border)),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 24,
-              child: Text(
-                '$index',
-                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ),
-            Expanded(
-              child: Text(player, style: const TextStyle(color: Colors.white, fontSize: 13)),
-            ),
-            ...values.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final val = entry.value;
-              final isGreen = isHighlightFirst && idx == 0;
-              return SizedBox(
-                width: 70,
-                child: Text(
-                  val,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: isGreen ? _Vs.good : (idx == 0 ? Colors.white : _Vs.textMuted),
-                    fontWeight: isGreen || idx == 0 ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 13,
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1554,8 +1058,17 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           _buildFilterBar(),
           const SizedBox(height: 20),
 
-          // Evolução de Desempenho
-          _buildPerformanceEvolutionChart(),
+          // Evolução de Desempenho (6 meses fixos, ignora o filtro de período)
+          EvolutionChartCard(
+            players: _playerMapList,
+            matches: _allMatches,
+            now: _now,
+          ),
+          const SizedBox(height: 16),
+
+          // Quadros: Gols Contra, Nota Média, Taxa de Vitórias, Duplas
+          _buildBoards(),
+          const SizedBox(height: 20),
 
           // 7 Pódios Principais
           _buildPodiumSection(
@@ -1639,12 +1152,6 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
             ),
           ],
 
-          const SizedBox(height: 20),
-          const Divider(color: _Vs.border),
-          const SizedBox(height: 20),
-
-          // 4 Tabelas Auxiliares
-          _buildAuxiliaryTables(),
           const SizedBox(height: 32),
         ],
       ),

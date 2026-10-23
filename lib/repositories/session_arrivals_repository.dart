@@ -31,6 +31,29 @@ class SessionArrivalsRepository {
         .toList();
   }
 
+  /// Player ids of the draft presence list of each session, in arrival order,
+  /// in a single query (used by the sessions list to show confirmed avatars).
+  Future<Map<String, List<String>>> getPlayerIdsBySessions(
+    List<String> sessionIds,
+  ) async {
+    if (sessionIds.isEmpty) return {};
+    final response = await _client
+        .from('session_arrivals')
+        .select('session_id, player_id, desistiu')
+        .inFilter('session_id', sessionIds)
+        .order('arrival_order', ascending: true);
+
+    final result = <String, List<String>>{};
+    for (final row in (response as List).whereType<Map>()) {
+      if (row['desistiu'] == true) continue;
+      final sid = row['session_id']?.toString();
+      final pid = row['player_id']?.toString();
+      if (sid == null || pid == null) continue;
+      result.putIfAbsent(sid, () => []).add(pid);
+    }
+    return result;
+  }
+
   /// Replaces the whole draft presence list for a session with [players].
   ///
   /// Each entry in [players] must contain: `id` (player id), `desistiu`

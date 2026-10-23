@@ -53,7 +53,7 @@ class MatchPlayerTile extends StatelessWidget {
                   overallRating.round().toString(),
                   style: TextStyle(
                     color: overallColor(overallRating),
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

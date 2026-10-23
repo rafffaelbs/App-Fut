@@ -1,18 +1,14 @@
 # Plano de Ação - App-Fut
 
-## 1. Correção de Bugs: Troféus e Prêmios Especiais
-- [x] Investigar e corrigir lógica de carregamento/atualização de troféus no perfil do jogador (bug do nome antigo).
-- [x] Melhorar a tela de gerenciamento de troféus especiais (renomeada para "Customizações" com abas).
-- [x] Impedir entrega de troféus repetidos (troféus já resgatados ficam cinza com texto "Resgatado por [Nome]").
-- [x] Corrigir nome da coluna no Supabase (era `badges`, correto é `manual_badges`).
-- [x] Corrigir remoção de troféu (agora remove por ID, não por índice).
-- [x] Restringir ações de escrita (dar/remover troféus) somente para Admins.
-- [x] Limpar troféus fantasmas no banco de dados via SQL (troféu "Craque de Janeiro de 2026" aparecendo em todos).
+## 1. Correção de Bugs
+- [x] Botão de desistir: O app de fato tira o jogador da fila, coloca ele como cinza, tem o botão de reativar funciona, no entanto, os jogadores ainda aparecem na hora que o proximo time entra. Então ele some da fila de proximos, mas ainda aparece no jogo quando o time dele entra, vamos dizer assim.
+- [ ] Estatisticas Avançadas: Na tela de detalhes do jogador, a parte de estatisticas avançadas está bugada. Muitos numeros nao fazem sentido, como um jogador ter 10 derrotas e o jogador com quem ele mais perdeu esteve presente em 3 derrotas mas fala que isso representa cerca de 70% das derrotas dele, onde deveria ser 30%.
 
 ## 2. Segurança e Permissões (Apenas Admin)
 - [ ] Revisar políticas de segurança (RLS - Row Level Security) do Supabase para prevenir abusos.
 - [ ] Criar tabela/sistema de logs de ações no Supabase.
 - [ ] Implementar mecanismo/alerta mensal para exportação e limpeza de logs.
+- [ ] Tirar acesso de telas e opções de escritas para jogadores que não são admins. Esse tipo de jogador não pode editar nada, mesmo que o banco não permita, ainda aparece a opção no App. Depois de um tempo, podemos ir habilitando as telas de pouco em pouco.
 
 ## 3. Nova Feature: Versão Web & Autenticação
 - [ ] Validar compilação e responsividade para versão Web.
@@ -20,13 +16,12 @@
 - [ ] Investigar/Implementar login via SSO (Google/Apple, por exemplo).
 
 ## 4. Customização Avançada (Apenas Admin)
-- [ ] Criar interface na nova aba "Efeitos" da tela de Customizações para admin escolher efeitos especiais (destaque no nome/ícone).
-- [ ] Dê sugestões e crie efeitos de nome (nome dourado por exemplo) e de moldura do icone nos jogos e ranking. Temos algumas formas de diferenciar os jogadores: Ganhador da bola de ouro (somente 1 por enqt), ganhador do premio do mes (temos 6, alguns que ja ganharam 2 vezes), artilheiro da temporada e podemos criar outros no futuro.
-- [x] Criar interface na nova aba "Áudios" da tela de Customizações para admin fazer upload/escolher áudios de comemoração de gols.
-- [ ] Bug na parte de aúdio: Parece que uma vez que eu coloco o aúdio para alguém, esse aúdio fica pra sempre (acho que não está sendo atualizado o banco de dados).
-- [ ] Bug na parte de aúdio: Na versão chrome, todos os aúdios tocam, enqt na versão mobile, 2 aúdios especificos (acredito que os primeiros adicionados), não estão tocando
-- [ ] Integrar áudios ao Storage do Supabase (tocar som customizado se existir, caso contrário, genérico).
+- [ ] Dê sugestões de moldura do icone nos jogos e ranking. Temos algumas formas de diferenciar os jogadores: Ganhador da bola de ouro (somente 1 por enqt), ganhador do premio do mes (temos 6, alguns que ja ganharam 2 vezes), artilheiro da temporada e podemos criar outros no futuro.
 - [ ] Aplicar visualmente os efeitos escolhidos na tela do jogo e placar.
+
+## 5. Notas
+- [ ] Adicionar a opção de nota do admin nos jogadores. Atualmente temos uma nota que é baseada em somente numeros, no entanto, iremos rodar uma votação e teremos 2 notas: A nota do app e a nota dada pela comunidade. Essa nota da comunidade iremos buscar esse numero por fora e colocaremos no app. A nova nota do jogador deve ser um calculo entre as nota do app e a nota da comunidade, sendo que a nota da comunidade deve ter um peso maior. Posso adicionar essa nota da comunidade via tela de detalhes do jogador.
+- [ ] Melhorar a questão de nota e atualizar de nota como 0-10 para um rating de 0-100, similar ao Fifa. E esse rating é baseado tanto na nota do app tanto na nota da comunidade. So que agora preciso que tenha diferença entre os aspectos, ou seja, teremos a nota do app que será somente baseada nos numeros e a nota da comunidade que irá levar em conta as mesmas coisas do fifa, mas que a comunidade irá decidir.
 
 ## 6. Atualização de Design
 - [ ] Alterar o tema do app para "Dark Mode" inspirado no Sofascore (tons escuros, verdes, destaques limpos).
