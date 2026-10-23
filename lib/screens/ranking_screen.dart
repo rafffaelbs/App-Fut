@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../widgets/shared/player_name_text.dart';
+import '../widgets/shared/player_avatar_frame.dart';
 import '../repositories/supabase_service.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -77,6 +78,7 @@ class _RankingScreenState extends State<RankingScreen> {
     final Map<String, String?> iconMap = {};
     final Map<String, String> nameToIdMap = {};
     final Map<String, String> idToNameMap = {};
+    final Map<String, Map<String, dynamic>> playerMetaMap = {};
 
     // 1. Load players from the group
     try {
@@ -84,6 +86,13 @@ class _RankingScreenState extends State<RankingScreen> {
         final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
         for (final p in groupPlayers) {
           iconMap[p.id] = p.avatarUrl;
+          playerMetaMap[p.id] = {
+            'name_effect': p.nameEffectFull ?? p.nameEffect,
+            'monthly_highlight': p.monthlyHighlight,
+            'manual_badges': p.manualBadges.map((b) => b.toMap()).toList(),
+            'advanced_stats': p.advancedStats,
+            'craque_mes_count': p.craqueDoMesCount,
+          };
           if (p.name.isNotEmpty) {
             nameToIdMap[p.name] = p.id;
             idToNameMap[p.id] = p.name;
@@ -102,6 +111,13 @@ class _RankingScreenState extends State<RankingScreen> {
           final String name = (p['name'] ?? '').toString();
           if (pid.isNotEmpty) {
             iconMap[pid] = p['icon'] as String?;
+            playerMetaMap.putIfAbsent(pid, () => {
+              'name_effect': p['name_effect'],
+              'monthly_highlight': p['monthly_highlight'] == true,
+              'manual_badges': p['manual_badges'] ?? [],
+              'advanced_stats': p['advanced_stats'] ?? {},
+              'craque_mes_count': p['craque_mes_count'] ?? 1,
+            });
             if (name.isNotEmpty) {
               nameToIdMap[name] = pid;
               idToNameMap[pid] = name;
@@ -427,10 +443,16 @@ class _RankingScreenState extends State<RankingScreen> {
       final int a = data['assists'] as int;
 
       if (games > 0) {
+        final meta = playerMetaMap[id] ?? playerMetaMap[nameToIdMap[id]] ?? {};
         sortedList.add({
           'id': id,
           'name': data['name'],
           'icon': iconMap[id], // ← ícone do banco de jogadores
+          'name_effect': meta['name_effect'],
+          'monthly_highlight': meta['monthly_highlight'] == true,
+          'manual_badges': meta['manual_badges'] ?? [],
+          'advanced_stats': meta['advanced_stats'] ?? {},
+          'craque_mes_count': meta['craque_mes_count'] ?? 1,
           'goals': g,
           'assists': a,
           'ga': g + a,
@@ -453,10 +475,16 @@ class _RankingScreenState extends State<RankingScreen> {
     gkStats.forEach((id, data) {
       final int games = data['gk_games'] as int;
       if (games > 0) {
+        final meta = playerMetaMap[id] ?? playerMetaMap[nameToIdMap[id]] ?? {};
         sortedGkList.add({
           'id': id,
           'name': data['name'],
           'icon': iconMap[id],
+          'name_effect': meta['name_effect'],
+          'monthly_highlight': meta['monthly_highlight'] == true,
+          'manual_badges': meta['manual_badges'] ?? [],
+          'advanced_stats': meta['advanced_stats'] ?? {},
+          'craque_mes_count': meta['craque_mes_count'] ?? 1,
           'games': games,
           'conceded': data['gk_conceded'],
           'clean_sheets': data['gk_clean_sheets'],
@@ -1358,12 +1386,17 @@ class _RankingScreenState extends State<RankingScreen> {
             )
           : null,
     );
-    // Ring/selo de craque do mês: só aplicado quando `highlight` é passado
-    // explicitamente (pódio, top 3) -- nunca nas listas compactas.
-    if (!highlight) return avatar;
-    return MonthlyHighlightAvatarRing(
-      avatar: avatar,
-      highlighted: p['monthly_highlight'] == true,
+
+    final frame = resolvePlayerFrame(p);
+    if (frame.type == PlayerFrameType.none) {
+      return avatar;
+    }
+
+    return PlayerAvatarFrame(
+      frame: frame,
+      compact: !highlight,
+      isCircular: true,
+      child: avatar,
     );
   }
 

@@ -1,24 +1,52 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/session_model.dart';
+import '../services/cache_store.dart';
 
 /// Repository for sessions ("peladas") integrated with Supabase PostgreSQL.
 class SessionsRepository {
   final SupabaseClient _client;
+  final CacheStore _cache;
 
-  SessionsRepository({SupabaseClient? client})
-      : _client = client ?? supabase;
+  SessionsRepository({SupabaseClient? client, CacheStore? cache})
+      : _client = client ?? supabase,
+        _cache = cache ?? CacheStore();
+
+  static const Duration _netTimeout = Duration(seconds: 8);
+
+  /// Última versão conhecida da pelada, SEM rede. É o que a tela da partida
+  /// usa pra abrir na hora (limite de vitórias, duração, modo de sorteio).
+  Future<SessionModel?> getCachedSession(String sessionId) async {
+    final cached = await _cache.read('session:$sessionId');
+    final v = cached?.value;
+    if (v is Map) return SessionModel.fromMap(Map<String, dynamic>.from(v));
+    return null;
+  }
+
+  Future<void> _cacheRow(Map<String, dynamic> row) async {
+    final id = row['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    await _cache.write('session:$id', row);
+  }
 
   /// Returns a specific session by its id, or null if it doesn't exist.
   Future<SessionModel?> getSessionById(String sessionId) async {
-    final response = await _client
-        .from('sessions')
-        .select()
-        .eq('id', sessionId)
-        .maybeSingle();
+    try {
+      final response = await _client
+          .from('sessions')
+          .select()
+          .eq('id', sessionId)
+          .maybeSingle()
+          .timeout(_netTimeout);
 
-    if (response == null) return null;
-    return SessionModel.fromMap(Map<String, dynamic>.from(response));
+      if (response == null) return null;
+      final row = Map<String, dynamic>.from(response);
+      await _cacheRow(row);
+      return SessionModel.fromMap(row);
+    } catch (_) {
+      // Sem rede / rede ruim: usa a última versão salva.
+      return getCachedSession(sessionId);
+    }
   }
 
   /// Returns the sessions of a given season.
@@ -40,16 +68,31 @@ class SessionsRepository {
   /// dropped any session without a season_id, hiding old/imported sessions
   /// that never had a season linked.)
   Future<List<SessionModel>> getSessionsByGroup(String groupId) async {
-    final response = await _client
-        .from('sessions')
-        .select()
-        .eq('group_id', groupId)
-        .order('session_date', ascending: false);
+    final listKey = 'sessions:group:$groupId';
+    try {
+      final response = await _client
+          .from('sessions')
+          .select()
+          .eq('group_id', groupId)
+          .order('session_date', ascending: false)
+          .timeout(_netTimeout);
 
-    return (response as List)
-        .whereType<Map>()
-        .map((item) => SessionModel.fromMap(Map<String, dynamic>.from(item)))
-        .toList();
+      final rows = (response as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      await _cache.write(listKey, rows);
+      for (final r in rows) {
+        await _cacheRow(r);
+      }
+      return rows.map(SessionModel.fromMap).toList();
+    } catch (e) {
+      final cached = await _cache.read(listKey);
+      if (cached != null) {
+        return cached.asMapList().map(SessionModel.fromMap).toList();
+      }
+      rethrow;
+    }
   }
 
   /// Creates a new session linked to a season.
@@ -60,7 +103,9 @@ class SessionsRepository {
         .select()
         .single();
 
-    return SessionModel.fromMap(Map<String, dynamic>.from(response));
+    final row = Map<String, dynamic>.from(response);
+    await _cacheRow(row);
+    return SessionModel.fromMap(row);
   }
 
   /// Updates the status, title, or settings of a session.
@@ -72,7 +117,11 @@ class SessionsRepository {
         .select()
         .single();
 
-    return SessionModel.fromMap(Map<String, dynamic>.from(response));
+    // Atualiza o cache NA HORA: era aqui que a tela da partida ficava com o
+    // limite de vitórias / duração antigos depois de editar a pelada.
+    final row = Map<String, dynamic>.from(response);
+    await _cacheRow(row);
+    return SessionModel.fromMap(row);
   }
 
   /// Incrementally persists the "live" state of a session that is still

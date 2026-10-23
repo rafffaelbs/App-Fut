@@ -2,11 +2,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../constants/app_colors.dart';
 import '../repositories/supabase_service.dart';
+import '../utils/constants.dart';
 import '../widgets/shared/player_name_text.dart';
+import '../widgets/shared/player_avatar_frame.dart';
 
 class ManageBadgesScreen extends StatefulWidget {
   final String groupId;
@@ -92,6 +93,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
               'goal_sound_url': j.goalSoundUrl,
               'name_effect': j.nameEffect,
               'monthly_highlight': j.monthlyHighlight,
+              'advanced_stats': j.advancedStats,
             },
           )
           .toList();
@@ -115,53 +117,191 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     setState(() => _isLoading = false);
   }
 
-  Future<void> _pickAndUploadGoalSound(String playerId) async {
+  /// Define o áudio customizado de gol para um jogador a partir dos assets locais.
+  Future<void> _setGoalAudioForPlayer(String playerId, String? audioFile) async {
     if (!_isAdmin) return;
+    setState(() => _uploadingPlayerId = playerId);
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _allowedAudioExtensions,
-        withData: true,
-      );
-      if (result == null || result.files.single.bytes == null) return;
-
-      final file = result.files.single;
-      if (file.size > _maxAudioSizeBytes) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Áudio muito grande. Máximo de 2MB.")),
-          );
-        }
-        return;
-      }
-
-      setState(() => _uploadingPlayerId = playerId);
-
-      final updated = await SupabaseService.instance.players.uploadGoalSound(
-        groupId: widget.groupId,
+      final updated = await SupabaseService.instance.players.setGoalSound(
         playerId: playerId,
-        fileBytes: file.bytes!,
-        fileExtension: file.extension ?? 'mp3',
+        audioFileName: audioFile,
+        groupId: widget.groupId,
       );
-
       setState(() {
         final idx = _allPlayers.indexWhere((p) => p['id'] == playerId);
         if (idx != -1) _allPlayers[idx]['goal_sound_url'] = updated.goalSoundUrl;
         _uploadingPlayerId = null;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              audioFile != null
+                  ? "Áudio salvo: ${getGoalAudioLabel(audioFile)}"
+                  : "Áudio redefinido para o padrão",
+            ),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _uploadingPlayerId = null);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro ao enviar áudio: $e")),
+          SnackBar(content: Text("Erro ao salvar áudio: $e")),
         );
       }
     }
   }
 
-  /// Abre o card de busca (mesmo padrão de "Adicionar Jogadores" da partida)
-  /// pra escolher UM jogador que ainda não tem áudio, e já dispara o upload.
+  /// Abre modal para escolher qual áudio da pasta assets/audio atribuir ao jogador.
+  void _showAudioPickerModal(String playerId, String playerName) {
+    if (!_isAdmin) return;
+    final currentPlayer = _allPlayers.firstWhere(
+      (p) => p['id'] == playerId,
+      orElse: () => {},
+    );
+    final String? currentAudio = currentPlayer['goal_sound_url']?.toString();
+    String? playingFile;
+    final localPlayer = AudioPlayer();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppColors.headerBlue,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Text(
+                  "Som de Gol: $playerName",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Escolha um áudio da pasta de assets para tocar no gol deste jogador.",
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: availableGoalAudios.length,
+                    separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                    itemBuilder: (c, idx) {
+                      final item = availableGoalAudios[idx];
+                      final file = item['file']!;
+                      final label = item['label']!;
+                      final isSelected = currentAudio == file;
+                      final isPlayingThis = playingFile == file;
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: IconButton(
+                          icon: Icon(
+                            isPlayingThis ? Icons.stop_circle : Icons.play_circle_fill,
+                            color: Colors.amber,
+                            size: 28,
+                          ),
+                          onPressed: () async {
+                            if (isPlayingThis) {
+                              await localPlayer.stop();
+                              setModalState(() => playingFile = null);
+                            } else {
+                              await localPlayer.stop();
+                              setModalState(() => playingFile = file);
+                              await localPlayer.play(AssetSource('audio/$file'));
+                              localPlayer.onPlayerComplete.first.then((_) {
+                                if (ctx.mounted) {
+                                  setModalState(() => playingFile = null);
+                                }
+                              });
+                            }
+                          },
+                        ),
+                        title: Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected ? Colors.amber : Colors.white,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Text(
+                          file,
+                          style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle, color: Colors.amber)
+                            : const Icon(Icons.chevron_right, color: Colors.white24),
+                        onTap: () {
+                          localPlayer.stop();
+                          localPlayer.dispose();
+                          Navigator.pop(ctx);
+                          _setGoalAudioForPlayer(playerId, file);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                if (currentAudio != null && currentAudio.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        foregroundColor: Colors.redAccent,
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text("Remover Áudio (Usar Padrão)"),
+                      onPressed: () {
+                        localPlayer.stop();
+                        localPlayer.dispose();
+                        Navigator.pop(ctx);
+                        _setGoalAudioForPlayer(playerId, null);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      localPlayer.stop();
+      localPlayer.dispose();
+    });
+  }
+
+  /// Abre o card de busca para escolher UM jogador que ainda não tem áudio customizado.
   void _showPickPlayerForAudioDialog() {
+    if (!_isAdmin) return;
     final candidates = _allPlayers
         .where((p) => (p['goal_sound_url'] as String?)?.isNotEmpty != true)
         .toList()
@@ -236,7 +376,10 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                               ),
                               onTap: () {
                                 Navigator.pop(c);
-                                _pickAndUploadGoalSound(filtered[i]['id'].toString());
+                                _showAudioPickerModal(
+                                  filtered[i]['id'].toString(),
+                                  filtered[i]['name']?.toString() ?? 'Jogador',
+                                );
                               },
                             ),
                           ),
@@ -258,22 +401,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
 
   Future<void> _removeGoalSound(String playerId) async {
     if (!_isAdmin) return;
-    try {
-      final updated = await SupabaseService.instance.players.clearGoalSound(
-        groupId: widget.groupId,
-        playerId: playerId,
-      );
-      setState(() {
-        final idx = _allPlayers.indexWhere((p) => p['id'] == playerId);
-        if (idx != -1) _allPlayers[idx]['goal_sound_url'] = updated.goalSoundUrl;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro ao remover áudio: $e")),
-        );
-      }
-    }
+    await _setGoalAudioForPlayer(playerId, null);
   }
 
   Future<void> _setNameEffect(String playerId, String? effect) async {
@@ -300,6 +428,42 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
   }
 
+  Future<void> _setAdvancedStat(String playerId, Map<String, dynamic> patch) async {
+    if (!_isAdmin) return;
+    setState(() => _savingEffectPlayerId = playerId);
+    try {
+      final updated = await SupabaseService.instance.players.setAdvancedStat(
+        groupId: widget.groupId,
+        playerId: playerId,
+        patch: patch,
+      );
+      setState(() {
+        final idx = _allPlayers.indexWhere((p) => p['id'] == playerId);
+        if (idx != -1) {
+          _allPlayers[idx]['advanced_stats'] = updated.advancedStats;
+        }
+        _savingEffectPlayerId = null;
+      });
+    } catch (e) {
+      setState(() => _savingEffectPlayerId = null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar: $e')),
+        );
+      }
+    }
+  }
+
+  /// Resolve quantas vezes o jogador ganhou Craque do Mês a partir do mapa local.
+  int _resolveCraqueCountLocal(Map<String, dynamic> player) {
+    final advStats = player['advanced_stats'];
+    if (advStats is Map) {
+      final v = advStats['craque_mes_count'];
+      if (v is num) return v.toInt();
+    }
+    return 1;
+  }
+
   Future<void> _setMonthlyHighlight(String playerId, bool value) async {
     if (!_isAdmin) return;
     setState(() => _savingEffectPlayerId = playerId);
@@ -324,59 +488,190 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
   }
 
-  /// Mini card com rádio (nenhum/dourado/prata/bronze) + checkbox do selo
-  /// de craque do mês, pra um jogador já escolhido. Reaberto tanto a partir
-  /// da lista (editar) quanto do card de busca (novo).
+  /// Mini card de configuração de efeitos com:
+  /// - Bola de Ouro (exclusivo para 1 jogador)
+  /// - Efeitos de nome com molduras correspondentes (Ouro, Diamante, Fogo, Prata, Bronze)
+  /// - Craque do Mês com seletor de 1x–6x vitórias
   void _showEffectConfigDialog(Map<String, dynamic> player) {
     final String playerId = player['id'].toString();
-    String? selectedEffect = player['name_effect'] as String?;
+
+    // Detecta efeito atual: nome base (gold/silver/bronze) OU extra (fire/diamond)
+    final advStats = player['advanced_stats'];
+    final extraEffect = advStats is Map ? advStats['name_effect_extra']?.toString() : null;
+    String? selectedEffect = extraEffect?.isNotEmpty == true
+        ? extraEffect
+        : player['name_effect'] as String?;
+    bool isBolaDeOuro = advStats is Map && advStats['bola_de_ouro'] == true;
     bool monthlyHighlight = player['monthly_highlight'] == true;
+    int craqueCount = _resolveCraqueCountLocal(player);
 
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, st) {
-          Widget effectRadio(String? value, String label, Color? swatch) {
+          Widget effectRadio(String? value, String label, Color? swatch, String desc) {
             return RadioListTile<String?>(
               value: value,
               groupValue: selectedEffect,
               activeColor: swatch ?? Colors.amber,
-              title: Text(label, style: const TextStyle(color: Colors.white)),
+              title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: Text(desc, style: const TextStyle(color: Colors.white54, fontSize: 11)),
               onChanged: (v) => st(() => selectedEffect = v),
             );
           }
 
           return AlertDialog(
             backgroundColor: AppColors.headerBlue,
-            title: Text(
-              player['name']?.toString() ?? 'Jogador',
-              style: const TextStyle(color: Colors.white),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    player['name']?.toString() ?? 'Jogador',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
             content: SizedBox(
               width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  effectRadio(null, "Nenhum efeito", Colors.white54),
-                  effectRadio('gold', "Nome dourado (bola de ouro)", PlayerNameEffectColors.gold),
-                  effectRadio('silver', "Nome prata (artilheiro/garçom)", PlayerNameEffectColors.silver),
-                  effectRadio('bronze', "Nome bronze", PlayerNameEffectColors.bronze),
-                  const Divider(color: Colors.white12),
-                  CheckboxListTile(
-                    value: monthlyHighlight,
-                    activeColor: PlayerNameEffectColors.gold,
-                    title: const Text(
-                      "Selo de craque do mês",
-                      style: TextStyle(color: Colors.white),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 👑 BOLA DE OURO (Melhor da Temporada - Exclusivo)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isBolaDeOuro
+                            ? Colors.amber.withValues(alpha: 0.15)
+                            : Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isBolaDeOuro ? Colors.amber : Colors.white12,
+                          width: isBolaDeOuro ? 1.5 : 1,
+                        ),
+                      ),
+                      child: SwitchListTile(
+                        value: isBolaDeOuro,
+                        activeColor: Colors.amber,
+                        title: const Text(
+                          "👑 Bola de Ouro",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          "Melhor da temporada (Coroa real + moldura nobre dourada)",
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                        onChanged: (v) {
+                          st(() {
+                            isBolaDeOuro = v;
+                            if (v && selectedEffect == null) {
+                              selectedEffect = 'gold';
+                            }
+                          });
+                        },
+                      ),
                     ),
-                    subtitle: const Text(
-                      "Ring dourado + estrela, só no pódio do ranking",
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
+
+                    const SizedBox(height: 8),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Text(
+                        "Efeito de Nome e Moldura",
+                        style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
-                    onChanged: (v) => st(() => monthlyHighlight = v ?? false),
-                  ),
-                ],
+
+                    // Ordem lógica e hierárquica dos efeitos:
+                    effectRadio(null, "Padrão (Sem efeito)", Colors.white54, "Sem contorno ou brilho extra"),
+                    effectRadio('diamond', "Diamante 💎", PlayerNameEffectColors.diamond, "Ciano cristalino (Jogador Lendário / MVP)"),
+                    effectRadio('gold', "Dourado 🏆", PlayerNameEffectColors.gold, "Ouro reluzente (Campeão / Destaque)"),
+                    effectRadio('fire', "Fogo 🔥", PlayerNameEffectColors.fire, "Chamas vivas (Artilheiro da temporada)"),
+                    effectRadio('silver', "Prata 🥈", PlayerNameEffectColors.silver, "Cromo prateado (Vice-artilheiro / Garçom)"),
+                    effectRadio('bronze', "Bronze 🥉", PlayerNameEffectColors.bronze, "Cobre nobre (3º colocado / Revelação)"),
+
+                    const Divider(color: Colors.white12),
+
+                    // Craque do Mês
+                    CheckboxListTile(
+                      value: monthlyHighlight,
+                      activeColor: const Color(0xFF00E5FF),
+                      title: const Text(
+                        "Craque do Mês 🏅",
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        "Moldura safira + estrelas cumulativas no card",
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      onChanged: (v) => st(() => monthlyHighlight = v ?? false),
+                    ),
+
+                    // Seletor de quantidade (1x a 6x)
+                    if (monthlyHighlight) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Quantas vezes ganhou?",
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: List.generate(6, (i) {
+                                final n = i + 1;
+                                final selected = craqueCount == n;
+                                return GestureDetector(
+                                  onTap: () => st(() => craqueCount = n),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? const Color(0xFF2979FF)
+                                          : AppColors.deepBlue,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: selected
+                                            ? const Color(0xFF00E5FF)
+                                            : Colors.white24,
+                                        width: selected ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '$n',
+                                          style: TextStyle(
+                                            color: selected ? Colors.white : Colors.white54,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.star_rounded,
+                                          color: selected
+                                              ? const Color(0xFFFFD700)
+                                              : Colors.white24,
+                                          size: 13,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -388,9 +683,52 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
                 onPressed: () async {
                   Navigator.pop(c);
-                  if (selectedEffect != player['name_effect']) {
-                    await _setNameEffect(playerId, selectedEffect);
+
+                  // 1. Se marcou bola de ouro, remove dos outros jogadores para ser exclusivo
+                  if (isBolaDeOuro) {
+                    for (final p in _allPlayers) {
+                      final otherId = p['id'].toString();
+                      if (otherId != playerId) {
+                        final otherAdv = p['advanced_stats'];
+                        if (otherAdv is Map && otherAdv['bola_de_ouro'] == true) {
+                          await _setAdvancedStat(otherId, {'bola_de_ouro': false});
+                        }
+                      }
+                    }
                   }
+
+                  // 2. Determina se o efeito vai no name_effect (gold/silver/bronze)
+                  // ou em advanced_stats.name_effect_extra (fire/diamond)
+                  final baseEffects = {'gold', 'silver', 'bronze'};
+                  final isBaseEffect = selectedEffect != null && baseEffects.contains(selectedEffect);
+                  final isExtraEffect = selectedEffect != null && !baseEffects.contains(selectedEffect);
+
+                  final newBaseEffect = isBaseEffect ? selectedEffect : null;
+                  final currentBaseEffect = player['name_effect'] as String?;
+                  if (newBaseEffect != currentBaseEffect) {
+                    await _setNameEffect(playerId, newBaseEffect);
+                  }
+
+                  // 3. Salva advanced_stats (name_effect_extra, craque_mes_count, bola_de_ouro)
+                  final newExtra = isExtraEffect ? selectedEffect : null;
+                  final currentExtra = extraEffect;
+                  final newCount = monthlyHighlight ? craqueCount : null;
+                  final currentCount = player['monthly_highlight'] == true
+                      ? _resolveCraqueCountLocal(player)
+                      : null;
+                  final currentBolaDeOuro = advStats is Map && advStats['bola_de_ouro'] == true;
+
+                  if (newExtra != currentExtra ||
+                      newCount != currentCount ||
+                      isBolaDeOuro != currentBolaDeOuro) {
+                    await _setAdvancedStat(playerId, {
+                      'name_effect_extra': newExtra,
+                      'craque_mes_count': newCount,
+                      'bola_de_ouro': isBolaDeOuro,
+                    });
+                  }
+
+                  // 4. Salva monthly_highlight
                   if (monthlyHighlight != (player['monthly_highlight'] == true)) {
                     await _setMonthlyHighlight(playerId, monthlyHighlight);
                   }
@@ -493,9 +831,14 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
 
     final withEffect = _allPlayers
-        .where((p) =>
-            (p['name_effect'] as String?)?.isNotEmpty == true ||
-            p['monthly_highlight'] == true)
+        .where((p) {
+          final adv = p['advanced_stats'];
+          final hasExtra = adv is Map && adv['name_effect_extra'] != null;
+          final hasBolaOuro = adv is Map && adv['bola_de_ouro'] == true;
+          final hasNameEffect = (p['name_effect'] as String?)?.isNotEmpty == true;
+          final isCraqueMes = p['monthly_highlight'] == true;
+          return hasExtra || hasBolaOuro || hasNameEffect || isCraqueMes;
+        })
         .toList()
       ..sort((a, b) => (a['name']?.toString() ?? '')
           .toLowerCase()
@@ -546,10 +889,28 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                       itemBuilder: (ctx, i) {
                         final player = withEffect[i];
                         final String playerId = player['id'].toString();
-                        final String? effect = player['name_effect'] as String?;
+                        // Efeito completo: base (gold/silver/bronze) ou extra (fire/diamond de advanced_stats)
+                        final advStats = player['advanced_stats'];
+                        final extraEffect = advStats is Map ? advStats['name_effect_extra']?.toString() : null;
+                        final String? effect = (extraEffect?.isNotEmpty == true)
+                            ? extraEffect
+                            : player['name_effect'] as String?;
                         final bool highlight = player['monthly_highlight'] == true;
                         final bool isSaving = _savingEffectPlayerId == playerId;
                         final effectColor = PlayerNameEffectColors.forEffect(effect) ?? Colors.amber;
+                        final frame = resolvePlayerFrame(player);
+                        final craqueCount = _resolveCraqueCountLocal(player);
+
+                        String effectLabel(String? e) {
+                          switch (e) {
+                            case 'gold': return 'Dourado';
+                            case 'silver': return 'Prata';
+                            case 'bronze': return 'Bronze';
+                            case 'fire': return '🔥 Fogo';
+                            case 'diamond': return '💎 Diamante';
+                            default: return e ?? '';
+                          }
+                        }
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -557,13 +918,23 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                           decoration: BoxDecoration(
                             color: AppColors.headerBlue,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: effectColor.withOpacity(0.4)),
+                            border: Border.all(color: effectColor.withValues(alpha: 0.4)),
                           ),
                           child: ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: CircleAvatar(
-                              backgroundColor: effectColor.withOpacity(0.15),
-                              child: Icon(Icons.auto_awesome, color: effectColor),
+                            leading: PlayerAvatarFrame(
+                              frame: frame,
+                              compact: true,
+                              isCircular: true,
+                              child: CircleAvatar(
+                                backgroundColor: effectColor.withValues(alpha: 0.15),
+                                backgroundImage: (player['icon'] != null && (player['icon'] as String).isNotEmpty)
+                                    ? AssetImage(player['icon'] as String)
+                                    : null,
+                                child: (player['icon'] == null || (player['icon'] as String).isEmpty)
+                                    ? Icon(Icons.auto_awesome, color: effectColor, size: 18)
+                                    : null,
+                              ),
                             ),
                             title: PlayerNameText(
                               name: player['name']?.toString() ?? 'Jogador',
@@ -572,10 +943,15 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                             ),
                             subtitle: Text(
                               [
-                                if (effect != null) "Nome: ${effect == 'gold' ? 'Dourado' : effect == 'silver' ? 'Prata' : 'Bronze'}",
-                                if (highlight) "Craque do mês",
-                              ].join(' • '),
-                              style: TextStyle(color: effectColor.withOpacity(0.9), fontSize: 12),
+                                if (advStats is Map && advStats['bola_de_ouro'] == true) '👑 Bola de Ouro (Melhor da Temporada)',
+                                if (effect != null) 'Nome: ${effectLabel(effect)}',
+                                if (highlight)
+                                  craqueCount > 1
+                                      ? 'Craque do Mês (${craqueCount}x ⭐)'
+                                      : 'Craque do Mês ⭐',
+                                if (frame.type == PlayerFrameType.artilheiro) '🔥 Artilheiro',
+                              ].toSet().join(' • '),
+                              style: TextStyle(color: effectColor.withValues(alpha: 0.9), fontSize: 12),
                             ),
                             trailing: isSaving
                                 ? const SizedBox(
@@ -610,7 +986,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     );
   }
 
-  Future<void> _togglePreview(String playerId, String url) async {
+  Future<void> _togglePreview(String playerId, String soundRef) async {
     if (_playingPreviewId == playerId) {
       await _previewPlayer.stop();
       setState(() => _playingPreviewId = null);
@@ -618,7 +994,11 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
     await _previewPlayer.stop();
     setState(() => _playingPreviewId = playerId);
-    await _previewPlayer.play(UrlSource(url));
+    if (soundRef.startsWith('http://') || soundRef.startsWith('https://')) {
+      await _previewPlayer.play(UrlSource(soundRef));
+    } else {
+      await _previewPlayer.play(AssetSource('audio/$soundRef'));
+    }
     _previewPlayer.onPlayerComplete.first.then((_) {
       if (mounted) setState(() => _playingPreviewId = null);
     });
@@ -848,8 +1228,8 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                   Expanded(
                     child: Text(
                       _isAdmin
-                          ? "Jogadores com áudio de comemoração próprio (MP3/WAV/OGG/M4A, até 2MB). Quem não estiver aqui usa o som padrão do gol."
-                          : "Somente administradores podem alterar os áudios de gol.",
+                          ? "Jogadores com áudio de comemoração configurado (assets/audio). Quem não estiver aqui usa o som padrão do gol."
+                          : "Somente administradores podem alterar os áudios de gol por esta tela.",
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
@@ -903,7 +1283,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                               ),
                             ),
                             subtitle: Text(
-                              "Áudio customizado definido",
+                              getGoalAudioLabel(soundUrl),
                               style: TextStyle(color: Colors.amber.shade200, fontSize: 12),
                             ),
                             trailing: isUploading
@@ -929,7 +1309,10 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                         IconButton(
                                           icon: const Icon(Icons.swap_horiz, color: Colors.white70),
                                           tooltip: "Trocar áudio",
-                                          onPressed: () => _pickAndUploadGoalSound(playerId),
+                                          onPressed: () => _showAudioPickerModal(
+                                            playerId,
+                                            player['name']?.toString() ?? 'Jogador',
+                                          ),
                                         ),
                                       if (_isAdmin)
                                         IconButton(

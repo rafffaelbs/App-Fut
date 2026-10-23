@@ -5,12 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../models/season_model.dart';
 import '../models/player_badge_model.dart';
 import '../repositories/supabase_service.dart';
+import '../config/supabase_config.dart';
+import '../utils/constants.dart';
 import '../utils/player_identity.dart';
+import '../utils/overall_calculator.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
+import '../widgets/player/fifa_card.dart';
 import '../widgets/shared/icon_picker_modal.dart';
 import 'player_comparison_screen.dart';
 
@@ -40,6 +45,17 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   int totalPlayers = 0;
   String playerName = '';
   String? resolvedIcon;
+  String? _pendingIcon;
+  bool _isSavingIcon = false;
+  String? _creatorId;
+  String? _goalSoundUrl;
+  bool _isSavingAudio = false;
+
+  bool get _canEditProfile {
+    if (_isAdmin) return true;
+    final currentUserId = SupabaseConfig.currentUserId;
+    return currentUserId != null && _creatorId != null && currentUserId == _creatorId;
+  }
 
   // ── Filtro de período ────────────────────────────────────────
   // Afeta TODOS os dados da tela (nota, ranking, stats, gráfico, avançadas).
@@ -77,6 +93,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   bool _showRadarChart = true;
   bool _isAdmin = false;
+
+  /// Atributos da comunidade (PAC/SHO/PAS/DRI/DEF/PHY + override).
+  CommunityAttributes _community = CommunityAttributes.empty;
 
   @override
   void initState() {
@@ -117,7 +136,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               'id': j.id,
               'name': j.name,
               'icon': j.avatarUrl,
+              'creator_id': j.creatorId,
+              'goal_sound_url': j.goalSoundUrl,
               'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
+              'community': j.community,
             },
           )
           .toList();
@@ -197,11 +219,16 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       defaultPeriodKey = activeSeason.id;
     }
 
+    _community =
+        (player?['community'] as CommunityAttributes?) ?? CommunityAttributes.empty;
+
     _rawHistory = rawHistory;
     _allSeasons = seasons;
     _allPlayers = players;
     resolvedIcon = icon;
     playerName = resolvedName;
+    _creatorId = player?['creator_id']?.toString();
+    _goalSoundUrl = player?['goal_sound_url']?.toString();
     _selectedPeriodKey = defaultPeriodKey;
 
     _applyFilter();
@@ -972,21 +999,227 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _savePlayerIcon(String iconPath) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'players_${widget.groupId}';
-    if (!prefs.containsKey(key)) return;
-    final players = ensurePlayerIds(
-      List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(key)!)),
-    );
-    final int index = players.indexWhere(
-      (p) => (p['id'] ?? '').toString() == widget.playerId,
-    );
-    if (index == -1) return;
-    players[index]['icon'] = iconPath;
-    await prefs.setString(key, jsonEncode(players));
-    setState(() {
-      resolvedIcon = iconPath;
-      _allPlayers = players; // Update stored list for takenIcons logic
+    setState(() => _isSavingIcon = true);
+    try {
+      // 1. Persistir no Supabase
+      await SupabaseService.instance.players.setPlayerIcon(
+        playerId: widget.playerId,
+        iconPath: iconPath,
+      );
+
+      // 2. Persistir no cache local
+      final prefs = await SharedPreferences.getInstance();
+      final String key = 'players_${widget.groupId}';
+      if (prefs.containsKey(key)) {
+        final players = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(key)!)),
+        );
+        final int index = players.indexWhere(
+          (p) => (p['id'] ?? '').toString() == widget.playerId,
+        );
+        if (index != -1) {
+          players[index]['icon'] = iconPath;
+          await prefs.setString(key, jsonEncode(players));
+        }
+      }
+
+      setState(() {
+        resolvedIcon = iconPath;
+        _pendingIcon = null;
+        _isSavingIcon = false;
+        final idx = _allPlayers.indexWhere((p) => p['id'] == widget.playerId);
+        if (idx != -1) _allPlayers[idx]['icon'] = iconPath;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Ícone atualizado com sucesso!")),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSavingIcon = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao salvar ícone: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveGoalSound(String? audioFile) async {
+    setState(() => _isSavingAudio = true);
+    try {
+      final updated = await SupabaseService.instance.players.setGoalSound(
+        playerId: widget.playerId,
+        audioFileName: audioFile,
+        groupId: widget.groupId,
+      );
+
+      setState(() {
+        _goalSoundUrl = updated.goalSoundUrl;
+        _isSavingAudio = false;
+        final idx = _allPlayers.indexWhere((p) => p['id'] == widget.playerId);
+        if (idx != -1) _allPlayers[idx]['goal_sound_url'] = updated.goalSoundUrl;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              audioFile != null
+                  ? "Som de gol salvo: ${getGoalAudioLabel(audioFile)}"
+                  : "Som de gol redefinido para o padrão",
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSavingAudio = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao salvar som de gol: $e")),
+        );
+      }
+    }
+  }
+
+  void _showAudioPickerModal() {
+    if (!_canEditProfile) return;
+    String? playingFile;
+    final localPlayer = AudioPlayer();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppColors.headerBlue,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Text(
+                  "Escolher Som de Gol",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Selecione o som que tocará quando você marcar um gol na partida.",
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: availableGoalAudios.length,
+                    separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                    itemBuilder: (c, idx) {
+                      final item = availableGoalAudios[idx];
+                      final file = item['file']!;
+                      final label = item['label']!;
+                      final isSelected = _goalSoundUrl == file;
+                      final isPlayingThis = playingFile == file;
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: IconButton(
+                          icon: Icon(
+                            isPlayingThis ? Icons.stop_circle : Icons.play_circle_fill,
+                            color: Colors.amber,
+                            size: 28,
+                          ),
+                          onPressed: () async {
+                            if (isPlayingThis) {
+                              await localPlayer.stop();
+                              setModalState(() => playingFile = null);
+                            } else {
+                              await localPlayer.stop();
+                              setModalState(() => playingFile = file);
+                              await localPlayer.play(AssetSource('audio/$file'));
+                              localPlayer.onPlayerComplete.first.then((_) {
+                                if (ctx.mounted) {
+                                  setModalState(() => playingFile = null);
+                                }
+                              });
+                            }
+                          },
+                        ),
+                        title: Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected ? Colors.amber : Colors.white,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Text(
+                          file,
+                          style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle, color: Colors.amber)
+                            : const Icon(Icons.chevron_right, color: Colors.white24),
+                        onTap: () {
+                          localPlayer.stop();
+                          localPlayer.dispose();
+                          Navigator.pop(ctx);
+                          _saveGoalSound(file);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                if (_goalSoundUrl != null && _goalSoundUrl!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        foregroundColor: Colors.redAccent,
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text("Remover Som (Usar Padrão)"),
+                      onPressed: () {
+                        localPlayer.stop();
+                        localPlayer.dispose();
+                        Navigator.pop(ctx);
+                        _saveGoalSound(null);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      localPlayer.stop();
+      localPlayer.dispose();
     });
   }
 
@@ -1127,6 +1360,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // HELPERS VISUAIS
   // ─────────────────────────────────────────────────────────────
 
+  String _sg(double v) => v >= 0 ? '+${v.toStringAsFixed(1)}' : v.toStringAsFixed(1);
+
   void _showRatingBreakdown() {
     final double nota = (playerStats['nota'] ?? kRatingBase) as double;
 
@@ -1135,7 +1370,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.headerBlue,
         title: const Text(
-          'Composição da Nota',
+          'Composição da Nota do App',
           style: TextStyle(color: Colors.white),
         ),
         content: SingleChildScrollView(
@@ -1143,23 +1378,31 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'A sua nota é a média do seu desempenho em todas as partidas jogadas. Cada partida começa com uma Nota Base e sofre ajustes com base nos seus eventos em campo:',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+              Text(
+                'Cada partida começa com a Nota Base (${kRatingBase.toStringAsFixed(1)}) e recebe ajustes pelo que você fez em campo. A nota exibida é a média das suas últimas $kFormWindowGames partidas (com menos de $kFormAnchorGames jogos, ela é puxada para a base).',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              _buildBreakdownRow('Nota Base', '6.5', Colors.white),
-              _buildBreakdownRow('Gol Feito', '+0.9', AppColors.accentBlue),
-              _buildBreakdownRow('Assistência', '+0.8', AppColors.accentBlue),
-              _buildBreakdownRow('Vitória', '+1.5', AppColors.accentBlue),
-              _buildBreakdownRow('Derrota', '-1.5', Colors.redAccent),
-              _buildBreakdownRow('Cartão Amarelo', '-1.0', Colors.yellow),
-              _buildBreakdownRow('Cartão Vermelho', '-2.0', Colors.redAccent),
-              _buildBreakdownRow('Gol Contra', '-1.0', Colors.redAccent),
+              _buildBreakdownRow('Nota Base', kRatingBase.toStringAsFixed(1), Colors.white),
+              _buildBreakdownRow('Gol feito', _sg(kWeightGoal), AppColors.accentBlue),
+              _buildBreakdownRow('Assistência', _sg(kWeightAssist), AppColors.accentBlue),
+              _buildBreakdownRow('Vitória', _sg(kResultImpactWin), AppColors.accentBlue),
+              _buildBreakdownRow('Derrota', _sg(kResultImpactLoss), Colors.redAccent),
+              _buildBreakdownRow('Sequência de vitórias (2 / 3+)', '${_sg(kStreakBonus2Wins)} / ${_sg(kStreakBonus3PlusWins)}', AppColors.accentBlue),
+              _buildBreakdownRow('Saldo de gols (por gol)', '±${kGoalDiffImpact.toStringAsFixed(1)}', Colors.white70),
+              _buildBreakdownRow('Clean sheet', _sg(kBonusCleanSheet), AppColors.accentBlue),
+              _buildBreakdownRow('Gol sofrido (por gol)', _sg(kWeightConceded), Colors.redAccent),
+              _buildBreakdownRow('Hat-trick (3+ gols)', _sg(kBonusHatTrick), AppColors.accentBlue),
+              _buildBreakdownRow('3+ assistências', _sg(kBonusPlaymaker), AppColors.accentBlue),
+              _buildBreakdownRow('Gol da virada', _sg(kBonusComebackGoal), AppColors.accentBlue),
+              _buildBreakdownRow('Gol decisivo (fim de jogo)', _sg(kBonusClutchGoal), AppColors.accentBlue),
+              _buildBreakdownRow('Cartão amarelo', _sg(kWeightYellowCard), Colors.yellow),
+              _buildBreakdownRow('Cartão vermelho', _sg(kWeightRedCard), Colors.redAccent),
+              _buildBreakdownRow('Gol contra', _sg(kWeightOwnGoal), Colors.redAccent),
               const Divider(color: Colors.white24, height: 24),
-              const Text(
-                '* Nota Bayesiana: Penaliza ou bonifica levemente jogadores baseando-se no histórico.',
-                style: TextStyle(
+              Text(
+                '* Gols e assistências extras na mesma partida valem ${(kDiminishingDecay * 100).round()}% do anterior. Vitória de time mais fraco vale mais; de time favorito, menos.',
+                style: const TextStyle(
                   color: Colors.white54,
                   fontSize: 11,
                   fontStyle: FontStyle.italic,
@@ -1168,7 +1411,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               const SizedBox(height: 12),
               Center(
                 child: Text(
-                  'Sua Média Atual: ${nota.toStringAsFixed(1)}',
+                  'Sua Nota Atual: ${nota.toStringAsFixed(1)}',
                   style: const TextStyle(
                     color: AppColors.accentBlue,
                     fontSize: 18,
@@ -2707,6 +2950,502 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // BUILD
   // ─────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────
+  // ÍCONE
+  // ─────────────────────────────────────────────────────────────
+  void _openIconPicker() {
+    if (!_canEditProfile) return;
+    final effectiveIcon = _pendingIcon ?? resolvedIcon;
+    final List<String> takenIcons = _allPlayers
+        .map((p) => p['icon'] as String?)
+        .where((icon) => icon != null && icon != effectiveIcon)
+        .cast<String>()
+        .toList();
+    showIconPickerModal(
+      context: context,
+      takenIcons: takenIcons,
+      currentIcon: effectiveIcon,
+      onSelected: (path) {
+        setState(() => _pendingIcon = path);
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // NOTA DO APP + COMPOSIÇÃO DO OVERALL
+  // ─────────────────────────────────────────────────────────────
+  Widget _statTile(String label, String value, {Color? color}) {
+    return Container(
+      width: 96,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: AppColors.deepBlue,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color ?? Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _overallRow(String label, String detail, String value,
+      {Color valueColor = Colors.white, bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+                if (detail.isNotEmpty)
+                  Text(
+                    detail,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: bold ? 18 : 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverallSection(double nota, int overall) {
+    final int games = playerStats['games'] ?? 0;
+    final int wins = playerStats['wins'] ?? 0;
+    final int draws = playerStats['draws'] ?? 0;
+    final int losses = playerStats['losses'] ?? 0;
+    final int goals = playerStats['goals'] ?? 0;
+    final int assists = playerStats['assists'] ?? 0;
+    final int yellow = playerStats['yellow'] ?? 0;
+    final int red = playerStats['red'] ?? 0;
+
+    final double app100 = appRatingTo100(nota);
+    final double? comm = _community.communityRating;
+    final double commUsed = comm ?? kCommunityNeutral;
+    final Color notaColor = _getRatingColor(nota);
+
+    String commDetail;
+    if (_community.ratingOverride != null) {
+      commDetail = 'Valor informado diretamente pelo admin';
+    } else if (_community.average != null) {
+      commDetail = 'Média simples dos 6 atributos (PAC, SHO, PAS, DRI, DEF, PHY)';
+    } else {
+      commDetail = 'Ainda sem avaliação da comunidade: usando ${kCommunityNeutral.round()} (neutro)';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Nota do App ─────────────────────────────────
+          Row(
+            children: [
+              const Icon(Icons.analytics, color: AppColors.accentBlue),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Nota do App',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: _showRatingBreakdown,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: notaColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${nota.toStringAsFixed(1)} / 10',
+                        style: const TextStyle(
+                          color: AppColors.headerBlue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.info_outline,
+                          size: 14, color: AppColors.headerBlue),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Calculada automaticamente a partir dos números coletados nas partidas do período selecionado: resultados (vitórias, empates, derrotas), gols, assistências, cartões, gols contra, clean sheets, hat-tricks, gols da virada e gols decisivos.',
+            style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _statTile('Jogos', '$games'),
+              _statTile('Vitórias', '$wins', color: Colors.greenAccent),
+              _statTile('Empates', '$draws'),
+              _statTile('Derrotas', '$losses', color: Colors.redAccent),
+              _statTile('Gols', '$goals'),
+              _statTile('Assistências', '$assists', color: Colors.amber),
+              _statTile('Gols contra', '${advancedStats['ownGoals'] ?? 0}'),
+              _statTile('Amarelos', '$yellow', color: Colors.yellow),
+              _statTile('Vermelhos', '$red', color: Colors.redAccent),
+              _statTile('Clean sheets', '${advancedStats['cleanSheets'] ?? 0}'),
+              _statTile('Hat-tricks', '${advancedStats['hatTricks'] ?? 0}'),
+              _statTile('Gols da virada', '${advancedStats['comebackGoals'] ?? 0}'),
+              _statTile('Gols decisivos', '${advancedStats['clutchGoals'] ?? 0}'),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showRatingBreakdown,
+              icon: const Icon(Icons.help_outline, size: 16),
+              label: const Text('Ver quanto vale cada número'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.accentBlue,
+                padding: const EdgeInsets.symmetric(horizontal: 0),
+              ),
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 20),
+
+          // ── Composição do Overall ───────────────────────
+          const Row(
+            children: [
+              Icon(Icons.military_tech, color: Colors.amber),
+              SizedBox(width: 8),
+              Text(
+                'Como o Overall é calculado',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _overallRow(
+            'Nota do App × ${(kOverallAppWeight * 100).round()}%',
+            'Nota do App (${nota.toStringAsFixed(1)}) × 10 = ${app100.toStringAsFixed(0)}',
+            (app100 * kOverallAppWeight).toStringAsFixed(1),
+          ),
+          _overallRow(
+            'Nota da Comunidade × ${(kOverallCommunityWeight * 100).round()}%',
+            commDetail,
+            (commUsed * kOverallCommunityWeight).toStringAsFixed(1),
+          ),
+          const Divider(color: Colors.white12, height: 16),
+          _overallRow(
+            'Overall',
+            'Arredondado, de 0 a $kOverallMax',
+            '$overall',
+            valueColor: AppColors.highlightGreen,
+            bold: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ADMIN: EDITAR ATRIBUTOS DA COMUNIDADE
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _showEditCommunityDialog() async {
+    if (!_isAdmin) return;
+
+    final Map<String, TextEditingController> ctrls = {
+      for (final k in kAttributeKeys)
+        k: TextEditingController(text: _community.valueOf(k)?.toString() ?? ''),
+    };
+    final overrideCtrl = TextEditingController(
+      text: _community.ratingOverride != null
+          ? _community.ratingOverride!.toString()
+          : '',
+    );
+    final double nota = (playerStats['nota'] ?? kRatingBase) as double;
+    bool saving = false;
+    String? errorText;
+
+    // Lê o formulário. Retorna null (e preenche errorText) se houver valor inválido.
+    CommunityAttributes? readForm(void Function(String?) setError) {
+      final Map<String, int?> vals = {};
+      for (final k in kAttributeKeys) {
+        final txt = ctrls[k]!.text.trim();
+        if (txt.isEmpty) {
+          vals[k] = null;
+          continue;
+        }
+        final v = int.tryParse(txt);
+        if (v == null || v < 0 || v > 100) {
+          setError('${kAttributeLabels[k]}: use um número inteiro de 0 a 100.');
+          return null;
+        }
+        vals[k] = v;
+      }
+      double? ov;
+      final ovTxt = overrideCtrl.text.trim().replaceAll(',', '.');
+      if (ovTxt.isNotEmpty) {
+        ov = double.tryParse(ovTxt);
+        if (ov == null || ov < 0 || ov > 100) {
+          setError('Nota da comunidade (override): use um valor de 0 a 100.');
+          return null;
+        }
+      }
+      setError(null);
+      return CommunityAttributes(
+        pac: vals['pac'],
+        sho: vals['sho'],
+        pas: vals['pas'],
+        dri: vals['dri'],
+        def: vals['def'],
+        phy: vals['phy'],
+        ratingOverride: ov,
+      );
+    }
+
+    InputDecoration deco(String label, {String? hint}) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
+          hintStyle: const TextStyle(color: Colors.white24),
+          filled: true,
+          fillColor: AppColors.deepBlue.withValues(alpha: 0.6),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: AppColors.accentBlue.withValues(alpha: 0.7),
+            ),
+          ),
+        );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.headerBlue,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            // Prévia ao vivo (sem salvar nada)
+            String preview = '';
+            String? ignored;
+            final draft = readForm((e) => ignored = e);
+            if (draft != null) {
+              final c = draft.communityRating;
+              final ov = calculateOverall(appRating10: nota, community: draft);
+              preview = c != null
+                  ? 'Nota da Comunidade: ${c.toStringAsFixed(1)}  →  Overall: $ov'
+                  : 'Preencha os 6 atributos (ou o override) para calcular a Nota da Comunidade. Overall agora: $ov';
+            }
+
+            Widget field(String k) => Expanded(
+                  child: TextField(
+                    controller: ctrls[k],
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: deco('${kAttributeLabels[k]} · ${kAttributeDescriptions[k]}'),
+                    onChanged: (_) => setModal(() {}),
+                  ),
+                );
+
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                20 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Atributos da comunidade · $playerName',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Valores de 0 a 100. A Nota da Comunidade é a média dos 6 atributos.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(children: [field('pac'), const SizedBox(width: 10), field('dri')]),
+                    const SizedBox(height: 10),
+                    Row(children: [field('sho'), const SizedBox(width: 10), field('def')]),
+                    const SizedBox(height: 10),
+                    Row(children: [field('pas'), const SizedBox(width: 10), field('phy')]),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: overrideCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: deco(
+                        'Nota da Comunidade (override, opcional)',
+                        hint: 'Se preenchida, substitui a média',
+                      ),
+                      onChanged: (_) => setModal(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    if (preview.isNotEmpty)
+                      Text(
+                        preview,
+                        style: const TextStyle(
+                          color: AppColors.highlightGreen,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (errorText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          errorText!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: saving
+                              ? null
+                              : () {
+                                  for (final c in ctrls.values) {
+                                    c.clear();
+                                  }
+                                  overrideCtrl.clear();
+                                  setModal(() {});
+                                },
+                          child: const Text('Limpar',
+                              style: TextStyle(color: Colors.redAccent)),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: saving ? null : () => Navigator.pop(ctx),
+                          child: const Text('Cancelar',
+                              style: TextStyle(color: Colors.white54)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: saving
+                              ? null
+                              : () async {
+                                  final attrs = readForm((e) => errorText = e);
+                                  if (attrs == null) {
+                                    setModal(() {});
+                                    return;
+                                  }
+                                  setModal(() => saving = true);
+                                  try {
+                                    final updated = await SupabaseService
+                                        .instance.players
+                                        .setCommunityAttributes(
+                                      groupId: widget.groupId,
+                                      playerId: widget.playerId,
+                                      attributes: attrs,
+                                    );
+                                    if (mounted) {
+                                      setState(() => _community = updated.community);
+                                    }
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                  } catch (e) {
+                                    errorText = 'Erro ao salvar: $e';
+                                    setModal(() => saving = false);
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentBlue,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Salvar'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    for (final c in ctrls.values) {
+      c.dispose();
+    }
+    overrideCtrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final int wins = playerStats['wins'] ?? 0;
@@ -2717,10 +3456,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final String displayName = playerName.isNotEmpty
         ? playerName
         : (widget.initialPlayerName ?? 'Jogador');
-    final String initial = displayName.isNotEmpty
-        ? displayName[0].toUpperCase()
-        : '?';
-    final Color ratingColor = _getRatingColor(nota);
+    final int overall = calculateOverall(appRating10: nota, community: _community);
 
     final int goals = playerStats['goals'] ?? 0;
     final int assists = playerStats['assists'] ?? 0;
@@ -2754,7 +3490,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Player card ─────────────────────────────────
+                  // ── Card FIFA do jogador ────────────────────────
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -2764,100 +3500,72 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     ),
                     child: Column(
                       children: [
-                        GestureDetector(
-                          onTap: () {
-                            final List<String> takenIcons = _allPlayers
-                                .map((p) => p['icon'] as String?)
-                                .where(
-                                  (icon) =>
-                                      icon != null && icon != resolvedIcon,
-                                )
-                                .cast<String>()
-                                .toList();
-                            showIconPickerModal(
-                              context: context,
-                              takenIcons: takenIcons,
-                              currentIcon: resolvedIcon,
-                              onSelected: (path) => _savePlayerIcon(path),
-                            );
-                          },
-                          child: Stack(
-                            alignment: Alignment.topRight,
+                        SizedBox(
+                          width: 240,
+                          child: FifaCard(
+                            name: displayName,
+                            iconPath: _pendingIcon ?? resolvedIcon,
+                            overall: overall,
+                            attributes: _community,
+                            onIconTap: _canEditProfile ? _openIconPicker : null,
+                          ),
+                        ),
+                        if (_pendingIcon != null) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              CircleAvatar(
-                                radius: 36,
-                                backgroundColor: AppColors.deepBlue,
-                                child: resolvedIcon != null
-                                    ? ClipOval(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(6),
-                                          child: Image.asset(
-                                            resolvedIcon!,
-                                            fit: BoxFit.contain,
-                                          ),
-                                        ),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amber,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: _isSavingIcon
+                                    ? null
+                                    : () => _savePlayerIcon(_pendingIcon!),
+                                icon: _isSavingIcon
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                                       )
-                                    : Text(
-                                        initial,
-                                        style: const TextStyle(
-                                          color: AppColors.textWhite,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 26,
-                                        ),
-                                      ),
+                                    : const Icon(Icons.check, size: 18),
+                                label: Text(
+                                  _isSavingIcon ? "Salvando..." : "Salvar Ícone",
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
-                              GestureDetector(
-                                onTap: _showRatingBreakdown,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: ratingColor,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: AppColors.headerBlue,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        nota.toStringAsFixed(1),
-                                        style: const TextStyle(
-                                          color: AppColors.headerBlue,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(
-                                        Icons.info_outline,
-                                        size: 12,
-                                        color: AppColors.headerBlue,
-                                      ),
-                                    ],
-                                  ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: _isSavingIcon
+                                    ? null
+                                    : () => setState(() => _pendingIcon = null),
+                                child: const Text(
+                                  "Cancelar",
+                                  style: TextStyle(color: Colors.white70),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          displayName,
-                          style: const TextStyle(
-                            color: AppColors.textWhite,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        ],
+                        const SizedBox(height: 14),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
+                            if (_canEditProfile && _pendingIcon == null)
+                              OutlinedButton.icon(
+                                onPressed: _openIconPicker,
+                                icon: const Icon(Icons.photo_camera_front, size: 16),
+                                label: const Text('Mudar foto'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                  side: const BorderSide(color: Colors.white24),
+                                ),
+                              ),
                             OutlinedButton.icon(
                               onPressed: _showEditNameDialog,
                               icon: const Icon(Icons.edit, size: 16),
@@ -2867,7 +3575,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                 side: const BorderSide(color: Colors.white24),
                               ),
                             ),
-                            const SizedBox(width: 12),
                             OutlinedButton.icon(
                               onPressed: _showCompareModal,
                               icon: const Icon(Icons.compare_arrows, size: 16),
@@ -2879,9 +3586,78 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                 ),
                               ),
                             ),
+                            // Só admins veem o botão de editar os atributos.
+                            if (_isAdmin)
+                              OutlinedButton.icon(
+                                onPressed: _showEditCommunityDialog,
+                                icon: const Icon(Icons.tune, size: 16),
+                                label: const Text('Atributos'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.amber,
+                                  side: const BorderSide(color: Colors.amber),
+                                ),
+                              ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        if (_canEditProfile) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.deepBlue.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.music_note, color: Colors.amber, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Som de Gol",
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        getGoalAudioLabel(_goalSoundUrl),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _isSavingAudio
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.amber,
+                                        ),
+                                      )
+                                    : TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.amber,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                        icon: const Icon(Icons.edit, size: 14),
+                                        label: const Text("Alterar", style: TextStyle(fontSize: 12)),
+                                        onPressed: _showAudioPickerModal,
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
                         Text(
                           rankPosition != null
                               ? 'Ranking Histórico Geral: #$rankPosition / $totalPlayers'
@@ -2897,6 +3673,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
                   const SizedBox(height: 16),
                   _buildFilterBar(),
+
+                  const SizedBox(height: 16),
+                  _buildOverallSection(nota, overall),
 
                   const SizedBox(height: 16),
                   _buildBadgesSection(),

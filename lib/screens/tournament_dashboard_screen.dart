@@ -57,26 +57,37 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
       backgroundColor: AppColors.deepBlue,
       body: screens[_currentIndex], // Shows the active screen
 
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppColors.headerBlue,
-        selectedItemColor: AppColors.accentBlue,
-        unselectedItemColor: Colors.white54,
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.sports_soccer),
-            label: "Campo",
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.headerBlue,
+          border: Border(
+            top: BorderSide(color: AppColors.borderSubtle, width: 1),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.leaderboard),
-            label: "Ranking",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: "Histórico",
-          ),
-        ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: AppColors.headerBlue,
+          elevation: 0,
+          selectedItemColor: AppColors.accentBlue,
+          unselectedItemColor: AppColors.textDim,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontSize: 12),
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.sports_soccer),
+              label: "Campo",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.leaderboard),
+              label: "Ranking",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history),
+              label: "Histórico",
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
+import '../../utils/overall_calculator.dart';
 
 class PlayerFieldSlot extends StatelessWidget {
   final Map<String, dynamic>? player;
@@ -17,9 +18,7 @@ class PlayerFieldSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPlayer = player != null;
     final iconPath = hasPlayer ? player!['icon'] as String? : null;
-    final rating = hasPlayer && player!['rating'] != null
-        ? (player!['rating'] as num).toDouble()
-        : 0.0;
+    final rating = hasPlayer ? playerOverallOf(player!) : 0.0;
 
     return GestureDetector(
       onTap: onTap,
@@ -28,13 +27,13 @@ class PlayerFieldSlot extends StatelessWidget {
         decoration: BoxDecoration(
           color: hasPlayer
               ? (isRed
-                    ? Colors.black.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.25))
+                    ? AppColors.surfaceSubtle.withValues(alpha: 0.90)
+                    : AppColors.surfaceElevated.withValues(alpha: 0.90))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: hasPlayer
-                ? (isRed ? Colors.grey.withOpacity(0.5) : Colors.white54)
+                ? (isRed ? AppColors.redTeam.withValues(alpha: 0.5) : Colors.white24)
                 : Colors.white12,
             style: hasPlayer ? BorderStyle.solid : BorderStyle.none,
           ),
@@ -45,7 +44,7 @@ class PlayerFieldSlot extends StatelessWidget {
             CircleAvatar(
               radius: 18,
               backgroundColor: hasPlayer
-                  ? (isRed ? Colors.white.withOpacity(0.3) : Colors.white24)
+                  ? (isRed ? AppColors.redTeam.withValues(alpha: 0.25) : Colors.white12)
                   : Colors.black12,
               backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
               child: !hasPlayer
@@ -53,7 +52,7 @@ class PlayerFieldSlot extends StatelessWidget {
                   : (iconPath == null
                         ? Icon(
                             Icons.person,
-                            color: isRed ? Colors.black : Colors.white,
+                            color: isRed ? AppColors.redTeam : Colors.white,
                           )
                         : null),
             ),
@@ -78,9 +77,9 @@ class PlayerFieldSlot extends StatelessWidget {
                   ),
                   if (hasPlayer && rating > 0)
                     Text(
-                      "OVR: ${rating.toStringAsFixed(1)}",
-                      style: const TextStyle(
-                        color: Colors.amber,
+                      "OVR: ${rating.round()}",
+                      style: TextStyle(
+                        color: overallColor(rating),
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),

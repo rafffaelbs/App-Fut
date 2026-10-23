@@ -284,15 +284,15 @@ Widget _formField({
     controller: controller,
     enabled: enabled,
     keyboardType: keyboardType,
-    style: TextStyle(color: dimmed ? Colors.white38 : Colors.white),
+    style: TextStyle(color: dimmed ? AppColors.textDim : AppColors.textWhite),
     decoration: InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white54),
+      labelStyle: const TextStyle(color: AppColors.textMuted),
       enabledBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.white24),
+        borderSide: BorderSide(color: AppColors.borderSubtle),
       ),
       focusedBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: AppColors.accentBlue),
+        borderSide: BorderSide(color: AppColors.accentBlue, width: 2),
       ),
     ),
   );
@@ -305,15 +305,15 @@ Widget _dateField({
   return TextField(
     controller: controller,
     readOnly: true,
-    style: const TextStyle(color: Colors.white),
+    style: const TextStyle(color: AppColors.textWhite),
     decoration: const InputDecoration(
       labelText: "Data",
-      labelStyle: TextStyle(color: Colors.white54),
+      labelStyle: TextStyle(color: AppColors.textMuted),
       enabledBorder: UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.white24),
+        borderSide: BorderSide(color: AppColors.borderSubtle),
       ),
       focusedBorder: UnderlineInputBorder(
-        borderSide: BorderSide(color: AppColors.accentBlue),
+        borderSide: BorderSide(color: AppColors.accentBlue, width: 2),
       ),
       suffixIcon: Icon(
         Icons.calendar_month,
@@ -339,8 +339,9 @@ Widget _segmentedButton({
     width: double.infinity,
     height: 40,
     decoration: BoxDecoration(
-      color: Colors.white10,
+      color: AppColors.surfaceSubtle,
       borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.borderSubtle),
     ),
     child: Row(
       children: options.map((option) {
@@ -357,7 +358,7 @@ Widget _segmentedButton({
               child: Text(
                 option.label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white54,
+                  color: selected ? AppColors.textWhite : AppColors.textMuted,
                   fontWeight: FontWeight.bold,
                 ),
               ),

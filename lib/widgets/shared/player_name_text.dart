@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 /// que precise pintar um ring/badge com a mesma cor do efeito (ex.: pódio
 /// do ranking).
 class PlayerNameEffectColors {
-  static const Color gold = Color(0xFFFFD700);
-  static const Color silver = Color(0xFFC0C0C0);
+  static const Color gold = Color(0xFFF59E0B);
+  static const Color silver = Color(0xFFCBD5E1);
   static const Color bronze = Color(0xFFCD7F32);
+  static const Color fire = Color(0xFFEA580C);
+  static const Color diamond = Color(0xFF0EA5E9);
 
   /// Retorna a cor do efeito, ou null se não houver efeito (nome padrão).
   static Color? forEffect(String? effect) {
@@ -17,6 +19,10 @@ class PlayerNameEffectColors {
         return silver;
       case 'bronze':
         return bronze;
+      case 'fire':
+        return fire;
+      case 'diamond':
+        return diamond;
       default:
         return null;
     }
@@ -57,11 +63,12 @@ class PlayerNameText extends StatelessWidget {
         ? baseStyle
         : baseStyle.copyWith(
             color: effectColor,
-            fontWeight: FontWeight.bold,
-            shadows: [
+            fontWeight: FontWeight.w700,
+            shadows: const [
               Shadow(
-                color: effectColor.withOpacity(0.45),
-                blurRadius: 6,
+                color: Colors.black87,
+                offset: Offset(0, 1),
+                blurRadius: 2,
               ),
             ],
           );
@@ -88,7 +95,7 @@ class MonthlyHighlightAvatarRing extends StatelessWidget {
     super.key,
     required this.avatar,
     required this.highlighted,
-    this.ringWidth = 3,
+    this.ringWidth = 2.5,
   });
 
   @override
@@ -108,9 +115,9 @@ class MonthlyHighlightAvatarRing extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: PlayerNameEffectColors.gold.withOpacity(0.5),
-                blurRadius: 8,
-                spreadRadius: 1,
+                color: Colors.black.withValues(alpha: 0.40),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -118,17 +125,24 @@ class MonthlyHighlightAvatarRing extends StatelessWidget {
           child: avatar,
         ),
         Positioned(
-          bottom: -6,
+          bottom: -4,
           child: Container(
             padding: const EdgeInsets.all(2),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: const Color(0xFF1E293B),
+              border: Border.all(color: PlayerNameEffectColors.gold, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 3,
+                ),
+              ],
             ),
             child: const Icon(
               Icons.star_rounded,
               color: PlayerNameEffectColors.gold,
-              size: 18,
+              size: 14,
             ),
           ),
         ),

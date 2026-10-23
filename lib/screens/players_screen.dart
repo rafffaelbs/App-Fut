@@ -5,7 +5,9 @@ import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
 import '../widgets/shared/icon_picker_modal.dart';
-import '../widgets/player/player_card.dart';
+import '../utils/overall_calculator.dart';
+import '../widgets/player/fifa_card.dart';
+import '../widgets/shared/player_avatar_frame.dart';
 import 'player_detail.dart';
 
 class PlayersScreen extends StatefulWidget {
@@ -36,12 +38,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
-  void _denyPermission() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Apenas administradores podem alterar o elenco.')),
-    );
-  }
-
   // ─────────────────────────────────────────────────────────────
   // LÓGICA DE NEGÓCIO
   // ─────────────────────────────────────────────────────────────
@@ -58,6 +54,12 @@ class _PlayersScreenState extends State<PlayersScreen> {
         'icon': j.avatarUrl,
         'rating': kRatingBase,
         'totalGames': 0,
+        'community': j.community,
+        'name_effect': j.nameEffectFull ?? j.nameEffect,
+        'monthly_highlight': j.monthlyHighlight,
+        'manual_badges': j.manualBadges.map((b) => b.toMap()).toList(),
+        'advanced_stats': j.advancedStats,
+        'craque_mes_count': j.craqueDoMesCount,
       }).toList();
       
       if (!mounted) return;
@@ -159,7 +161,11 @@ class _PlayersScreenState extends State<PlayersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
       child: Row(
         children: [
           _toggleOption('Alfabética (A-Z)', 'A-Z'),
@@ -177,15 +183,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color:        active ? AppColors.accentBlue : Colors.transparent,
+            color: active ? AppColors.accentBlue : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color:      active ? Colors.white : Colors.white54,
+                color: active ? AppColors.textWhite : AppColors.textMuted,
                 fontWeight: FontWeight.bold,
+                fontSize: 13,
               ),
             ),
           ),
@@ -196,14 +203,30 @@ class _PlayersScreenState extends State<PlayersScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 12, left: 4),
+      padding: const EdgeInsets.only(top: 12, bottom: 12, left: 4),
       child: Row(
         children: [
-          Text(title, style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 8),
-          const Expanded(child: Divider(color: Colors.white12)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
         ],
       ),
+    );
+  }
+
+  int _overallOf(Map<String, dynamic> player) {
+    final double rating = ((player['rating'] ?? kRatingBase) as num).toDouble();
+    return calculateOverall(
+      appRating10: rating,
+      community: player['community'] as CommunityAttributes?,
     );
   }
 
@@ -211,9 +234,16 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final player = players[index];
     final String name = player['name'] ?? '';
     final String? iconPath = player['icon'];
+    final frame = resolvePlayerFrame(player);
 
-    return PlayerCard(
-      player: player,
+    return FifaCard(
+      name: name,
+      iconPath: iconPath,
+      overall: _overallOf(player),
+      attributes: player['community'] as CommunityAttributes?,
+      frame: frame,
+      // O "x" só aparece para admins; quem não é admin nem vê o botão.
+      onRemove: _isAdmin ? () => _removePlayer(index) : null,
       onTap: () {
         Navigator.push(
           context,
@@ -225,9 +255,23 @@ class _PlayersScreenState extends State<PlayersScreen> {
               playerIcon: iconPath,
             ),
           ),
-        );
+        ).then((_) {
+          // Admin pode ter editado os atributos no perfil: recarrega o elenco.
+          if (mounted) _loadPlayers();
+        });
       },
-      onRemove: _isAdmin ? () => _removePlayer(index) : () => _denyPermission(),
+    );
+  }
+
+  Widget _buildCardsGrid(List<int> indexes) {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 14,
+      childAspectRatio: FifaCard.designWidth / FifaCard.designHeight,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: indexes.map(_buildPlayerCard).toList(),
     );
   }
 
@@ -241,9 +285,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return Dialog(
-              backgroundColor: AppColors.headerBlue,
+              backgroundColor: AppColors.surfaceElevated,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: AppColors.borderSubtle),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -254,7 +299,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                     const Text(
                       'Novo Jogador',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.textWhite,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.2,
@@ -291,8 +336,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                 shape: BoxShape.circle,
                                 color: AppColors.deepBlue,
                                 border: Border.all(
-                                  color: AppColors.accentBlue.withOpacity(0.4,
-                                  ),
+                                  color: AppColors.borderSubtle,
                                   width: 1.5,
                                 ),
                               ),
@@ -305,7 +349,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                           fit: BoxFit.contain,
                                           errorBuilder: (_, _, _) => const Icon(
                                             Icons.person_outline,
-                                            color: Colors.white38,
+                                            color: AppColors.textDim,
                                             size: 32,
                                           ),
                                         ),
@@ -313,14 +357,14 @@ class _PlayersScreenState extends State<PlayersScreen> {
                                     )
                                   : const Icon(
                                       Icons.person_outline,
-                                      color: Colors.white38,
+                                      color: AppColors.textDim,
                                       size: 32,
                                     ),
                             ),
                             Container(
                               width: 22,
                               height: 22,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: AppColors.accentBlue,
                               ),
@@ -335,10 +379,10 @@ class _PlayersScreenState extends State<PlayersScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Center(
+                    const Center(
                       child: Text(
                         "Toque para escolher ícone",
-                        style: TextStyle(color: Colors.white30, fontSize: 11),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -346,25 +390,25 @@ class _PlayersScreenState extends State<PlayersScreen> {
                     // Name field
                     TextField(
                       controller: controller,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      style: const TextStyle(color: AppColors.textWhite, fontSize: 15),
                       decoration: InputDecoration(
                         hintText: "Nome do jogador",
-                        hintStyle: const TextStyle(color: Colors.white30),
+                        hintStyle: const TextStyle(color: AppColors.textDim),
                         filled: true,
-                        fillColor: AppColors.deepBlue.withOpacity(0.6),
+                        fillColor: AppColors.deepBlue,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 12,
                         ),
-                        border: OutlineInputBorder(
+                        enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
+                          borderSide: const BorderSide(color: AppColors.borderSubtle),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: AppColors.accentBlue.withOpacity(0.6),
-                            width: 1,
+                          borderSide: const BorderSide(
+                            color: AppColors.accentBlue,
+                            width: 1.5,
                           ),
                         ),
                       ),
@@ -385,7 +429,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                             ),
                             child: const Text(
                               'Cancelar',
-                              style: TextStyle(color: Colors.white38),
+                              style: TextStyle(color: AppColors.textMuted),
                             ),
                           ),
                         ),
@@ -447,33 +491,44 @@ class _PlayersScreenState extends State<PlayersScreen> {
             (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase()));
 
         String currentLetter = '';
+        List<int> bucket = [];
+        void flush() {
+          if (bucket.isNotEmpty) listItems.add(_buildCardsGrid(bucket));
+          bucket = [];
+        }
+
         for (int i = 0; i < players.length; i++) {
           final String letter = (players[i]['name'] as String)[0].toUpperCase();
           if (letter != currentLetter) {
+            flush();
             listItems.add(_buildSectionHeader(letter));
             currentLetter = letter;
           }
-          listItems.add(_buildPlayerCard(i));
+          bucket.add(i);
         }
+        flush();
       } else {
-        players.sort((a, b) {
-          final double rA = (a['rating'] ?? kRatingBase) as double;
-          final double rB = (b['rating'] ?? kRatingBase) as double;
-          return rB.compareTo(rA);
-        });
+        // Por nível: agrupa pela faixa do Overall (Elite / Ouro / Prata / Bronze)
+        // e ordena do maior pro menor Overall.
+        players.sort((a, b) => _overallOf(b).compareTo(_overallOf(a)));
 
-        String currentLevel = '';
-        for (int i = 0; i < players.length; i++) {
-          final String level = getRatingLabel(
-            (players[i]['rating'] ?? kRatingBase) as double,
-            (players[i]['totalGames'] ?? 0) as int,
-          );
-          if (level != currentLevel) {
-            listItems.add(_buildSectionHeader(level));
-            currentLevel = level;
-          }
-          listItems.add(_buildPlayerCard(i));
+        CardTier? currentTier;
+        List<int> bucket = [];
+        void flush() {
+          if (bucket.isNotEmpty) listItems.add(_buildCardsGrid(bucket));
+          bucket = [];
         }
+
+        for (int i = 0; i < players.length; i++) {
+          final tier = cardTierFor(_overallOf(players[i]));
+          if (tier != currentTier) {
+            flush();
+            listItems.add(_buildSectionHeader(cardTierLabel(tier)));
+            currentTier = tier;
+          }
+          bucket.add(i);
+        }
+        flush();
       }
     }
 

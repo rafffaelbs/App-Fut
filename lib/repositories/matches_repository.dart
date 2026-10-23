@@ -6,6 +6,7 @@ import '../models/match_lineup_model.dart';
 import '../models/match_event_model.dart';
 import '../models/rating_history_model.dart';
 import '../services/cache_store.dart';
+import '../services/pending_match_queue.dart';
 
 class MatchesRepository {
   final SupabaseClient _client;
@@ -16,51 +17,89 @@ class MatchesRepository {
       : _client = client ?? supabase,
         _cache = cache ?? CacheStore();
 
-  /// Fetches all matches for a session with lineups (including players) and events
+  static const Duration _netTimeout = Duration(seconds: 8);
+
+  /// Partidas já finalizadas mas ainda na fila de envio, no formato do banco.
+  /// Assim Histórico/Ranking/Estatísticas mostram a partida na hora, mesmo
+  /// offline ou antes do upload terminar.
+  Future<List<MatchModel>> _pendingMatches({String? sessionId, String? groupId}) async {
+    final jobs = await PendingMatchQueue.readAll();
+    final out = <MatchModel>[];
+    for (final job in jobs) {
+      final match = Map<String, dynamic>.from(job['match'] as Map);
+      if (sessionId != null && match['session_id']?.toString() != sessionId) continue;
+      if (groupId != null && match['group_id']?.toString() != groupId) continue;
+      final id = job['match_id'].toString();
+      out.add(MatchModel.fromMap({
+        ...match,
+        'id': id,
+        'match_lineups': (job['lineups'] as List)
+            .map((e) => {...Map<String, dynamic>.from(e as Map), 'match_id': id})
+            .toList(),
+        'match_events': (job['events'] as List)
+            .map((e) => {...Map<String, dynamic>.from(e as Map), 'match_id': id})
+            .toList(),
+      }));
+    }
+    return out;
+  }
+
+  /// Fetches all matches for a session with lineups (including players) and events.
+  /// Cache-first em caso de falha de rede + partidas pendentes de upload.
   Future<List<MatchModel>> getMatchesBySession(String sessionId) async {
+    final cacheKey = 'matches:session:$sessionId';
+    List<MatchModel> remote = [];
+    bool loaded = false;
     try {
       final matchesResp = await _client
           .from("matches")
           .select("*, match_lineups(*, players(*)), match_events(*)")
           .eq("session_id", sessionId)
-          .order("played_at", ascending: true);
+          .order("played_at", ascending: true)
+          .timeout(_netTimeout);
 
-      return (matchesResp as List)
-          .map((m) => MatchModel.fromMap(Map<String, dynamic>.from(m as Map)))
+      final raw = (matchesResp as List)
+          .map((m) => Map<String, dynamic>.from(m as Map))
           .toList();
+      await _cache.write(cacheKey, raw);
+      remote = raw.map(MatchModel.fromMap).toList();
+      loaded = true;
     } catch (e) {
-      // Fallback in case relation syntax fails
+      final cached = await _cache.read(cacheKey);
+      if (cached != null) {
+        remote = cached.asMapList().map(MatchModel.fromMap).toList();
+        loaded = true;
+      }
+    }
+
+    if (!loaded) {
+      // Sem rede e sem cache: tenta o caminho antigo (sem joins).
       try {
         final matchesResp = await _client
             .from("matches")
             .select()
             .eq("session_id", sessionId)
-            .order("played_at", ascending: true);
-
-        final List<MatchModel> results = [];
+            .order("played_at", ascending: true)
+            .timeout(_netTimeout);
         for (final m in (matchesResp as List)) {
           final matchMap = Map<String, dynamic>.from(m as Map);
           final matchId = matchMap["id"]?.toString() ?? "";
-
-          final lineupsResp = await _client
+          matchMap["match_lineups"] = await _client
               .from("match_lineups")
               .select("*, players(*)")
-              .eq("match_id", matchId);
-
-          final eventsResp = await _client
-              .from("match_events")
-              .select()
-              .eq("match_id", matchId);
-
-          matchMap["match_lineups"] = lineupsResp;
-          matchMap["match_events"] = eventsResp;
-          results.add(MatchModel.fromMap(matchMap));
+              .eq("match_id", matchId)
+              .timeout(_netTimeout);
+          matchMap["match_events"] =
+              await _client.from("match_events").select().eq("match_id", matchId).timeout(_netTimeout);
+          remote.add(MatchModel.fromMap(matchMap));
         }
-        return results;
-      } catch (err) {
-        return [];
-      }
+      } catch (_) {}
     }
+
+    final pending = await _pendingMatches(sessionId: sessionId);
+    if (pending.isEmpty) return remote;
+    final known = remote.map((m) => m.id).toSet();
+    return [...remote, ...pending.where((m) => !known.contains(m.id))];
   }
 
   /// Fetches all matches belonging to a group. `matches` already carries its
@@ -83,13 +122,15 @@ class MatchesRepository {
           .from("matches")
           .select("*, match_lineups(*), match_events(*)")
           .eq("group_id", groupId)
-          .order("played_at", ascending: false);
+          .order("played_at", ascending: false)
+          .timeout(_netTimeout);
 
       final rawMatches = (matchesResp as List)
           .map((m) => Map<String, dynamic>.from(m as Map))
           .toList();
       await _cache.write(cacheKey, rawMatches);
-      return rawMatches.map((m) => MatchModel.fromMap(m)).toList();
+      return _withPendingForGroup(
+          groupId, rawMatches.map((m) => MatchModel.fromMap(m)).toList());
     } catch (e) {
       // Antes isso falhava em silêncio (por isso o elenco aparecia todo
       // zerado sem nenhuma pista do motivo). Logamos o erro real agora.
@@ -97,10 +138,55 @@ class MatchesRepository {
       print('getMatchesByGroup($groupId) failed: $e');
       final cached = await _cache.read(cacheKey);
       if (cached != null) {
-        return cached.asMapList().map((m) => MatchModel.fromMap(m)).toList();
+        return _withPendingForGroup(
+            groupId, cached.asMapList().map((m) => MatchModel.fromMap(m)).toList());
       }
-      return [];
+      return _withPendingForGroup(groupId, []);
     }
+  }
+
+  Future<List<MatchModel>> _withPendingForGroup(
+      String groupId, List<MatchModel> remote) async {
+    final pending = await _pendingMatches(groupId: groupId);
+    if (pending.isEmpty) return remote;
+    final known = remote.map((m) => m.id).toSet();
+    // getMatchesByGroup vem do mais novo pro mais antigo.
+    return [...pending.reversed.where((m) => !known.contains(m.id)), ...remote];
+  }
+
+  /// Envio idempotente de uma partida (usado pela fila de pendências).
+  ///
+  /// - O id da partida vem do app, então `upsert` torna o reenvio seguro.
+  /// - Lineups e eventos vão em paralelo (antes eram sequenciais), cortando
+  ///   uma ida-e-volta de rede inteira.
+  /// - Em reenvio, apaga o que uma tentativa anterior possa ter deixado pela
+  ///   metade antes de inserir de novo.
+  Future<void> savePendingMatch({
+    required String matchId,
+    required Map<String, dynamic> match,
+    required List<Map<String, dynamic>> lineups,
+    required List<Map<String, dynamic>> events,
+    bool isRetry = false,
+  }) async {
+    await _client.from("matches").upsert({...match, "id": matchId});
+
+    if (isRetry) {
+      await Future.wait([
+        _client.from("match_lineups").delete().eq("match_id", matchId),
+        _client.from("match_events").delete().eq("match_id", matchId),
+      ]);
+    }
+
+    await Future.wait([
+      if (lineups.isNotEmpty)
+        _client
+            .from("match_lineups")
+            .insert(lineups.map((e) => {...e, "match_id": matchId}).toList()),
+      if (events.isNotEmpty)
+        _client
+            .from("match_events")
+            .insert(events.map((e) => {...e, "match_id": matchId}).toList()),
+    ]);
   }
 
   /// Saves a complete match including lineups, events, and rating history

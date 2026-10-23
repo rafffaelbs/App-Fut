@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
-import '../../utils/rating_calculator.dart';
+import '../../utils/overall_calculator.dart';
 import '../shared/player_name_text.dart';
+import '../shared/player_avatar_frame.dart';
 
 class MatchPlayerTile extends StatelessWidget {
   final Map<String, dynamic> player;
@@ -21,29 +22,42 @@ class MatchPlayerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double overallRating = player['rating'] != null ? (player['rating'] as num).toDouble() : kRatingBase;
+    final double overallRating = playerOverallOf(player);
+    final frame = resolvePlayerFrame(player);
     
     return InkWell(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 4, left: 6, right: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        margin: const EdgeInsets.only(bottom: 6, left: 6, right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: AppColors.headerBlue,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.borderSubtle),
         ),
         child: Row(
           children: [
-            Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: getRatingColor(overallRating).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            PlayerAvatarFrame(
+              frame: frame,
+              compact: true,
+              isCircular: true,
+              child: Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: overallColor(overallRating).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  overallRating.round().toString(),
+                  style: TextStyle(
+                    color: overallColor(overallRating),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              child: Text(overallRating.toStringAsFixed(1), style: TextStyle(color: getRatingColor(overallRating), fontSize: 9, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(width: 8),
             Expanded(

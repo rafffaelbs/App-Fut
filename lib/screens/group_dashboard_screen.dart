@@ -9,6 +9,7 @@ import 'package:app_do_fut/screens/admin_debug_screen.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:app_do_fut/screens/manage_members_screen.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
+import 'package:app_do_fut/services/group_bootstrap.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,14 +36,25 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
   void initState() {
     super.initState();
     _checkAdmin();
+    // Carga inicial: puxa elenco, peladas, histórico e calcula as notas uma
+    // vez. Roda em segundo plano; a pelada usa esse snapshot local.
+    GroupBootstrap.instance.prefetch(widget.groupId, force: true);
   }
 
   Future<void> _checkAdmin() async {
-    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
-    if (mounted) setState(() {
-      _isAdmin = isAdmin;
-      _checkingAdmin = false;
-    });
+    // Fail-safe: qualquer erro na checagem = não é admin = sem engrenagem.
+    bool isAdmin = false;
+    try {
+      isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    } catch (_) {
+      isAdmin = false;
+    }
+    if (mounted) {
+      setState(() {
+        _isAdmin = isAdmin;
+        _checkingAdmin = false;
+      });
+    }
   }
 
   /// Abre a tela de perfil (a mesma usada no Elenco/Ranking) já com o
@@ -92,14 +104,27 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
         ),
         centerTitle: true,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: ValueListenableBuilder<BootstrapStatus>(
+            valueListenable: GroupBootstrap.instance.status,
+            builder: (_, st, __) => st == BootstrapStatus.loading
+                ? const LinearProgressIndicator(minHeight: 3)
+                : st == BootstrapStatus.offline
+                    ? Container(height: 3, color: Colors.orangeAccent)
+                    : const SizedBox(height: 3),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.account_circle, color: Colors.white),
             tooltip: 'Meu Perfil',
             onPressed: _openMyProfile,
           ),
+          // Engrenagem (Peladas / Elenco / Estatísticas): só admin vê.
           // A checagem real de permissão é feita pelo RLS no Supabase; isso
-          // here it just avoids showing admin buttons to a regular member.
+          // aqui só evita mostrar botões de admin para um membro comum.
+          // (A engrenagem da tela de Partida continua visível para todos.)
           if (!_checkingAdmin && _isAdmin)
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings, color: Colors.white),
@@ -208,24 +233,35 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
 
       body: screens[_currentIndex], 
 
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppColors.headerBlue,
-        selectedItemColor: AppColors.accentBlue,
-        unselectedItemColor: Colors.white54,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: "Peladas",
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.headerBlue,
+          border: Border(
+            top: BorderSide(color: AppColors.borderSubtle, width: 1),
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.groups), label: "Elenco"),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Estatísticas"),
-        ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: AppColors.headerBlue,
+          elevation: 0,
+          selectedItemColor: AppColors.accentBlue,
+          unselectedItemColor: AppColors.textDim,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontSize: 12),
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_month),
+              label: "Peladas",
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.groups), label: "Elenco"),
+            BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Estatísticas"),
+          ],
+        ),
       ),
     );
   }

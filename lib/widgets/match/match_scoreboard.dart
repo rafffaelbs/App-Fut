@@ -41,7 +41,7 @@ class MatchScoreboard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(0, 10, 0, 20),
-      color: const Color(0xff001c55), // Header Blue
+      color: AppColors.headerBlue,
       child: Column(
         children: [
           Row(
@@ -72,6 +72,24 @@ class MatchScoreboard extends StatelessWidget {
                     label: "Barcelona",
                     assetPath: "assets/images/vermelho.png",
                   ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 2, bottom: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 1),
+                    ),
+                    child: const Text(
+                      "🔴 CIMA",
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
                   Row(
                     children: [
                       IconButton(
@@ -100,16 +118,16 @@ class MatchScoreboard extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.sports_soccer,
-                    color: isMatchRunning ? Colors.greenAccent : Colors.grey,
-                    size: 30,
+                    color: isMatchRunning ? AppColors.highlightGreen : AppColors.textDim,
+                    size: 28,
                   ),
                   const SizedBox(height: 5),
                   Text(
                     timeString,
                     style: TextStyle(
                       color: isOvertime
-                          ? Colors.redAccent
-                          : (isMatchRunning ? Colors.greenAccent : Colors.grey),
+                          ? AppColors.redTeam
+                          : (isMatchRunning ? AppColors.highlightGreen : AppColors.textMuted),
                       fontSize: 28,
                       fontFamily: 'Courier',
                       fontWeight: FontWeight.bold,
@@ -119,7 +137,7 @@ class MatchScoreboard extends StatelessWidget {
                     const Text(
                       "ACRÉSCIMO",
                       style: TextStyle(
-                        color: Colors.redAccent,
+                        color: AppColors.redTeam,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -152,6 +170,24 @@ class MatchScoreboard extends StatelessWidget {
                     label: "Real Madrid",
                     assetPath: "assets/images/branco.png",
                   ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 2, bottom: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.whiteTeamBorder, width: 1),
+                    ),
+                    child: const Text(
+                      "⚪ BAIXO",
+                      style: TextStyle(
+                        color: AppColors.whiteTeam,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
                   Row(
                     children: [
                       IconButton(
@@ -160,14 +196,14 @@ class MatchScoreboard extends StatelessWidget {
                       ),
                       Text(
                         "$scoreWhite",
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.textWhite,
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.add, color: AppColors.accentBlue),
+                        icon: const Icon(Icons.add, color: AppColors.accentBlue),
                         onPressed: () => onUpdateScore(false, 1),
                       ),
                     ],
@@ -184,15 +220,15 @@ class MatchScoreboard extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 color: isReadyToStart
-                    ? Colors.green
-                    : Colors.grey.withOpacity(0.3),
+                    ? AppColors.highlightGreen
+                    : AppColors.surfaceSubtle,
                 shape: BoxShape.circle,
                 boxShadow: isReadyToStart
                     ? [
                         BoxShadow(
-                          color: Colors.green.withOpacity(0.4),
-                          blurRadius: 10,
-                          spreadRadius: 2,
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
                       ]
                     : [],
@@ -201,7 +237,7 @@ class MatchScoreboard extends StatelessWidget {
                 iconSize: 40,
                 icon: Icon(
                   Icons.play_arrow,
-                  color: isReadyToStart ? Colors.white : Colors.white38,
+                  color: isReadyToStart ? Colors.white : AppColors.textDim,
                 ),
                 onPressed: isReadyToStart ? onStart : null,
               ),
@@ -210,9 +246,9 @@ class MatchScoreboard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildCircleBtn(Colors.orangeAccent, Icons.pause, onPause),
+                _buildCircleBtn(AppColors.orangeStreak, Icons.pause, onPause),
                 const SizedBox(width: 40),
-                _buildCircleBtn(Colors.redAccent, Icons.stop, onStop),
+                _buildCircleBtn(AppColors.redTeam, Icons.stop, onStop),
               ],
             ),
         ],

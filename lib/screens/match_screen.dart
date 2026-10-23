@@ -7,17 +7,25 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
+import '../utils/overall_calculator.dart';
+import '../utils/team_balancer.dart';
+import '../utils/roster_utils.dart';
 import '../utils/stats_calculator.dart';
 import '../services/sync_service.dart';
+import '../services/pending_match_queue.dart';
+import '../services/group_bootstrap.dart';
+import 'package:uuid/uuid.dart';
 import '../repositories/supabase_service.dart';
 import '../models/session_model.dart';
 import '../models/match_lineup_model.dart';
 import '../models/match_event_model.dart';
 
 import '../widgets/match/match_scoreboard.dart';
-import '../widgets/match/match_pitch_player.dart';
 import '../widgets/match/match_player_tile.dart';
+import '../widgets/match/tactical_pitch.dart';
+import '../widgets/match/match_events_panel.dart';
 import '../widgets/shared/player_name_text.dart';
+import '../widgets/shared/player_avatar_frame.dart';
 import 'draft_screen.dart';
 
 class MatchScreen extends StatefulWidget {
@@ -52,6 +60,7 @@ class _MatchScreenState extends State<MatchScreen>
   final AudioPlayer _goalSoundPlayer = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
 
   List<Map<String, dynamic>> allSavedPlayers = [];
+  Timer? _siteSyncTimer;
   List<Map<String, dynamic>> presentPlayers = [];
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
@@ -73,6 +82,8 @@ class _MatchScreenState extends State<MatchScreen>
   bool isOvertime = false;
   bool isDraftMode = false;
   int winLimit = 3;
+  // Duração da partida vem da pelada (antes era 480s fixos no código).
+  int matchDurationSeconds = 8 * 60;
   String streakAction = 'split';
   Timer? _matchTimer;
 
@@ -98,13 +109,20 @@ class _MatchScreenState extends State<MatchScreen>
     _tabController.addListener(() {
       setState(() {});
     });
-    _loadMatchState();
+    _loadMatchState().then((_) => _refreshSessionSettings());
+    // Reenvia partidas que ficaram pendentes (ex.: sem internet na última vez).
+    PendingMatchQueue.instance.flush();
   }
 
   @override
   void dispose() {
     _matchTimer?.cancel();
     _cloudSyncDebounce?.cancel();
+    // Se ainda havia um sync do site agendado, dispara agora ao sair da tela.
+    if (_siteSyncTimer?.isActive == true) {
+      _siteSyncTimer!.cancel();
+      _triggerBackgroundSync();
+    }
     _tabController.dispose();
     _audioPlayer.dispose();
     _goalSoundPlayer.dispose();
@@ -122,21 +140,72 @@ class _MatchScreenState extends State<MatchScreen>
     return "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
   }
 
+  /// Força média do time = média do OVERALL (0-99) dos jogadores.
   double _calculateTeamRating(List<Map<String, dynamic>> team) {
     if (team.isEmpty) return 0.0;
-    double totalStars = 0.0;
+    double total = 0.0;
     for (var player in team) {
-      final double r = player['rating'] != null
-          ? (player['rating'] as num).toDouble()
-          : kRatingBase;
-      totalStars += r;
+      total += playerOverallOf(player);
     }
-    return totalStars / team.length;
+    return total / team.length;
+  }
+
+  /// Converte um jogador da partida para o formato do balanceador.
+  BalancePlayer _balancePlayer(Map<String, dynamic> p) =>
+      BalancePlayer(_pid(p), playerOverallOf(p));
+
+  /// Chaves do snapshot que carregam a "força" do jogador (overall + atributos
+  /// da comunidade). Copiadas do snapshot do grupo para os jogadores já
+  /// presentes, que podem ter sido gravados antes do overall existir.
+  static const List<String> _strengthKeys = [
+    'rating',
+    'overall',
+    'community_pac',
+    'community_sho',
+    'community_pas',
+    'community_dri',
+    'community_def',
+    'community_phy',
+    'community_rating_override',
+  ];
+
+  void _refreshStrengthFromSnapshot(Map<String, dynamic> p) {
+    final saved = allSavedPlayers.firstWhere(
+      (dbP) => _pid(dbP) == _pid(p),
+      orElse: () => {},
+    );
+    if (saved.isEmpty) return;
+    for (final k in _strengthKeys) {
+      if (saved.containsKey(k) && saved[k] != null) p[k] = saved[k];
+    }
+    p['rating'] ??= kRatingBase;
   }
 
   String _pid(Map<String, dynamic> player) => playerIdFromObject(player);
 
+  // Várias chamadas seguidas (finalizar + sair + ratings) viravam 3 rodadas
+  // completas de ~15 gravações. Agora, se já há uma gravação em andamento,
+  // apenas marca que precisa de mais uma (que lê o estado mais recente).
+  bool _savingState = false;
+  bool _saveStateQueued = false;
+
   Future<void> _saveMatchState() async {
+    if (_savingState) {
+      _saveStateQueued = true;
+      return;
+    }
+    _savingState = true;
+    try {
+      do {
+        _saveStateQueued = false;
+        await _writeMatchState();
+      } while (_saveStateQueued);
+    } finally {
+      _savingState = false;
+    }
+  }
+
+  Future<void> _writeMatchState() async {
     final prefs = await SharedPreferences.getInstance();
     final String id = widget.tournamentId;
 
@@ -183,7 +252,7 @@ class _MatchScreenState extends State<MatchScreen>
   void _scheduleCloudSync() {
     if (widget.groupId.isEmpty) return;
     _cloudSyncDebounce?.cancel();
-    _cloudSyncDebounce = Timer(const Duration(seconds: 2), _syncToCloud);
+    _cloudSyncDebounce = Timer(const Duration(seconds: 5), _syncToCloud);
   }
 
   /// Envia o estado "rascunho" da pelada (quem chegou, times, goleiros,
@@ -191,8 +260,16 @@ class _MatchScreenState extends State<MatchScreen>
   /// aparelho/reinstalação antes de "Encerrar Partida". Falha
   /// silenciosamente (fica só local) se estiver offline -- o cache local
   /// via SharedPreferences continua sendo a fonte imediata de verdade.
+  bool _cloudSyncInFlight = false;
+
   Future<void> _syncToCloud() async {
     if (widget.groupId.isEmpty || presentPlayers.isEmpty) return;
+    // Rede lenta: nunca empilha um sync em cima do outro.
+    if (_cloudSyncInFlight) {
+      _scheduleCloudSync();
+      return;
+    }
+    _cloudSyncInFlight = true;
     try {
       final redIds = teamRed.map((p) => _pid(p)).toSet();
       final whiteIds = teamWhite.map((p) => _pid(p)).toSet();
@@ -213,7 +290,8 @@ class _MatchScreenState extends State<MatchScreen>
       }).toList();
 
       await SupabaseService.instance.sessionArrivals
-          .replaceArrivals(widget.tournamentId, draft);
+          .replaceArrivals(widget.tournamentId, draft)
+          .timeout(const Duration(seconds: 10));
 
       await SupabaseService.instance.sessions.updateRuntimeState(
         widget.tournamentId,
@@ -226,9 +304,11 @@ class _MatchScreenState extends State<MatchScreen>
         isOvertime: isOvertime,
         startedAt: _lastStartTime,
         status: SessionModel.statusInProgress,
-      );
+      ).timeout(const Duration(seconds: 10));
     } catch (e) {
       debugPrint('Error syncing session draft to Supabase: $e');
+    } finally {
+      _cloudSyncInFlight = false;
     }
   }
 
@@ -246,37 +326,25 @@ class _MatchScreenState extends State<MatchScreen>
       );
     }
     if (widget.groupId.isNotEmpty) {
-      try {
-        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
-        if (fetched.isNotEmpty) {
-          allSavedPlayers = fetched.map((p) => {
-            'id': p.id,
-            'name': p.displayName,
-            'icon': p.icon,
-            'rating': p.rating,
-            'goal_sound_url': p.goalSoundUrl,
-            'name_effect': p.nameEffect,
-            'monthly_highlight': p.monthlyHighlight,
-          }).toList();
-        }
-      } catch (e) {
-        debugPrint('Error fetching players from Supabase: $e');
+      // Estratégia offline-first: elenco + notas vêm do snapshot gravado na
+      // entrada do grupo (GroupBootstrap). Abrir a pelada não depende de
+      // rede. As notas ficam fixas durante toda a pelada.
+      final bool hasSnapshot = await GroupBootstrap.hasLocalSnapshot(widget.groupId);
+      if (!hasSnapshot) {
+        // Primeira vez neste aparelho: única situação em que esperamos a rede.
+        await GroupBootstrap.instance.prefetch(widget.groupId, force: true);
+      } else {
+        // Já temos tudo localmente; só renova em segundo plano pra próxima.
+        unawaited(GroupBootstrap.instance.prefetch(widget.groupId));
       }
-
-      try {
-        final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
-        final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
-        for (var p in allSavedPlayers) {
-          final pid = _pid(p);
-          if (globalStats.containsKey(pid)) {
-            p['rating'] = globalStats[pid]!['nota'];
-          } else if (p['rating'] == null) {
-            p['rating'] = kRatingBase;
-          }
+      final String? snap = prefs.getString('players_${widget.groupId}');
+      if (snap != null) {
+        allSavedPlayers = ensurePlayerIds(
+          List<Map<String, dynamic>>.from(jsonDecode(snap)),
+        );
+        for (final p in allSavedPlayers) {
+          p['rating'] ??= kRatingBase;
         }
-        await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
-      } catch (e) {
-        debugPrint('Error calculating dynamic ratings in MatchScreen: $e');
       }
     }
 
@@ -353,6 +421,10 @@ class _MatchScreenState extends State<MatchScreen>
     }
 
     if (!mounted) return; // usuário já saiu da tela enquanto isso carregava
+    // Configurações da pelada (limite de vitórias, duração...) do cache local.
+    final SessionModel? cachedSession =
+        await SupabaseService.instance.sessions.getCachedSession(widget.tournamentId);
+    if (!mounted) return;
     setState(() {
       if (prefs.containsKey('present_players_$id'))
         presentPlayers = ensurePlayerIds(
@@ -380,6 +452,7 @@ class _MatchScreenState extends State<MatchScreen>
       int sessionWinLimit = 3;
       final sessionsData = prefs.getString('sessions_${widget.groupId}');
       if (sessionsData != null) {
+        // Legado: só vale se não houver nada melhor (cache/Supabase abaixo).
         final List<dynamic> allSessions = jsonDecode(sessionsData);
         final currentSession = allSessions.firstWhere(
           (s) => s['id'] == widget.tournamentId,
@@ -398,18 +471,11 @@ class _MatchScreenState extends State<MatchScreen>
         }
       }
       winLimit = sessionWinLimit;
+      if (cachedSession != null) _applySessionSettings(cachedSession);
 
       void syncRatings(List<Map<String, dynamic>> list) {
         for (var p in list) {
-          final dbPlayer = allSavedPlayers.firstWhere(
-            (dbP) => _pid(dbP) == _pid(p),
-            orElse: () => {},
-          );
-          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
-            p['rating'] = dbPlayer['rating'];
-          } else if (p['rating'] == null) {
-            p['rating'] = kRatingBase;
-          }
+          _refreshStrengthFromSnapshot(p);
         }
       }
 
@@ -433,19 +499,13 @@ class _MatchScreenState extends State<MatchScreen>
       if (prefs.containsKey('first_gk_red_$id')) firstGkRed = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_red_$id')!));
       if (prefs.containsKey('first_gk_white_$id')) firstGkWhite = Map<String, dynamic>.from(jsonDecode(prefs.getString('first_gk_white_$id')!));
 
-      if (activeGkRed != null && activeGkRed!['rating'] == null) {
-        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkRed!), orElse: () => {});
-        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkRed!['rating'] = dbP['rating'];
-      }
-      if (activeGkWhite != null && activeGkWhite!['rating'] == null) {
-        final dbP = allSavedPlayers.firstWhere((item) => _pid(item) == _pid(activeGkWhite!), orElse: () => {});
-        if (dbP.isNotEmpty && dbP['rating'] != null) activeGkWhite!['rating'] = dbP['rating'];
-      }
+      if (activeGkRed != null) _refreshStrengthFromSnapshot(activeGkRed!);
+      if (activeGkWhite != null) _refreshStrengthFromSnapshot(activeGkWhite!);
 
       if (isMatchRunning && _lastStartTime != null) {
         _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           setState(() {
-            if (totalSecondsElapsed >= 480 && !isOvertime) {
+            if (totalSecondsElapsed >= matchDurationSeconds && !isOvertime) {
               isOvertime = true;
               try {
                 _audioPlayer.play(AssetSource('audio/end.mp3'));
@@ -457,63 +517,33 @@ class _MatchScreenState extends State<MatchScreen>
     });
   }
 
-  Future<void> _calculateDynamicRatings() async {
-    if (widget.groupId.isEmpty) return;
+  /// Aplica limite de vitórias, duração, modo de sorteio e ação de sequência
+  /// da pelada. Usado ao abrir (cache) e quando o Supabase responde.
+  void _applySessionSettings(SessionModel s) {
+    winLimit = s.winLimit ?? 0; // null = sem limite
+    matchDurationSeconds = (s.durationMinutes ?? 8) * 60;
+    streakAction = s.streakAction;
+    isDraftMode = s.draftMode;
+  }
+
+  /// Em segundo plano, confere se a pelada foi editada (ex.: de 8 pra 7 min,
+  /// de 3 pra 2 vitórias) e aplica sem precisar recriar a pelada.
+  Future<void> _refreshSessionSettings() async {
     try {
-      final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
-      final Map<String, Map<String, dynamic>> globalStats = calculateGlobalStats(allHistory);
-
-      for (var p in allSavedPlayers) {
-        final pid = _pid(p);
-        if (globalStats.containsKey(pid)) {
-          p['rating'] = globalStats[pid]!['nota'];
-        } else if (p['rating'] == null) {
-          p['rating'] = kRatingBase;
-        }
-      }
-
-      void syncList(List<Map<String, dynamic>> list) {
-        for (var p in list) {
-          final pid = _pid(p);
-          final dbPlayer = allSavedPlayers.firstWhere(
-            (dbP) => _pid(dbP) == pid,
-            orElse: () => {},
-          );
-          if (dbPlayer.isNotEmpty && dbPlayer['rating'] != null) {
-            p['rating'] = dbPlayer['rating'];
-          } else if (globalStats.containsKey(pid)) {
-            p['rating'] = globalStats[pid]!['nota'];
-          } else if (p['rating'] == null) {
-            p['rating'] = kRatingBase;
-          }
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          syncList(presentPlayers);
-          syncList(teamRed);
-          syncList(teamWhite);
-          if (activeGkRed != null) {
-            final pid = _pid(activeGkRed!);
-            if (globalStats.containsKey(pid)) activeGkRed!['rating'] = globalStats[pid]!['nota'];
-          }
-          if (activeGkWhite != null) {
-            final pid = _pid(activeGkWhite!);
-            if (globalStats.containsKey(pid)) activeGkWhite!['rating'] = globalStats[pid]!['nota'];
-          }
-        });
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
-      await _saveMatchState();
+      final fresh =
+          await SupabaseService.instance.sessions.getSessionById(widget.tournamentId);
+      if (fresh == null || !mounted) return;
+      setState(() => _applySessionSettings(fresh));
     } catch (e) {
-      debugPrint("Error in _calculateDynamicRatings: $e");
+      debugPrint('Error refreshing session settings: $e');
     }
   }
 
+  bool _disbalanceWarned = false;
+
   void _startMatch() async {
+    // Bola rolando = bom momento pra subir súmulas pendentes em segundo plano.
+    PendingMatchQueue.instance.flush();
     if (isMatchRunning) return;
     if (_requireGk && (activeGkRed == null || activeGkWhite == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -523,6 +553,20 @@ class _MatchScreenState extends State<MatchScreen>
       );
       return;
     }
+
+    if (totalSecondsElapsed == 0 && !_disbalanceWarned) {
+      final rRed = _calculateTeamRating(teamRed);
+      final rWhite = _calculateTeamRating(teamWhite);
+      if ((rRed - rWhite).abs() >= 3.5) {
+        _checkAndWarnTeamDisbalance(onProceed: _doStartMatch);
+        return;
+      }
+    }
+    _doStartMatch();
+  }
+
+  void _doStartMatch() async {
+    if (isMatchRunning) return;
     setState(() {
       isMatchRunning = true;
       _lastStartTime = DateTime.now();
@@ -533,7 +577,7 @@ class _MatchScreenState extends State<MatchScreen>
     _saveMatchState();
     _matchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
-        if (totalSecondsElapsed >= 480 && !isOvertime) {
+        if (totalSecondsElapsed >= matchDurationSeconds && !isOvertime) {
           isOvertime = true;
           try {
             _audioPlayer.play(AssetSource('audio/end.mp3'));
@@ -541,6 +585,108 @@ class _MatchScreenState extends State<MatchScreen>
         }
       });
     });
+  }
+
+  /// Alerta caso a diferença de força entre os times seja >= 3.5 pontos de Overall.
+  /// Oferece a opção de misturar e equilibrar os dois times na hora.
+  void _checkAndWarnTeamDisbalance({VoidCallback? onProceed}) {
+    if (teamRed.isEmpty || teamWhite.isEmpty || !mounted) {
+      onProceed?.call();
+      return;
+    }
+    final rRed = _calculateTeamRating(teamRed);
+    final rWhite = _calculateTeamRating(teamWhite);
+    final diff = (rRed - rWhite).abs();
+
+    if (diff < 3.5 || _disbalanceWarned) {
+      onProceed?.call();
+      return;
+    }
+
+    _disbalanceWarned = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 28),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Times Desbalanceados",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "A diferença de força entre os times é muito grande: ${diff.toStringAsFixed(1)} pontos (${rRed.toStringAsFixed(1)} vs ${rWhite.toStringAsFixed(1)}).",
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Você gostaria de misturar os times para equilibrar a partida?",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onProceed?.call();
+            },
+            child: const Text("Não, manter assim", style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.shuffle_rounded, size: 18),
+            label: const Text("Sim, misturar times", style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _rebalanceCurrentTeams();
+              onProceed?.call();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mistura e rebalanceia os times atuais em campo usando o TeamBalancer.
+  void _rebalanceCurrentTeams() {
+    final pool = [...teamRed, ...teamWhite];
+    if (pool.length < 2) return;
+    final byId = {for (final p in pool) _pid(p): p};
+    final balancePool = pool.map(_balancePlayer).toList();
+    final suggestions = TeamBalancer.suggest(
+      balancePool,
+      count: 1,
+      tolerance: 1.0,
+      excludeKeys: _lastDrawKey == null ? <String>{} : {_lastDrawKey!},
+    );
+    if (suggestions.isNotEmpty) {
+      _applySplit(suggestions.first, byId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Times misturados e equilibrados com sucesso!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   void _pauseMatch() {
@@ -866,6 +1012,7 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _showSorteioOptionsDialog() {
     final int n = widget.totalPlayers * 2;
+    final int ativos = activePlayers(presentPlayers).length;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -884,7 +1031,9 @@ class _MatchScreenState extends State<MatchScreen>
                 style: TextStyle(color: Colors.white),
               ),
               subtitle: Text(
-                'Distribui todos os ${presentPlayers.length} jogadores em dois times balanceados',
+                ativos > n
+                    ? 'Sorteia $n entre os $ativos presentes (quem desistiu fica de fora) e monta times equilibrados pelo Overall'
+                    : 'Distribui os $ativos jogadores (sem os desistentes) em dois times equilibrados pelo Overall',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               onTap: () {
@@ -900,7 +1049,7 @@ class _MatchScreenState extends State<MatchScreen>
                 style: const TextStyle(color: Colors.white),
               ),
               subtitle: Text(
-                'Apenas os $n primeiros jogadores serão sorteados (${widget.totalPlayers} por time)',
+                'Apenas os $n primeiros da chegada serão sorteados (${widget.totalPlayers} por time)',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               onTap: () {
@@ -923,130 +1072,202 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
+  /// Quem entra no sorteio. Desistentes NUNCA entram (um único ponto de
+  /// verdade: [activePlayers]).
+  List<Map<String, dynamic>> _drawPool({required bool useAllPlayers}) {
+    final eligible = activePlayers(presentPlayers);
+    final int needed = widget.totalPlayers * 2;
+    if (useAllPlayers) {
+      final shuffled = List<Map<String, dynamic>>.from(eligible)
+        ..shuffle(Random());
+      return shuffled.take(needed).toList();
+    }
+    // Ordem de chegada, sem embaralhar.
+    return eligible.take(needed).toList();
+  }
+
   void _sortearTeams({bool useAllPlayers = false}) {
-    final eligible = presentPlayers.where((p) => p['desistiu'] != true).toList();
-    if (eligible.length < 2) return;
+    if (activePlayers(presentPlayers).length < 2) return;
+    final pool = _drawPool(useAllPlayers: useAllPlayers);
+    if (pool.length < 2) return;
+    _showSplitSuggestions(pool);
+  }
+
+  /// O balanceador analisa TODAS as divisões possíveis do grupo (até 20
+  /// jogadores) e o app oferece 3 sugestões quase igualmente equilibradas
+  /// (nunca igual ao último sorteio). Quem decide é o organizador.
+  void _showSplitSuggestions(List<Map<String, dynamic>> pool) {
+    final byId = {for (final p in pool) _pid(p): p};
+    final balancePool = pool.map(_balancePlayer).toList();
+    List<SplitResult> suggestions = [];
+
+    void generate() {
+      suggestions = TeamBalancer.suggest(
+        balancePool,
+        count: 3,
+        tolerance: 1.0,
+        excludeKeys: _lastDrawKey == null ? <String>{} : {_lastDrawKey!},
+      );
+    }
+
+    generate();
+    if (suggestions.isEmpty) return;
+
+    String firstNames(List<BalancePlayer> l) => l
+        .map((bp) {
+          final p = byId[bp.id]!;
+          final first = p['name'].toString().split(' ')[0];
+          return '$first ${bp.rating.round()}';
+        })
+        .join(' · ');
+
+    String quality(double diff) {
+      if (diff <= 1.0) return 'Super equilibrado';
+      if (diff <= 2.5) return 'Equilibrado';
+      return 'Mais ou menos';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          title: const Text(
+            'Sugestões de times',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: suggestions.length,
+              itemBuilder: (c, i) {
+                final s = suggestions[i];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.deepBlue,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Opção ${i + 1} · ${quality(s.diff)} (dif. ${s.diff.toStringAsFixed(1)})',
+                        style: const TextStyle(
+                          color: Colors.orangeAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '🔴 Vermelho ${s.meanA.toStringAsFixed(1)}  (${s.eliteA} elite${s.eliteA == 1 ? '' : 's'})',
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        firstNames(s.a),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '⚪ Branco ${s.meanB.toStringAsFixed(1)}  (${s.eliteB} elite${s.eliteB == 1 ? '' : 's'})',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        firstNames(s.b),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _applySplit(s, byId);
+                          },
+                          child: const Text('Usar esta'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.white54),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setSt(generate),
+              child: const Text('Outras opções'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applySplit(SplitResult split, Map<String, Map<String, dynamic>> byId) {
+    final red = [for (final bp in split.a) if (byId[bp.id] != null) byId[bp.id]!];
+    final white = [for (final bp in split.b) if (byId[bp.id] != null) byId[bp.id]!];
     setState(() {
-      int needed = widget.totalPlayers * 2;
-      final random = Random();
-
-      List<Map<String, dynamic>> basePool;
-      if (useAllPlayers) {
-        List<Map<String, dynamic>> shuffledPlayers =
-            List<Map<String, dynamic>>.from(eligible);
-        shuffledPlayers.shuffle(random);
-        basePool = shuffledPlayers.take(needed).toList();
-      } else {
-        // Take the first n players in arrival order (no shuffling)
-        basePool = eligible.take(needed).toList();
-      }
-
-      // Sorteia até sair diferente do último sorteio (ignorando cor -- times
-      // trocados de lado contam como repetição). Tenta algumas vezes; se não
-      // conseguir (grupos muito pequenos), força uma troca de 1 jogador no
-      // fim pra garantir que nunca saia igual ao anterior.
-      List<Map<String, dynamic>> redResult = [];
-      List<Map<String, dynamic>> whiteResult = [];
-      const maxAttempts = 15;
-      for (int attempt = 0; attempt < maxAttempts; attempt++) {
-        final split = _draftOneSplit(basePool, random);
-        redResult = split.$1;
-        whiteResult = split.$2;
-        if (_lastDrawKey == null || _splitKey(redResult, whiteResult) != _lastDrawKey) {
-          break;
-        }
-      }
-
-      // Garantia final: se mesmo assim saiu igual ao anterior, troca um par
-      // de jogadores de nota parecida entre os dois times pra forçar diferença.
-      if (_lastDrawKey != null &&
-          _splitKey(redResult, whiteResult) == _lastDrawKey &&
-          redResult.isNotEmpty &&
-          whiteResult.isNotEmpty) {
-        final tmp = redResult[0];
-        redResult[0] = whiteResult[0];
-        whiteResult[0] = tmp;
-      }
-
       teamRed
         ..clear()
-        ..addAll(redResult);
+        ..addAll(red);
       teamWhite
         ..clear()
-        ..addAll(whiteResult);
-
+        ..addAll(white);
       _lastDrawKey = _splitKey(teamRed, teamWhite);
     });
     _saveMatchState();
   }
 
-  /// Sorteia uma divisão dos jogadores em dois times, com aleatoriedade real:
-  /// jogadores são agrupados em faixas próximas de nota (não em ranking
-  /// estritamente ordenado) e embaralhados dentro de cada faixa antes de
-  /// serem distribuídos, ao invés de reordenados por nota (o que antes
-  /// anulava qualquer shuffle anterior).
-  (List<Map<String, dynamic>>, List<Map<String, dynamic>>) _draftOneSplit(
-    List<Map<String, dynamic>> basePool,
-    Random random,
-  ) {
-    final pool = List<Map<String, dynamic>>.from(basePool);
-
-    // Agrupa em faixas de ~0.5 pontos de nota e embaralha dentro de cada
-    // faixa, mantendo as faixas em ordem decrescente (melhores primeiro).
-    const bandWidth = 0.5;
-    final byBand = <int, List<Map<String, dynamic>>>{};
-    for (final p in pool) {
-      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
-      final band = (rating / bandWidth).floor();
-      byBand.putIfAbsent(band, () => []).add(p);
+  /// Completa as vagas dos dois times com [entering] escolhendo a combinação
+  /// mais equilibrada por Overall (considerando quem já está em campo).
+  void _fillTeamsBalanced(List<Map<String, dynamic>> entering) {
+    final byId = {for (final p in entering) _pid(p): p};
+    final res = TeamBalancer.fill(
+      stayersA: teamRed.map(_balancePlayer).toList(),
+      stayersB: teamWhite.map(_balancePlayer).toList(),
+      entering: entering.map(_balancePlayer).toList(),
+      capA: max(0, widget.totalPlayers - teamRed.length),
+      capB: max(0, widget.totalPlayers - teamWhite.length),
+    );
+    for (final bp in res.toA) {
+      final p = byId[bp.id];
+      if (p != null) teamRed.add(p);
     }
-    final bands = byBand.keys.toList()..sort((a, b) => b.compareTo(a));
-    final shuffledPool = <Map<String, dynamic>>[];
-    for (final band in bands) {
-      final group = byBand[band]!;
-      group.shuffle(random);
-      shuffledPool.addAll(group);
+    for (final bp in res.toB) {
+      final p = byId[bp.id];
+      if (p != null) teamWhite.add(p);
     }
-
-    final teamRedDraft = <Map<String, dynamic>>[];
-    final teamWhiteDraft = <Map<String, dynamic>>[];
-    double sumRed = 0;
-    double sumWhite = 0;
-
-    for (var p in shuffledPool) {
-      final rating = ((p['rating'] ?? kRatingBase) as num).toDouble();
-      if (teamRedDraft.length < widget.totalPlayers &&
-          teamWhiteDraft.length < widget.totalPlayers) {
-        bool shouldPickRed = sumRed <= sumWhite;
-        // 40% de chance de inverter a escolha "ideal" -- suficiente pra dar
-        // variedade real, já que agora a ordem de entrada dos jogadores de
-        // nota parecida também é aleatória (antes só isso já não bastava
-        // porque o pool inteiro era reordenado por nota logo depois).
-        if (random.nextDouble() < 0.4) {
-          shouldPickRed = !shouldPickRed;
-        }
-        if (shouldPickRed) {
-          teamRedDraft.add(p);
-          sumRed += rating;
-        } else {
-          teamWhiteDraft.add(p);
-          sumWhite += rating;
-        }
-      } else if (teamRedDraft.length < widget.totalPlayers) {
-        teamRedDraft.add(p);
-        sumRed += rating;
-      } else if (teamWhiteDraft.length < widget.totalPlayers) {
-        teamWhiteDraft.add(p);
-        sumWhite += rating;
-      }
-    }
-
-    return (teamRedDraft, teamWhiteDraft);
   }
 
   /// Chave única de uma divisão de times, ignorando qual lado é vermelho ou
   /// branco -- duas divisões com os mesmos jogadores só de lado trocado
-  /// geram a mesma chave (contam como repetição).
+  /// geram a mesma chave (contam como repetição). Mesmo formato de
+  /// [SplitResult.key].
   String _splitKey(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
     final keyA = (a.map(_pid).toList()..sort()).join(',');
     final keyB = (b.map(_pid).toList()..sort()).join(',');
@@ -1054,7 +1275,7 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _iniciarTimesDraft() async {
-    final eligible = presentPlayers.where((p) => p['desistiu'] != true).toList();
+    final eligible = activePlayers(presentPlayers);
     if (eligible.length < 2) return;
 
     final List<List<Map<String, dynamic>>>? result = await Navigator.push(
@@ -1159,17 +1380,16 @@ class _MatchScreenState extends State<MatchScreen>
     bool isRedTeam,
     Function(Map<String, dynamic>) onSelected,
   ) {
-    final waiting = presentPlayers.where((p) {
-      final id = _pid(p);
-      return p['desistiu'] != true &&
-          !teamRed.any((t) => _pid(t) == id) &&
-          !teamWhite.any((t) => _pid(t) == id);
-    }).toList();
+    final otherGk = isRedTeam ? activeGkWhite : activeGkRed;
+    final otherGkId = otherGk != null ? _pid(otherGk) : null;
+    final waiting = waitingPlayers(presentPlayers, teamRed, teamWhite, _pid)
+        .where((p) => _pid(p) != otherGkId)
+        .toList();
     if (waiting.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Não há jogadores de fora para selecionar como goleiro!",
+            "Não há outros jogadores disponíveis para selecionar como goleiro!",
           ),
         ),
       );
@@ -1318,19 +1538,17 @@ class _MatchScreenState extends State<MatchScreen>
             SwitchListTile(
               activeColor: AppColors.accentBlue,
               title: const Text(
-                "Mostrar Mini Campo Tático",
+                "Campo tático ou lista",
                 style: TextStyle(color: Colors.white),
               ),
               subtitle: const Text(
-                "Desative para ver apenas as listas de jogadores",
+                "Ligado: campo tático com cards. Desligado: lista de jogadores",
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
               value: _showTacticalPitch,
               onChanged: (val) async {
-                setState(() => _showTacticalPitch = val);
+                await _setShowTacticalPitch(val);
                 setModalState(() => _showTacticalPitch = val);
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setBool('show_tactical_pitch', val);
               },
             ),
             SwitchListTile(
@@ -1361,17 +1579,35 @@ class _MatchScreenState extends State<MatchScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xff010a3b),
+      backgroundColor: AppColors.deepBlue,
       appBar: AppBar(
         backgroundColor: AppColors.headerBlue,
         iconTheme: const IconThemeData(color: AppColors.textWhite),
         title: Text(
           widget.tournamentName,
-          style: const TextStyle(color: AppColors.textWhite),
+          style: const TextStyle(
+            color: AppColors.textWhite,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
         ),
         centerTitle: true,
         elevation: 0,
         actions: [
+          ValueListenableBuilder<int>(
+            valueListenable: PendingMatchQueue.instance.pending,
+            builder: (context, count, _) {
+              if (count == 0) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Aguardando envio: $count',
+                icon: Badge(
+                  label: Text('$count'),
+                  child: const Icon(Icons.cloud_upload_outlined),
+                ),
+                onPressed: _showPendingSyncDialog,
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showSettingsDialog,
@@ -1396,12 +1632,28 @@ class _MatchScreenState extends State<MatchScreen>
           ),
           _buildGoalScorers(),
           Container(
-            color: AppColors.headerBlue,
+            decoration: const BoxDecoration(
+              color: AppColors.headerBlue,
+              border: Border(
+                bottom: BorderSide(color: AppColors.borderSubtle, width: 1),
+              ),
+            ),
             child: TabBar(
               controller: _tabController,
-              labelColor: AppColors.accentBlue,
-              unselectedLabelColor: Colors.grey,
+              labelColor: AppColors.textWhite,
+              unselectedLabelColor: AppColors.textMuted,
               indicatorColor: AppColors.accentBlue,
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.8,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                letterSpacing: 0.8,
+              ),
               tabs: const [
                 Tab(text: "CHEGADA"),
                 Tab(text: "PARTIDA"),
@@ -1486,8 +1738,13 @@ class _MatchScreenState extends State<MatchScreen>
     if (redScorers.isEmpty && whiteScorers.isEmpty)
       return const SizedBox.shrink();
     return Container(
-      color: AppColors.deepBlue,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      decoration: const BoxDecoration(
+        color: AppColors.headerBlue,
+        border: Border(
+          bottom: BorderSide(color: AppColors.borderSubtle, width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1512,7 +1769,7 @@ class _MatchScreenState extends State<MatchScreen>
   Widget _buildOrderArrivalTab() {
     if (presentPlayers.isEmpty)
       return const Center(
-        child: Text("Lista vazia.", style: TextStyle(color: Colors.white38)),
+        child: Text("Lista vazia.", style: TextStyle(color: AppColors.textMuted)),
       );
     final activePlayers =
         presentPlayers.where((p) => p['desistiu'] != true).toList();
@@ -1530,15 +1787,15 @@ class _MatchScreenState extends State<MatchScreen>
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.accentBlue.withOpacity(0.15),
+          color: AppColors.surfaceSubtle,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.accentBlue.withOpacity(0.5)),
+          border: Border.all(color: AppColors.borderSubtle),
         ),
         child: Center(
           child: Text(
             resumoText,
             style: const TextStyle(
-              color: AppColors.accentBlue,
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -1598,47 +1855,57 @@ class _MatchScreenState extends State<MatchScreen>
                   ),
                 Opacity(
               opacity: desistiu ? 0.45 : 1.0,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.headerBlue,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
-                ),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.headerBlue,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
                 child: Material(
                 color: Colors.transparent,
                 child: ListTile(
                   leading: Stack(
+                    clipBehavior: Clip.none,
                     alignment: Alignment.bottomRight,
                     children: [
-                      CircleAvatar(
-                        backgroundColor: AppColors.deepBlue,
-                        backgroundImage: displayList[i]['icon'] != null
-                            ? AssetImage(displayList[i]['icon'])
-                            : null,
-                        child: displayList[i]['icon'] == null
-                            ? Text(
-                                displayList[i]['name'][0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
+                      PlayerAvatarFrame(
+                        frame: resolvePlayerFrame(displayList[i]),
+                        compact: true,
+                        isCircular: true,
+                        child: CircleAvatar(
+                          backgroundColor: AppColors.deepBlue,
+                          backgroundImage: displayList[i]['icon'] != null
+                              ? AssetImage(displayList[i]['icon'])
+                              : null,
+                          child: displayList[i]['icon'] == null
+                              ? Text(
+                                  displayList[i]['name'][0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
+                        ),
                       ),
                       if (!desistiu)
-                        Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            color: AppColors.accentBlue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            "$displayOrder",
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: AppColors.accentBlue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              "$displayOrder",
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -1681,30 +1948,8 @@ class _MatchScreenState extends State<MatchScreen>
                             ),
                           ),
                         )
-                      else if (displayList[i]['rating'] != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: Colors.green.withOpacity(0.3),
-                            ),
-                          ),
-                          child: Text(
-                            (displayList[i]['rating'] as num)
-                                .toDouble()
-                                .toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.greenAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
+                      else
+                        _overallBadge(displayList[i]),
                     ],
                   ),
                   trailing: Icon(
@@ -1753,24 +1998,20 @@ class _MatchScreenState extends State<MatchScreen>
       allStats[_pid(p)] = s;
       checkMotm(p, s);
     }
-    final List<Alignment> redAlignments = [
-      const Alignment(-0.85, 0.0),
-      const Alignment(-0.55, -0.65),
-      const Alignment(-0.55, 0.65),
-      const Alignment(-0.25, 0.0),
-      const Alignment(-0.5, 0.0),
-    ];
-    final List<Alignment> whiteAlignments = [
-      const Alignment(0.85, 0.0),
-      const Alignment(0.55, -0.65),
-      const Alignment(0.55, 0.65),
-      const Alignment(0.25, 0.0),
-      const Alignment(0.5, 0.0),
-    ];
-
+    if (activeGkRed != null) {
+      var s = _getPlayerMatchStats(activeGkRed!, true);
+      allStats[_pid(activeGkRed!)] = s;
+      checkMotm(activeGkRed!, s);
+    }
+    if (activeGkWhite != null) {
+      var s = _getPlayerMatchStats(activeGkWhite!, false);
+      allStats[_pid(activeGkWhite!)] = s;
+      checkMotm(activeGkWhite!, s);
+    }
     return SingleChildScrollView(
       child: Column(
         children: [
+          _buildPitchListToggle(),
           if (redWinStreak > 0 || whiteWinStreak > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
@@ -1798,112 +2039,118 @@ class _MatchScreenState extends State<MatchScreen>
                 ],
               ),
             ),
-
           if (_showTacticalPitch)
-            Container(
-              margin: const EdgeInsets.all(12),
-              height: 330,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1B4332),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white30, width: 2),
-              ),
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.center,
-                    child: Container(width: 2, color: Colors.white30),
-                  ),
-                  Align(
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white30, width: 2),
+            TacticalPitch(
+              teamSize: widget.totalPlayers,
+              teamRed: teamRed,
+              teamWhite: teamWhite,
+              gkRed: activeGkRed,
+              gkWhite: activeGkWhite,
+              allStats: allStats,
+              motmPlayerId: motmPlayerId,
+              onPlayerTap: (player, isRed) {
+                if (isMatchRunning) {
+                  _showInGameOptions(player, isRed);
+                } else {
+                  _showRemovePopup(player);
+                }
+              },
+              onGkRedTap: () {
+                if (activeGkRed == null) {
+                  _showGoalkeeperSelectionDialog(true, (player) {
+                    setState(() {
+                      activeGkRed = player;
+                      firstGkRed ??= player;
+                    });
+                    _saveMatchState();
+                  });
+                } else {
+                  _showInGameOptions(activeGkRed!, true, isGk: true);
+                }
+              },
+              onGkWhiteTap: () {
+                if (activeGkWhite == null) {
+                  _showGoalkeeperSelectionDialog(false, (player) {
+                    setState(() {
+                      activeGkWhite = player;
+                      firstGkWhite ??= player;
+                    });
+                    _saveMatchState();
+                  });
+                } else {
+                  _showInGameOptions(activeGkWhite!, false, isGk: true);
+                }
+              },
+              eventIconsOf: _buildEventIconsList,
+            )
+          else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        right: BorderSide(color: Colors.white10, width: 1),
                       ),
                     ),
-                  ),
-                  ...teamRed.asMap().entries.map(
-                    (entry) => Align(
-                      alignment:
-                          redAlignments[entry.key % redAlignments.length],
-                      child: MatchPitchPlayer(
-                        player: entry.value,
-                        isRed: true,
-                        isMotm: _pid(entry.value) == motmPlayerId,
-                        stats: allStats[_pid(entry.value)]!,
-                        onTap: () {
-                          if (isMatchRunning)
-                            _showInGameOptions(entry.value, true);
-                          else
-                            _showRemovePopup(entry.value);
-                        },
-                        eventIcons: _buildEventIconsList(
-                          allStats[_pid(entry.value)]!,
+                    child: Column(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 12.0, bottom: 8.0),
+                          child: Text(
+                            "Linha Vermelho",
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                  ...teamWhite.asMap().entries.map(
-                    (entry) => Align(
-                      alignment:
-                          whiteAlignments[entry.key % whiteAlignments.length],
-                      child: MatchPitchPlayer(
-                        player: entry.value,
-                        isRed: false,
-                        isMotm: _pid(entry.value) == motmPlayerId,
-                        stats: allStats[_pid(entry.value)]!,
-                        onTap: () {
-                          if (isMatchRunning)
-                            _showInGameOptions(entry.value, false);
-                          else
-                            _showRemovePopup(entry.value);
-                        },
-                        eventIcons: _buildEventIconsList(
-                          allStats[_pid(entry.value)]!,
+                        ...teamRed.map(
+                          (p) => MatchPlayerTile(
+                            player: p,
+                            isRed: true,
+                            matchStats: allStats[_pid(p)]!,
+                            onTap: () {
+                              if (isMatchRunning) {
+                                _showInGameOptions(p, true);
+                              } else {
+                                _showRemovePopup(p);
+                              }
+                            },
+                            eventIcons: _buildEventIconsList(allStats[_pid(p)]!),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      right: BorderSide(color: Colors.white10, width: 1),
-                    ),
-                  ),
+                ),
+                Expanded(
                   child: Column(
                     children: [
                       const Padding(
                         padding: EdgeInsets.only(top: 12.0, bottom: 8.0),
                         child: Text(
-                          "Linha Vermelho",
+                          "Linha Branco",
                           style: TextStyle(
-                            color: Colors.redAccent,
+                            color: Colors.white70,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
                         ),
                       ),
-                      ...teamRed.map(
+                      ...teamWhite.map(
                         (p) => MatchPlayerTile(
                           player: p,
-                          isRed: true,
+                          isRed: false,
                           matchStats: allStats[_pid(p)]!,
                           onTap: () {
-                            if (isMatchRunning)
-                              _showInGameOptions(p, true);
-                            else
+                            if (isMatchRunning) {
+                              _showInGameOptions(p, false);
+                            } else {
                               _showRemovePopup(p);
+                            }
                           },
                           eventIcons: _buildEventIconsList(allStats[_pid(p)]!),
                         ),
@@ -1911,59 +2158,109 @@ class _MatchScreenState extends State<MatchScreen>
                     ],
                   ),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12.0, bottom: 8.0),
-                      child: Text(
-                        "Linha Branco",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    ...teamWhite.map(
-                      (p) => MatchPlayerTile(
-                        player: p,
-                        isRed: false,
-                        matchStats: allStats[_pid(p)]!,
-                        onTap: () {
-                          if (isMatchRunning)
-                            _showInGameOptions(p, false);
-                          else
-                            _showRemovePopup(p);
-                        },
-                        eventIcons: _buildEventIconsList(allStats[_pid(p)]!),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
-            child: Row(
-              children: [
-                _buildGkTile(true),
-                const SizedBox(width: 12),
-                _buildGkTile(false),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
+              child: Row(
+                children: [
+                  _buildGkTile(true),
+                  const SizedBox(width: 12),
+                  _buildGkTile(false),
+                ],
+              ),
+            ),
+          ],
+          MatchEventsPanel(events: matchEvents),
         ],
       ),
     );
   }
 
+  Widget _buildPitchListToggle() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _viewModeChip(
+              selected: _showTacticalPitch,
+              icon: Icons.sports_soccer,
+              label: 'Campo tático',
+              onTap: () => _setShowTacticalPitch(true),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _viewModeChip(
+              selected: !_showTacticalPitch,
+              icon: Icons.view_list,
+              label: 'Lista',
+              onTap: () => _setShowTacticalPitch(false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _viewModeChip({
+    required bool selected,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected
+          ? AppColors.accentBlue
+          : AppColors.surfaceSubtle,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.accentBlue : AppColors.borderSubtle,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? AppColors.textWhite : AppColors.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? AppColors.textWhite : AppColors.textMuted,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setShowTacticalPitch(bool value) async {
+    if (_showTacticalPitch == value) return;
+    setState(() => _showTacticalPitch = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_tactical_pitch', value);
+  }
+
   Widget _buildGkTile(bool isRed) {
     final gk = isRed ? activeGkRed : activeGkWhite;
-    final teamColor = isRed ? Colors.redAccent : Colors.white70;
+    final teamColor = isRed ? AppColors.redTeam : AppColors.whiteTeam;
+    final borderColor = isRed ? AppColors.redTeam.withValues(alpha: 0.4) : AppColors.borderSubtle;
 
     return Expanded(
       child: GestureDetector(
@@ -1986,11 +2283,11 @@ class _MatchScreenState extends State<MatchScreen>
           }
         },
         child: Container(
-          height: 40,
+          height: 42,
           decoration: BoxDecoration(
-            color: isRed ? Colors.black45 : Colors.white12,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: teamColor.withOpacity(0.5)),
+            color: AppColors.headerBlue,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2000,8 +2297,8 @@ class _MatchScreenState extends State<MatchScreen>
               Flexible(
                 child: Text(
                   gk != null ? gk['name'] : "Goleiro",
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: gk != null ? AppColors.textWhite : AppColors.textMuted,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -2016,12 +2313,7 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   Widget _buildNextTeamsTab() {
-    final waiting = presentPlayers.where((p) {
-      final id = _pid(p);
-      return p['desistiu'] != true &&
-          !teamRed.any((t) => _pid(t) == id) &&
-          !teamWhite.any((t) => _pid(t) == id);
-    }).toList();
+    final waiting = waitingPlayers(presentPlayers, teamRed, teamWhite, _pid);
     if (waiting.isEmpty)
       return const Center(
         child: Text(
@@ -2051,6 +2343,24 @@ class _MatchScreenState extends State<MatchScreen>
         _saveMatchState();
       },
       children: _buildIndividualPlayerCards(waiting, teamSize),
+    );
+  }
+
+  /// Selo com o Overall (0-99) do jogador, na cor da faixa (bronze/prata/ouro/elite).
+  Widget _overallBadge(Map<String, dynamic> player) {
+    final int ovr = playerOverallOf(player).round();
+    final Color c = overallColor(ovr);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: c.withOpacity(0.4)),
+      ),
+      child: Text(
+        '$ovr',
+        style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 12),
+      ),
     );
   }
 
@@ -2105,9 +2415,7 @@ class _MatchScreenState extends State<MatchScreen>
     required int teamBatch,
   }) {
     final iconPath = player['icon'] as String?;
-    final rating = player['rating'] != null
-        ? (player['rating'] as num).toDouble()
-        : kRatingBase;
+    final rating = playerOverallOf(player);
     Color teamColor = Colors.white12;
     if (isCompleteTeam) {
       if (teamBatch == 1)
@@ -2147,35 +2455,45 @@ class _MatchScreenState extends State<MatchScreen>
         child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         leading: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.bottomRight,
           children: [
-            CircleAvatar(
-              backgroundColor: isCompleteTeam
-                  ? teamColor.withOpacity(0.2)
-                  : AppColors.deepBlue,
-              backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
-              child: iconPath == null
-                  ? Text(
-                      player['name'][0].toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
-            ),
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: isCompleteTeam ? teamColor : Colors.white30,
-                shape: BoxShape.circle,
+            PlayerAvatarFrame(
+              frame: resolvePlayerFrame(player),
+              compact: true,
+              isCircular: true,
+              child: CircleAvatar(
+                backgroundColor: isCompleteTeam
+                    ? teamColor.withOpacity(0.2)
+                    : AppColors.deepBlue,
+                backgroundImage: iconPath != null ? AssetImage(iconPath) : null,
+                child: iconPath == null
+                    ? Text(
+                        player['name'][0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
               ),
-              child: Text(
-                "${index + 1}",
-                style: const TextStyle(
-                  fontSize: 9,
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
+            ),
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: isCompleteTeam ? teamColor : Colors.white30,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  "${index + 1}",
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -2196,23 +2514,7 @@ class _MatchScreenState extends State<MatchScreen>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (rating > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: Text(
-                  rating.toStringAsFixed(1),
-                  style: const TextStyle(
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+            if (rating > 0) _overallBadge(player),
           ],
         ),
         trailing: const Icon(Icons.drag_handle, color: Colors.white24),
@@ -2343,10 +2645,19 @@ class _MatchScreenState extends State<MatchScreen>
             ),
             onPressed: () {
               setState(() {
-                teamRed.removeWhere((p) => _pid(p) == _pid(player));
-                teamWhite.removeWhere((p) => _pid(p) == _pid(player));
+                final String pid = _pid(player);
+                teamRed.removeWhere((p) => _pid(p) == pid);
+                teamWhite.removeWhere((p) => _pid(p) == pid);
+                // Quem desiste também deixa de ser o goleiro em campo. (O
+                // `firstGk*` é histórico da partida atual e não é mexido.)
+                if (activeGkRed != null && _pid(activeGkRed!) == pid) {
+                  activeGkRed = null;
+                }
+                if (activeGkWhite != null && _pid(activeGkWhite!) == pid) {
+                  activeGkWhite = null;
+                }
                 final idx = presentPlayers.indexWhere(
-                  (p) => _pid(p) == _pid(player),
+                  (p) => _pid(p) == pid,
                 );
                 if (idx != -1) {
                   presentPlayers[idx] = {
@@ -2388,15 +2699,10 @@ class _MatchScreenState extends State<MatchScreen>
         final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
         if (fetched.isNotEmpty) {
           setState(() {
-            allSavedPlayers = fetched.map((p) => {
-              'id': p.id,
-              'name': p.displayName,
-              'icon': p.icon,
-              'rating': p.rating,
-              'goal_sound_url': p.goalSoundUrl,
-              'name_effect': p.nameEffect,
-              'monthly_highlight': p.monthlyHighlight,
-            }).toList();
+            allSavedPlayers = fetched
+                .map((p) => GroupBootstrap.playerSnapshotMap(
+                    p, p.rating ?? kRatingBase))
+                .toList();
           });
           await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
         }
@@ -2736,6 +3042,40 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
+  /// Toca o som do gol SEM bloquear o placar. Antes, o `await` do áudio
+  /// customizado (URL de rede) vinha antes do setState: com internet ruim o
+  /// gol demorava segundos pra aparecer. Sem rede / URL lenta -> som padrão.
+  Future<void> _playGoalSound(String type, Map<String, dynamic> player) async {
+    if (type != "goal" && type != "own_goal") return;
+    final String? customSound = player['goal_sound_url']?.toString();
+    try {
+      if (customSound != null && customSound.isNotEmpty && type == "goal") {
+        // Só quem fez o gol de verdade tem seu áudio tocado; gol contra
+        // sempre usa o som padrão.
+        await _goalSoundPlayer.stop();
+        if (customSound.startsWith('http://') || customSound.startsWith('https://')) {
+          await _goalSoundPlayer
+              .play(UrlSource(customSound))
+              .timeout(const Duration(seconds: 4));
+        } else {
+          await _goalSoundPlayer
+              .play(AssetSource('audio/$customSound'))
+              .timeout(const Duration(seconds: 4));
+        }
+      } else {
+        await _audioPlayer.stop();
+        await _audioPlayer.play(AssetSource('audio/default_goal.mp3'));
+      }
+    } catch (e) {
+      // Link quebrado, sem internet ou erro: som padrão.
+      try {
+        await _goalSoundPlayer.stop();
+        await _audioPlayer.stop();
+        await _audioPlayer.play(AssetSource('audio/default_goal.mp3'));
+      } catch (_) {}
+    }
+  }
+
   void _registerEvent(
     String type,
     Map<String, dynamic> player,
@@ -2743,32 +3083,8 @@ class _MatchScreenState extends State<MatchScreen>
     String? assist,
     String? assistId,
   }) async {
-    try {
-      if (type == "goal" || type == "own_goal") {
-        final String? customSoundUrl = player['goal_sound_url']?.toString();
-        if (customSoundUrl != null && customSoundUrl.isNotEmpty && type == "goal") {
-          // Só quem fez o gol de verdade tem seu áudio tocado; gol contra
-          // sempre usa o som padrão para não soar como comemoração.
-          // Sempre para qualquer reprodução pendente nesse player antes de
-          // tocar de novo -- evita que um segundo gol interrompa/corrompa o
-          // carregamento de uma URL que ainda estava bufferizando.
-          await _goalSoundPlayer.stop();
-          await _goalSoundPlayer.play(UrlSource(customSoundUrl));
-        } else {
-          await _audioPlayer.stop();
-          await _audioPlayer.play(AssetSource('audio/goal.mp3'));
-        }
-      }
-    } catch (e) {
-      // Se o áudio customizado falhar (link quebrado, sem internet etc.),
-      // cai pro som padrão em vez de silenciar o gol.
-      try {
-        if (type == "goal" || type == "own_goal") {
-          await _audioPlayer.stop();
-          await _audioPlayer.play(AssetSource('audio/goal.mp3'));
-        }
-      } catch (_) {}
-    }
+    // 1) placar e súmula primeiro; 2) áudio em paralelo.
+    unawaited(_playGoalSound(type, player));
     setState(() {
       if (type == "goal") {
         if (isRedTeam)
@@ -2908,6 +3224,19 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _finishMatch() async {
     _matchTimer?.cancel();
+    // Snapshot ANTES de zerar goleiros/estado: o código antigo montava as
+    // escalações do Supabase depois do setState que limpa firstGkRed/White,
+    // então o flag is_goalkeeper nunca era gravado.
+    final Map<String, dynamic>? gkRedSnap = firstGkRed;
+    final Map<String, dynamic>? gkWhiteSnap = firstGkWhite;
+    final List<Map<String, dynamic>> redSnap = List.from(teamRed);
+    final List<Map<String, dynamic>> whiteSnap = List.from(teamWhite);
+    final List<Map<String, dynamic>> eventsSnap = List.from(matchEvents);
+    final int redScoreSnap = scoreRed;
+    final int whiteScoreSnap = scoreWhite;
+    final int durationSnap = totalSecondsElapsed;
+    final DateTime startedAtSnap = _lastStartTime ??
+        DateTime.now().subtract(Duration(seconds: totalSecondsElapsed));
     final Map<String, dynamic> matchRecord = {
       "match_id": DateTime.now().millisecondsSinceEpoch.toString(),
       "date": DateTime.now().toIso8601String(),
@@ -2931,94 +3260,59 @@ class _MatchScreenState extends State<MatchScreen>
     });
     _saveMatchState();
 
-    final prefs = await SharedPreferences.getInstance();
-    final String historyKey = 'match_history_${widget.tournamentId}';
-    List<dynamic> history = [];
-    try {
-      if (prefs.containsKey(historyKey))
-        history = jsonDecode(prefs.getString(historyKey)!);
-    } catch (e) {
-      history = [];
+    // --- Persistência: nada aqui espera a rede ---------------------------
+    final String matchId = const Uuid().v4();
+
+    final List<Map<String, dynamic>> lineupMaps = [];
+    void addLineup(Map<String, dynamic> p, String team, Map<String, dynamic>? gk) {
+      final pid = playerIdFromObject(p);
+      if (pid.isEmpty) return;
+      lineupMaps.add(MatchLineupModel(
+        matchId: '',
+        playerId: pid,
+        team: team,
+        isGoalkeeper: gk != null && pid == playerIdFromObject(gk),
+      ).toMap(includeId: false)..remove('match_id'));
     }
-    history.add(matchRecord);
-    await prefs.setString(historyKey, jsonEncode(history));
+    for (final p in redSnap) addLineup(p, 'red', gkRedSnap);
+    for (final p in whiteSnap) addLineup(p, 'white', gkWhiteSnap);
 
-    // Persist direct to Supabase
-    try {
-      final List<MatchLineupModel> lineups = [];
-      for (final p in teamRed) {
-        final pid = playerIdFromObject(p);
-        if (pid.isNotEmpty) {
-          lineups.add(MatchLineupModel(
-            matchId: '',
-            playerId: pid,
-            team: 'red',
-            isGoalkeeper: pid == playerIdFromObject(firstGkRed),
-          ));
-        }
-      }
-      for (final p in teamWhite) {
-        final pid = playerIdFromObject(p);
-        if (pid.isNotEmpty) {
-          lineups.add(MatchLineupModel(
-            matchId: '',
-            playerId: pid,
-            team: 'white',
-            isGoalkeeper: pid == playerIdFromObject(firstGkWhite),
-          ));
-        }
-      }
+    final List<Map<String, dynamic>> eventMaps = eventsSnap.map((ev) {
+      final pid = eventPlayerId(ev, 'player');
+      final astId = eventPlayerId(ev, 'assist');
+      // matchEvents guarda "Vermelho"/"Branco" pra exibição; o banco só
+      // aceita 'red'/'white'.
+      final rawTeam = ev['team']?.toString() ?? '';
+      final normalizedTeam = rawTeam == 'Branco' ? 'white' : 'red';
+      return MatchEventModel(
+        matchId: '',
+        playerId: pid,
+        assistPlayerId: astId.isNotEmpty ? astId : null,
+        eventType: ev['type']?.toString() ?? 'goal',
+        team: normalizedTeam,
+        minute: ev['time']?.toString(),
+      ).toMap(includeId: false)..remove('match_id');
+    }).toList();
 
-      final List<MatchEventModel> events = matchEvents.map((ev) {
-        final pid = eventPlayerId(ev, 'player');
-        final astId = eventPlayerId(ev, 'assist');
-        // matchEvents stores "Vermelho"/"Branco" for on-screen display; the
-        // DB constraint only accepts 'red'/'white', so normalize here.
-        final rawTeam = ev['team']?.toString() ?? '';
-        final normalizedTeam = rawTeam == 'Branco' ? 'white' : 'red';
-        return MatchEventModel(
-          matchId: '',
-          playerId: pid,
-          assistPlayerId: astId.isNotEmpty ? astId : null,
-          eventType: ev['type']?.toString() ?? 'goal',
-          team: normalizedTeam,
-          minute: ev['time']?.toString(),
-        );
-      }).toList();
+    // 1 escrita local rápida e o envio vai pra fila (retry automático).
+    await PendingMatchQueue.instance.enqueue({
+      'match_id': matchId,
+      'match': {
+        'id': matchId,
+        'session_id': widget.tournamentId,
+        'group_id': widget.groupId,
+        'score_red': redScoreSnap,
+        'score_white': whiteScoreSnap,
+        'played_at': startedAtSnap.toIso8601String(),
+        'duration_seconds': durationSnap,
+      },
+      'lineups': lineupMaps,
+      'events': eventMaps,
+    });
 
-      await SupabaseService.instance.matches.saveFullMatch(
-        sessionId: widget.tournamentId,
-        groupId: widget.groupId,
-        teamAScore: scoreRed,
-        teamBScore: scoreWhite,
-        startTime: _lastStartTime ?? DateTime.now().subtract(Duration(seconds: totalSecondsElapsed)),
-        durationSeconds: totalSecondsElapsed,
-        lineups: lineups,
-        events: events,
-      );
-      debugPrint("Match saved to Supabase successfully. session_id=${widget.tournamentId}");
-      _calculateDynamicRatings();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Partida salva no Histórico!"),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error saving match to Supabase: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Erro ao salvar partida no servidor: $e"),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
+    // Backup local do histórico: em segundo plano.
+    unawaited(_appendLocalHistory(matchRecord));
+    // Notas ficam fixas durante a pelada (snapshot do GroupBootstrap).
 
     bool isTie = scoreRed == scoreWhite;
     bool redWon = scoreRed > scoreWhite;
@@ -3059,7 +3353,7 @@ class _MatchScreenState extends State<MatchScreen>
       }
     }
 
-    _triggerBackgroundSync();
+    _scheduleSiteSync();
 
     if (thresholdMet) {
       if (mounted) {
@@ -3175,6 +3469,74 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
+  Future<void> _appendLocalHistory(Map<String, dynamic> matchRecord) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String historyKey = 'match_history_${widget.tournamentId}';
+      List<dynamic> history = [];
+      try {
+        if (prefs.containsKey(historyKey)) {
+          history = jsonDecode(prefs.getString(historyKey)!);
+        }
+      } catch (_) {
+        history = [];
+      }
+      history.add(matchRecord);
+      await prefs.setString(historyKey, jsonEncode(history));
+    } catch (e) {
+      debugPrint('Error saving local match history: $e');
+    }
+  }
+
+  /// Agenda o export pesado (site_data/backup) pra DEPOIS do jogo, em vez de
+  /// rodar a cada partida finalizada. Espera a fila de upload esvaziar e não
+  /// dispara enquanto uma partida está rolando.
+  void _scheduleSiteSync() {
+    _siteSyncTimer?.cancel();
+    _siteSyncTimer = Timer(const Duration(seconds: 90), () {
+      if (!mounted) return;
+      if (isMatchRunning || PendingMatchQueue.instance.pending.value > 0) {
+        _scheduleSiteSync();
+        return;
+      }
+      _triggerBackgroundSync();
+    });
+  }
+
+  void _showPendingSyncDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.headerBlue,
+        title: const Text("Sincronização",
+            style: TextStyle(color: AppColors.textWhite)),
+        content: ValueListenableBuilder<int>(
+          valueListenable: PendingMatchQueue.instance.pending,
+          builder: (_, count, __) => ValueListenableBuilder<String?>(
+            valueListenable: PendingMatchQueue.instance.lastError,
+            builder: (_, err, __) => Text(
+              count == 0
+                  ? "Tudo sincronizado."
+                  : "$count partida(s) aguardando envio ao servidor."
+                      "${err != null ? '\n\nÚltimo erro: $err' : ''}",
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => PendingMatchQueue.instance.flush(),
+            child: const Text("Tentar agora"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Fechar"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _splitWinner(
     List<Map<String, dynamic>> winners,
     List<Map<String, dynamic>> losers,
@@ -3189,14 +3551,27 @@ class _MatchScreenState extends State<MatchScreen>
         }
       }
 
-      // Divide o time vencedor ao meio: metade fica no vermelho, metade vai para o branco
+      // Divide o time vencedor em duas metades EQUILIBRADAS por Overall
+      // (antes era "primeiros pra um lado, últimos pro outro", sem olhar nota).
       final List<Map<String, dynamic>> half1 = [];
       final List<Map<String, dynamic>> half2 = [];
-      for (int i = 0; i < winners.length; i++) {
-        if (i < (winners.length / 2).ceil())
-          half1.add(winners[i]);
-        else
-          half2.add(winners[i]);
+      if (winners.length >= 2) {
+        final winnersById = {for (final p in winners) _pid(p): p};
+        final split = TeamBalancer.suggest(
+          winners.map(_balancePlayer).toList(),
+          count: 1,
+          tolerance: 1.0,
+        ).first;
+        for (final bp in split.a) {
+          final p = winnersById[bp.id];
+          if (p != null) half1.add(p);
+        }
+        for (final bp in split.b) {
+          final p = winnersById[bp.id];
+          if (p != null) half2.add(p);
+        }
+      } else {
+        half1.addAll(winners);
       }
 
       // Calculates how many players are missing on each team
@@ -3209,7 +3584,7 @@ class _MatchScreenState extends State<MatchScreen>
       final List<Map<String, dynamic>> bench = presentPlayers
           .where((p) {
             final id = _pid(p);
-            return !winnerIds.contains(id);
+            return p['desistiu'] != true && !winnerIds.contains(id);
           })
           .take(totalNeeded)
           .toList();
@@ -3217,13 +3592,8 @@ class _MatchScreenState extends State<MatchScreen>
       teamRed = List.from(half1);
       teamWhite = List.from(half2);
 
-      // Distribui o banco de forma balanceada
-      for (var p in bench) {
-        if (teamRed.length < widget.totalPlayers)
-          teamRed.add(p);
-        else if (teamWhite.length < widget.totalPlayers)
-          teamWhite.add(p);
-      }
+      // Distribui o banco de forma balanceada (por Overall)
+      _fillTeamsBalanced(bench);
 
       // Reseta sequências
       redWinStreak = 0;
@@ -3235,6 +3605,7 @@ class _MatchScreenState extends State<MatchScreen>
       matchEvents.clear();
       _secondsPlayedBeforePause = 0;
       _lastStartTime = null;
+      _disbalanceWarned = false;
 
       _saveMatchState();
       _showLeaversPopup(losers, bench);
@@ -3386,6 +3757,7 @@ class _MatchScreenState extends State<MatchScreen>
       int needed = leavers.length;
       for (var p in presentPlayers) {
         if (entering.length >= needed) break;
+        if (p['desistiu'] == true) continue; // quem desistiu nunca entra
         final id = _pid(p);
         if (!teamRed.any((t) => _pid(t) == id) &&
             !teamWhite.any((t) => _pid(t) == id))
@@ -3395,47 +3767,18 @@ class _MatchScreenState extends State<MatchScreen>
       teamRed.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
       teamWhite.removeWhere((p) => leavers.any((l) => _pid(l) == _pid(p)));
 
-      // --- MÁGICA DO BALANCEAMENTO AQUI TAMBÉM ---
-      List<Map<String, dynamic>> pool = List.from(entering);
-      if (!isDraftMode) {
-        pool.sort(
-          (a, b) => ((b['rating'] ?? kRatingBase) as num).compareTo(
-            (a['rating'] ?? kRatingBase) as num,
-          ),
-        );
-      }
-
-      double sumRed = teamRed.fold(
-        0.0,
-        (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble(),
-      );
-      double sumWhite = teamWhite.fold(
-        0.0,
-        (s, p) => s + ((p['rating'] ?? kRatingBase) as num).toDouble(),
-      );
-
-      for (var p in pool) {
-        if (teamRed.length < widget.totalPlayers &&
-            teamWhite.length < widget.totalPlayers) {
-          if (isDraftMode) {
+      // --- BALANCEAMENTO por OVERALL ---
+      if (isDraftMode) {
+        // Modo draft: o organizador escolhe depois; só preenche as vagas.
+        for (var p in entering) {
+          if (teamRed.length < widget.totalPlayers) {
             teamRed.add(p);
-          } else {
-            bool shouldPickRed = sumRed <= sumWhite;
-            if (shouldPickRed) {
-              teamRed.add(p);
-              sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-            } else {
-              teamWhite.add(p);
-              sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
-            }
+          } else if (teamWhite.length < widget.totalPlayers) {
+            teamWhite.add(p);
           }
-        } else if (teamRed.length < widget.totalPlayers) {
-          teamRed.add(p);
-          sumRed += ((p['rating'] ?? kRatingBase) as num).toDouble();
-        } else if (teamWhite.length < widget.totalPlayers) {
-          teamWhite.add(p);
-          sumWhite += ((p['rating'] ?? kRatingBase) as num).toDouble();
         }
+      } else {
+        _fillTeamsBalanced(entering);
       }
 
       isMatchRunning = false;
@@ -3445,6 +3788,7 @@ class _MatchScreenState extends State<MatchScreen>
       matchEvents.clear();
       _secondsPlayedBeforePause = 0;
       _lastStartTime = null;
+      _disbalanceWarned = false;
 
       _saveMatchState();
       _showLeaversPopup(leavers, entering);
@@ -3503,15 +3847,21 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _playVictorySound() async {
-    List<String> sounds = [
+    final sounds = [
       'audio/vitoria1.mp3',
       'audio/vitoria2.mp3',
       'audio/vitoria3.mp3',
-    ];
-    String randomSound = sounds[Random().nextInt(sounds.length)];
-    try {
-      await _audioPlayer.play(AssetSource(randomSound));
-    } catch (e) {}
+    ]..shuffle(Random());
+    // Se um arquivo estiver corrompido/incompatível (ex.: Format error no
+    // Chrome), tenta o próximo em vez de ficar sem som.
+    for (final sound in sounds) {
+      try {
+        await _audioPlayer.play(AssetSource(sound));
+        return;
+      } catch (e) {
+        debugPrint('Falha ao tocar $sound: $e');
+      }
+    }
   }
 
   void _showEnteringPlayersPopup(List<Map<String, dynamic>> entering) {
@@ -3552,7 +3902,10 @@ class _MatchScreenState extends State<MatchScreen>
           actions: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _checkAndWarnTeamDisbalance();
+              },
               child: const Text("OK", style: TextStyle(color: Colors.white)),
             ),
           ],

@@ -1,6 +1,7 @@
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../utils/rating_calculator.dart';
+import '../utils/overall_calculator.dart';
 import '../utils/player_identity.dart';
 
 /// ============================================================
@@ -66,8 +67,8 @@ class _DraftScreenState extends State<DraftScreen> {
     // Ordena por nota decrescente para pegar os top numTeams como capitães
     final sorted = List<Map<String, dynamic>>.from(widget.presentPlayers)
       ..sort((a, b) {
-        final double ra = (a['rating'] ?? kRatingBase).toDouble();
-        final double rb = (b['rating'] ?? kRatingBase).toDouble();
+        final double ra = playerOverallOf(a);
+        final double rb = playerOverallOf(b);
         return rb.compareTo(ra);
       });
 
@@ -75,8 +76,8 @@ class _DraftScreenState extends State<DraftScreen> {
     // (pior capitão escolhe primeiro)
     captains = sorted.take(numTeams).toList()
       ..sort((a, b) {
-        final double ra = (a['rating'] ?? kRatingBase).toDouble();
-        final double rb = (b['rating'] ?? kRatingBase).toDouble();
+        final double ra = playerOverallOf(a);
+        final double rb = playerOverallOf(b);
         return ra.compareTo(rb); // ascendente
       });
 
@@ -326,7 +327,7 @@ class _DraftScreenState extends State<DraftScreen> {
       itemCount: available.length,
       itemBuilder: (context, index) {
         final player = available[index];
-        final double rating = (player['rating'] ?? kRatingBase).toDouble();
+        final double rating = playerOverallOf(player);
         final color = _teamColor(_currentPickIndex);
         return Card(
           color: AppColors.headerBlue,
@@ -339,8 +340,8 @@ class _DraftScreenState extends State<DraftScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  rating.toStringAsFixed(1),
-                  style: TextStyle(color: getRatingColor(rating), fontWeight: FontWeight.bold, fontSize: 16),
+                  rating.round().toString(),
+                  style: TextStyle(color: overallColor(rating), fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.add_circle, color: color, size: 28),
@@ -386,7 +387,7 @@ class _DraftScreenState extends State<DraftScreen> {
                   const SizedBox(height: 8),
                   ...teams[i].map((p) {
                     final bool isCap = _pid(p) == _pid(captains[i]);
-                    final double rating = (p['rating'] ?? kRatingBase).toDouble();
+                    final double rating = playerOverallOf(p);
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -399,8 +400,8 @@ class _DraftScreenState extends State<DraftScreen> {
                         ),
                       ),
                       trailing: Text(
-                        rating.toStringAsFixed(1),
-                        style: TextStyle(color: getRatingColor(rating), fontWeight: FontWeight.bold),
+                        rating.round().toString(),
+                        style: TextStyle(color: overallColor(rating), fontWeight: FontWeight.bold),
                       ),
                     );
                   }),

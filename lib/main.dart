@@ -40,9 +40,11 @@ class MyApp extends StatelessWidget {
       title: 'Pelada Manager',
       theme: ThemeData(
         useMaterial3: true,
+        scaffoldBackgroundColor: AppColors.deepBlue,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff0E6BA8),
+          seedColor: AppColors.accentBlue,
           brightness: Brightness.dark,
+          surface: AppColors.headerBlue,
         ),
       ),
       navigatorObservers: [routeObserver],

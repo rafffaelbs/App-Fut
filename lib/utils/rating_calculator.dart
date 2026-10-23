@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 // --------------- Public constants -------------------------
 
 /// The match rating for someone who did nothing (neither won nor lost).
-const double kRatingBase = 6.0;
+const double kRatingBase = 7.0;
 
 /// Impacto do Resultado
 const double kResultImpactWin  =  0.8;
@@ -28,14 +28,14 @@ const double kStreakBonus3PlusWins = 0.4;
 
 /// Impactos Individuais (valor do 1º gol/assistência; os seguintes têm
 /// retorno decrescente -- ver [_diminishingImpact]).
-const double kWeightGoal       =  1.0;
-const double kWeightAssist     =  0.8;
+const double kWeightGoal       =  1.5;
+const double kWeightAssist     =  1.0;
 const double kWeightOwnGoal    = -1.0;
 
 /// Fator de decaimento aplicado a cada gol/assistência extra na mesma
 /// partida (0.6 = cada um vale 60% do anterior). Evita que uma goleada
 /// pessoal sozinha estoure a nota via soma linear.
-const double kDiminishingDecay = 0.8;
+const double kDiminishingDecay = 0.6;
 
 /// Impacto de Defesa
 const double kWeightConceded   = -0.1;
@@ -47,10 +47,10 @@ const double kWeightRedCard    = -1.5;
 /// Dynamic Bonuses (menores que antes -- o ganho principal de hat-trick/
 /// playmaker já vem do próprio [_diminishingImpact]; isso aqui é só um
 /// "selo" simbólico por bater a marca).
-const double kBonusHatTrick    = 0.3;   // 3+ gols
-const double kBonusPlaymaker   = 0.35;  // 3+ assistências
+const double kBonusHatTrick    = 0.8;   // 3+ gols
+const double kBonusPlaymaker   = 0.6;  // 3+ assistências
 const double kBonusTeamGoal    = 0.1;   // Ativado para ajudar aqueles que ajudaram mas nao puderam nem fazer gol ou assist.
-const double kBonusCleanSheet  = 0.2;   // Bônus menor para clean sheet geral
+const double kBonusCleanSheet  = 0.5;   // Bônus menor para clean sheet geral
 
 /// Impact of the goal difference (per goal of difference)
 const double kGoalDiffImpact   = 0.1;
@@ -72,7 +72,7 @@ const double kBonusComebackGoal = 0.4;
 /// jogo (ver [kClutchWindowFraction]), num jogo apertado (diferença de
 /// até 1 gol antes dele), que garante vitória ou empate pra quem marcou.
 /// Único por partida (só o último gol do jogo pode ser o "decisivo").
-const double kBonusClutchGoal = 0.4;
+const double kBonusClutchGoal = 0.8;
 
 /// Limites do App
 const double kMinRating = 0.0;
@@ -100,7 +100,7 @@ const int kRegulationSeconds = 480;
 
 /// Fração final do tempo regulamentar considerada "minutos finais" pro
 /// bônus de gol decisivo (0.2 = últimos 20% do jogo).
-const double kClutchWindowFraction = 0.2;
+const double kClutchWindowFraction = 0.5;
 
 // --------------- Math functions ----------------------------
 

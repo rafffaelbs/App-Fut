@@ -223,6 +223,8 @@ class SiteDataGenerator {
 
         List<String> waitingIds = [];
         for (var p in presentPlayers) {
+          // Quem desistiu não entra na fila ao vivo do site.
+          if (p is Map && p['desistiu'] == true) continue;
           final id = playerIdFromObject(p);
           if (!activeIds.contains(id)) waitingIds.add(id);
         }
