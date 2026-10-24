@@ -11,7 +11,7 @@ import 'player_avatar_frame.dart';
 import 'stars_badge.dart';
 
 /// Peças compartilhadas por ranking, lista completa e Elenco, para que o
-/// mesmo jogador tenha a mesma cara (cor + ícone + estrelas) em todo lugar.
+/// mesmo jogador tenha a mesma cara (cor + estrelas) em todo lugar.
 
 ResolvedCosmetic cosmeticOfMap(Map<String, dynamic> p) =>
     resolveCosmetic(PlayerCosmetics.fromMap(p));
@@ -60,7 +60,7 @@ class RankAvatar extends StatelessWidget {
   }
 }
 
-/// Nome cosmético + ícone no fim + estrelas compactas (linha de lista).
+/// Nome cosmético + estrelas compactas (linha de lista).
 class RankName extends StatelessWidget {
   final Map<String, dynamic> player;
   final TextStyle? style;
@@ -81,8 +81,6 @@ class RankName extends StatelessWidget {
     final name = CosmeticName(
       name: (player['name'] ?? '').toString(),
       cosmetic: c,
-      showIcon: true,
-      iconSize: 14,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,

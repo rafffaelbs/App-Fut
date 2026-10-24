@@ -111,7 +111,6 @@ class AppColors {
   static const cosmeticGold = Color(0xfff59e0b);
   static const cosmeticFireFrom = Color(0xfffdba74);
   static const cosmeticFire = Color(0xfff97316);
-  static const cosmeticFireIcon = Color(0xffef4444); // vermelho só no ícone
   static const cosmeticSilverFrom = Color(0xffe2e8f0);
   static const cosmeticSilverTo = Color(0xff94a3b8);
   static const cosmeticSilverFrame = Color(0xffcbd5e1);
@@ -120,7 +119,6 @@ class AppColors {
   static const cosmeticGoldenBallFrom = Color(0xfffde68a);
   static const cosmeticGoldenBallMid = Color(0xffd4af37);
   static const cosmeticGoldenBallTo = Color(0xffb8860b);
-  static const cosmeticCrown = Color(0xfffacc15);
   static const cosmeticSapphire = Color(0xff3b6fe0);
   static const cosmeticSapphireHighlight = Color(0xff7aa2ff);
   static const cosmeticStar = Color(0xfffacc15);

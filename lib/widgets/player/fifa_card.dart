@@ -4,7 +4,6 @@ import '../../theme/app_theme.dart';
 import '../../utils/cosmetic_resolver.dart';
 import '../../utils/overall_calculator.dart';
 import '../shared/cosmetic_frame.dart';
-import '../shared/cosmetic_icon.dart';
 import '../shared/cosmetic_name.dart';
 import '../shared/player_avatar_frame.dart';
 import '../shared/stars_badge.dart';
@@ -24,7 +23,6 @@ class _Metrics {
   static const frameGap = 2.0;
   final double frameThickness;
   final bool doubleFrame, texture, glow;
-  final double iconSize;
   const _Metrics({
     required this.w,
     required this.h,
@@ -32,7 +30,6 @@ class _Metrics {
     required this.doubleFrame,
     required this.texture,
     required this.glow,
-    required this.iconSize,
   });
 
   /// Espaço que a moldura cosmética ocupa ao redor da carta.
@@ -43,21 +40,21 @@ class _Metrics {
 const _metrics = {
   CardDensity.full: _Metrics(
       w: 200, h: 280, frameThickness: 1.5, doubleFrame: true,
-      texture: true, glow: true, iconSize: 22),
+      texture: true, glow: true),
   CardDensity.large: _Metrics(
       w: 132, h: 168, frameThickness: 1.5, doubleFrame: true,
-      texture: true, glow: false, iconSize: 14),
+      texture: true, glow: false),
   CardDensity.medium: _Metrics(
       w: 60, h: 84, frameThickness: 1, doubleFrame: false,
-      texture: true, glow: false, iconSize: 12),
+      texture: true, glow: false),
   CardDensity.small: _Metrics(
-      w: 56, h: 74, frameThickness: 1.5, doubleFrame: false,
-      texture: false, glow: false, iconSize: 12),
+      w: 64, h: 84, frameThickness: 1.5, doubleFrame: false,
+      texture: false, glow: false),
 };
 
 /// Card de jogador no estilo FIFA/Ultimate Team, em camadas:
 /// escudo (tier) → textura → foto → textos → divisória + atributos →
-/// moldura cosmética (fora do escudo) → ícones/estrelas.
+/// moldura cosmética (fora do escudo) → estrelas.
 ///
 /// Faixas do tier: ver `tierForOverall` (bronze, prata, ouro, platina, lendária).
 /// Cosméticos vêm sempre de [frame] (`resolveCosmetic`).
@@ -213,7 +210,6 @@ class FifaCard extends StatelessWidget {
     final double nameFont = full ? 20 : (large ? 14 : 10);
     final double sideInset = full ? 14 : (large ? 8 : 3);
 
-    final primary = cosmetic.primaryIcon;
     final starsCompact = !full && !large || cosmetic.stars > 3;
 
     Widget nameText = CosmeticName(
@@ -222,8 +218,6 @@ class FifaCard extends StatelessWidget {
       solid: medium,
       plaque: true,
       compactPlaque: medium,
-      showIcon: full && cosmetic.nameIcon != null,
-      iconSize: 14,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
@@ -261,7 +255,7 @@ class FifaCard extends StatelessWidget {
             showEdit: onIconTap != null,
           ),
         ),
-        // 5. OVR (Z1) + estrelas (+ ícone em M)
+        // 5. OVR (Z1) + estrelas
         Positioned(
           left: full ? 18 : (large ? 8 : 2),
           top: full ? 30 : (large ? 16 : 6),
@@ -298,21 +292,9 @@ class FifaCard extends StatelessWidget {
                   size: full ? 14 : 10,
                 ),
               ],
-              // Em M cabe um ícone só (coroa > efeito), sob o OVR.
-              if (medium && primary != null) ...[
-                const SizedBox(height: 2),
-                CosmeticIcon(spec: primary, size: m.iconSize),
-              ],
             ],
           ),
         ),
-        // Ícone principal (Z2) em full e L
-        if (!medium && primary != null)
-          Positioned(
-            top: full ? 14 : 8,
-            right: full ? 14 : 6,
-            child: CosmeticIcon(spec: primary, size: m.iconSize),
-          ),
         // 5. Nome (Z4) — sem sombra
         Positioned(
           left: sideInset,
@@ -527,7 +509,7 @@ class _CardPattern extends StatelessWidget {
   }
 }
 
-/// Densidade S: chip com foto circular, OVR em badge, nome 10sp.
+/// Densidade S: chip com foto circular, OVR em badge, nome 12sp.
 class _SmallChip extends StatelessWidget {
   final String name;
   final String? iconPath;
@@ -545,9 +527,8 @@ class _SmallChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = cosmetic.primaryIcon;
     final short = name.trim().toUpperCase();
-    final shortName = short.length <= 8 ? short : short.substring(0, 8);
+    final shortName = short.length <= 10 ? short : short.substring(0, 10);
 
     final Widget photo = CosmeticFrame(
       cosmetic: cosmetic,
@@ -555,8 +536,8 @@ class _SmallChip extends StatelessWidget {
       gap: 1,
       allowDouble: false,
       child: Container(
-        width: 38,
-        height: 38,
+        width: 46,
+        height: 46,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
@@ -573,7 +554,7 @@ class _SmallChip extends StatelessWidget {
             name: name,
             iconPath: iconPath,
             color: palette.text,
-            fontSize: 18,
+            fontSize: 22,
             onTap: null,
             showEdit: false,
           ),
@@ -584,13 +565,13 @@ class _SmallChip extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned(top: 0, left: 6, child: photo),
-        // OVR em badge + ícone único ao lado
+        Positioned(top: 0, left: 9, child: photo),
+        // OVR em badge
         Positioned(
           top: 0,
           left: 0,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
             decoration: BoxDecoration(
               color: palette.gradient[1],
               borderRadius: BorderRadius.circular(6),
@@ -598,16 +579,14 @@ class _SmallChip extends StatelessWidget {
             ),
             child: Text('$overall',
                 style: AppTheme.number(
-                        fontSize: 11, fontWeight: FontWeight.w700, color: palette.text)
+                        fontSize: 12, fontWeight: FontWeight.w700, color: palette.text)
                     .copyWith(height: 1)),
           ),
         ),
-        if (primary != null)
-          Positioned(top: 0, right: 0, child: CosmeticIcon(spec: primary, size: 12)),
         Positioned(
           left: 0,
           right: 0,
-          top: 46,
+          top: 50,
           child: CosmeticName(
             name: shortName,
             cosmetic: cosmetic,
@@ -615,17 +594,17 @@ class _SmallChip extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.clip,
             textAlign: TextAlign.center,
-            style: AppTheme.number(fontSize: 10, fontWeight: FontWeight.w600)
-                .copyWith(height: 1.1),
+            style: AppTheme.number(fontSize: 12, fontWeight: FontWeight.w700)
+                .copyWith(height: 1.15),
           ),
         ),
         if (cosmetic.stars > 0)
           Positioned(
             left: 0,
             right: 0,
-            top: 60,
+            top: 67,
             child: Center(
-                child: StarsBadge(stars: cosmetic.stars, compact: true, size: 10)),
+                child: StarsBadge(stars: cosmetic.stars, compact: true, size: 11)),
           ),
       ],
     );

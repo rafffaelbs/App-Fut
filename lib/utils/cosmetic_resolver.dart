@@ -31,15 +31,6 @@ class PlayerCosmetics {
       PlayerCosmetics.fromPlayer(PlayerModel.fromMap(map));
 }
 
-/// Ícones cosméticos (coroa tem prioridade sobre o ícone do efeito).
-enum CosmeticIconKind { crown, gem, trophy, flame, medalSilver, medalBronze }
-
-class CosmeticIconSpec {
-  final CosmeticIconKind kind;
-  final Color color;
-  const CosmeticIconSpec(this.kind, this.color);
-}
-
 /// Nome: cor sólida ou gradiente de 2 cores.
 class NameStyle {
   final List<Color> colors;
@@ -70,8 +61,6 @@ class ResolvedCosmetic {
   final NameStyle nameStyle;
   final FrameStyle? frame;
   final FrameSource frameSource;
-  final CosmeticIconSpec? primaryIcon;
-  final CosmeticIconSpec? nameIcon;
   final int stars;
   final bool allowsGlow;
 
@@ -80,8 +69,6 @@ class ResolvedCosmetic {
     required this.nameStyle,
     required this.frame,
     required this.frameSource,
-    required this.primaryIcon,
-    required this.nameIcon,
     required this.stars,
     required this.allowsGlow,
   });
@@ -101,53 +88,43 @@ const _sapphireFrame = [AppColors.cosmeticSapphire, AppColors.cosmeticSapphireHi
 class _EffectSpec {
   final NameStyle name;
   final List<Color> frame;
-  final CosmeticIconSpec icon;
   final bool glow;
-  const _EffectSpec(this.name, this.frame, this.icon, this.glow);
+  const _EffectSpec(this.name, this.frame, this.glow);
 }
 
 const _effects = <CosmeticEffect, _EffectSpec>{
   CosmeticEffect.diamond: _EffectSpec(
     NameStyle([AppColors.cosmeticDiamondFrom, AppColors.cosmeticDiamond]),
     [AppColors.cosmeticDiamond],
-    CosmeticIconSpec(CosmeticIconKind.gem, AppColors.cosmeticDiamond),
     true,
   ),
   CosmeticEffect.gold: _EffectSpec(
     NameStyle([AppColors.cosmeticGoldFrom, AppColors.cosmeticGold]),
     [AppColors.cosmeticGold],
-    CosmeticIconSpec(CosmeticIconKind.trophy, AppColors.cosmeticGold),
     true,
   ),
   CosmeticEffect.fire: _EffectSpec(
     NameStyle([AppColors.cosmeticFireFrom, AppColors.cosmeticFire]),
     [AppColors.cosmeticFire],
-    CosmeticIconSpec(CosmeticIconKind.flame, AppColors.cosmeticFireIcon),
     true,
   ),
   CosmeticEffect.silver: _EffectSpec(
     NameStyle([AppColors.cosmeticSilverFrom, AppColors.cosmeticSilverTo]),
     [AppColors.cosmeticSilverFrame],
-    CosmeticIconSpec(CosmeticIconKind.medalSilver, AppColors.cosmeticSilverFrame),
     false,
   ),
   CosmeticEffect.bronze: _EffectSpec(
     NameStyle([AppColors.cosmeticBronzeFrom, AppColors.cosmeticBronze]),
     [AppColors.cosmeticBronze],
-    CosmeticIconSpec(CosmeticIconKind.medalBronze, AppColors.cosmeticBronze),
     false,
   ),
 };
-
-const _crownIcon = CosmeticIconSpec(CosmeticIconKind.crown, AppColors.cosmeticCrown);
 
 /// Fonte única de verdade dos cosméticos. Nenhuma tela decide cor ou ícone
 /// de efeito por conta própria.
 ///
 /// - Moldura: Bola de Ouro > Efeito de nome > Craque do Mês. O Craque do Mês
 ///   vira linha interna (moldura dupla) quando há outra moldura.
-/// - Ícone principal: coroa > ícone do efeito. Se a coroa ocupa o principal,
-///   o ícone do efeito vai para [ResolvedCosmetic.nameIcon].
 ResolvedCosmetic resolveCosmetic(PlayerCosmetics c) {
   final effect = _effects[c.nameEffect];
   final stars = c.monthlyStars.clamp(0, 6);
@@ -173,8 +150,6 @@ ResolvedCosmetic resolveCosmetic(PlayerCosmetics c) {
     nameStyle: effect?.name ?? NameStyle.plain,
     frame: frame,
     frameSource: source,
-    primaryIcon: c.goldenBall ? _crownIcon : effect?.icon,
-    nameIcon: c.goldenBall ? effect?.icon : null,
     stars: stars,
     allowsGlow: c.goldenBall || (effect?.glow ?? false),
   );

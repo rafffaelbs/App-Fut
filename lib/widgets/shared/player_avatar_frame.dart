@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/cosmetic_resolver.dart';
 import 'cosmetic_frame.dart';
-import 'cosmetic_icon.dart';
 import 'stars_badge.dart';
 
 /// Origem da moldura (para telas que ainda ramificam por tipo, ex.: `fifa_card`).
@@ -45,7 +44,7 @@ class PlayerFrameInfo {
 PlayerFrameInfo resolvePlayerFrame(Map<String, dynamic> player) =>
     PlayerFrameInfo(resolveCosmetic(PlayerCosmetics.fromMap(player)));
 
-/// Avatar com moldura, ícone principal e estrelas, tudo vindo do resolver.
+/// Avatar com moldura e estrelas, tudo vindo do resolver.
 /// Sem glow: usado em listas e campo. Para pódio/carta, use [CosmeticFrame]
 /// com `glow: true`.
 class PlayerAvatarFrame extends StatelessWidget {
@@ -70,7 +69,6 @@ class PlayerAvatarFrame extends StatelessWidget {
     if (c.frame == null && c.stars == 0) return child;
 
     final iconSize = compact ? 12.0 : 16.0;
-    final icon = c.primaryIcon;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -85,12 +83,6 @@ class PlayerAvatarFrame extends StatelessWidget {
           allowDouble: !compact,
           child: child,
         ),
-        if (icon != null)
-          Positioned(
-            top: -iconSize / 3,
-            right: -iconSize / 3,
-            child: _Badge(child: CosmeticIcon(spec: icon, size: iconSize)),
-          ),
         if (c.stars > 0)
           Positioned(
             bottom: -iconSize / 2,

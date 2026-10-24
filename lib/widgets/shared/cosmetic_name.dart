@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../constants/app_colors.dart';
 import '../../utils/cosmetic_resolver.dart';
-import 'cosmetic_icon.dart';
 
 /// Nome do jogador estilizado pelo [ResolvedCosmetic].
 ///
 /// [solid] usa a cor média do gradiente (campo M/S, timeline). [plaque]
-/// põe o nome sobre a plaqueta escura (cartas). [showIcon] acrescenta o
-/// ícone do efeito ao fim do nome (listas).
+/// põe o nome sobre a plaqueta escura (cartas).
 class CosmeticName extends StatelessWidget {
   final String name;
   final ResolvedCosmetic cosmetic;
@@ -19,8 +17,6 @@ class CosmeticName extends StatelessWidget {
   final bool solid;
   final bool plaque;
   final bool compactPlaque;
-  final bool showIcon;
-  final double iconSize;
 
   const CosmeticName({
     super.key,
@@ -33,8 +29,6 @@ class CosmeticName extends StatelessWidget {
     this.solid = false,
     this.plaque = false,
     this.compactPlaque = false,
-    this.showIcon = false,
-    this.iconSize = 14,
   });
 
   @override
@@ -68,18 +62,6 @@ class CosmeticName extends StatelessWidget {
             textAlign: textAlign,
             maxLines: maxLines,
             overflow: overflow),
-      );
-    }
-
-    final icon = cosmetic.nameIcon ?? cosmetic.primaryIcon;
-    if (showIcon && icon != null) {
-      text = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(child: text),
-          const SizedBox(width: 4),
-          CosmeticIcon(spec: icon, size: iconSize),
-        ],
       );
     }
 

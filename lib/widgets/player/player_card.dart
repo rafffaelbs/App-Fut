@@ -65,7 +65,6 @@ class PlayerCard extends StatelessWidget {
                             child: CosmeticName(
                               name: name,
                               cosmetic: frame.cosmetic,
-                              showIcon: true,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: AppColors.textWhite, fontSize: 15, fontWeight: FontWeight.w600),
