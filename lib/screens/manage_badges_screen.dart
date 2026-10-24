@@ -135,6 +135,22 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
         if (idx != -1) _allPlayers[idx]['goal_sound_url'] = updated.goalSoundUrl;
         _uploadingPlayerId = null;
       });
+
+      // Atualiza o snapshot local em SharedPreferences
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = 'players_${widget.groupId}';
+        final raw = prefs.getString(key);
+        if (raw != null) {
+          final list = List<Map<String, dynamic>>.from(jsonDecode(raw));
+          final idx = list.indexWhere((p) => p['id'] == playerId);
+          if (idx != -1) {
+            list[idx]['goal_sound_url'] = updated.goalSoundUrl;
+            await prefs.setString(key, jsonEncode(list));
+          }
+        }
+      } catch (_) {}
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -164,9 +180,11 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
       orElse: () => {},
     );
     final String? currentAudio = currentPlayer['goal_sound_url']?.toString();
-    final List<String> selectedFiles = parseGoalSounds(currentAudio);
+    final List<String> selectedFiles =
+        List<String>.from(parseGoalSounds(currentAudio));
     String? playingFile;
     final localPlayer = AudioPlayer();
+    StreamSubscription? completeSub;
 
     showModalBottomSheet(
       context: context,
@@ -298,12 +316,14 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                             } else {
                               await localPlayer.stop();
                               setModalState(() => playingFile = file);
-                              await localPlayer.play(AssetSource('audio/$file'));
-                              localPlayer.onPlayerComplete.first.then((_) {
+                              completeSub?.cancel();
+                              completeSub =
+                                  localPlayer.onPlayerComplete.listen((_) {
                                 if (ctx.mounted) {
                                   setModalState(() => playingFile = null);
                                 }
                               });
+                              await localPlayer.play(AssetSource('audio/$file'));
                             }
                           },
                         ),
@@ -318,25 +338,43 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                           file,
                           style: const TextStyle(color: Colors.white38, fontSize: 11),
                         ),
-                        trailing: isSelected
-                            ? Container(
-                                width: 28,
-                                height: 28,
-                                alignment: Alignment.center,
-                                decoration: const BoxDecoration(
-                                  color: Colors.amber,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  "${orderIndex + 1}º",
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                        trailing: IconButton(
+                          icon: isSelected
+                              ? Container(
+                                  width: 28,
+                                  height: 28,
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.amber,
+                                    shape: BoxShape.circle,
                                   ),
+                                  child: Text(
+                                    "${orderIndex + 1}º",
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.add_circle,
+                                  color: Colors.amber,
+                                  size: 28,
                                 ),
-                              )
-                            : const Icon(Icons.add_circle_outline, color: Colors.white24, size: 22),
+                          tooltip: isSelected
+                              ? "Remover do loop"
+                              : "Adicionar ao loop",
+                          onPressed: () {
+                            setModalState(() {
+                              if (isSelected) {
+                                selectedFiles.remove(file);
+                              } else {
+                                selectedFiles.add(file);
+                              }
+                            });
+                          },
+                        ),
                         onTap: () {
                           setModalState(() {
                             if (isSelected) {
@@ -372,8 +410,6 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     onPressed: () {
-                      localPlayer.stop();
-                      localPlayer.dispose();
                       Navigator.pop(ctx);
                       _setGoalAudioForPlayer(playerId, formatGoalSounds(selectedFiles));
                     },
@@ -390,8 +426,6 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                       icon: const Icon(Icons.delete_outline, size: 18),
                       label: const Text("Redefinir para Padrão"),
                       onPressed: () {
-                        localPlayer.stop();
-                        localPlayer.dispose();
                         Navigator.pop(ctx);
                         _setGoalAudioForPlayer(playerId, null);
                       },
@@ -403,9 +437,12 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
           );
         },
       ),
-    ).then((_) {
-      localPlayer.stop();
-      localPlayer.dispose();
+    ).whenComplete(() async {
+      await completeSub?.cancel();
+      try {
+        await localPlayer.stop();
+        await localPlayer.dispose();
+      } catch (_) {}
     });
   }
 

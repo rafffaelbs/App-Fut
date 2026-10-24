@@ -3082,11 +3082,39 @@ class _MatchScreenState extends State<MatchScreen>
   /// jogador tiver múltiplos sons configurados, toca o próximo da sequência.
   Future<void> _playGoalSound(String type, Map<String, dynamic> player) async {
     if (type != "goal" && type != "own_goal") return;
-    final List<String> sounds =
-        parseGoalSounds(player['goal_sound_url']?.toString());
+    final pid = _pid(player);
+
+    final savedPlayer = allSavedPlayers.firstWhere(
+      (p) => _pid(p) == pid,
+      orElse: () => player,
+    );
+    String? rawSound = savedPlayer['goal_sound_url']?.toString() ??
+        player['goal_sound_url']?.toString();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawSnap = prefs.getString('players_${widget.groupId}');
+      if (rawSnap != null) {
+        final list = List<dynamic>.from(jsonDecode(rawSnap));
+        final fresh = list.firstWhere(
+          (p) =>
+              p is Map &&
+              (p['id']?.toString() == pid || p['name'] == player['name']),
+          orElse: () => null,
+        );
+        if (fresh is Map && fresh['goal_sound_url'] != null) {
+          rawSound = fresh['goal_sound_url']?.toString();
+          final idx = allSavedPlayers.indexWhere((p) => _pid(p) == pid);
+          if (idx != -1) {
+            allSavedPlayers[idx]['goal_sound_url'] = rawSound;
+          }
+        }
+      }
+    } catch (_) {}
+
+    final List<String> sounds = parseGoalSounds(rawSound);
     try {
       if (sounds.isNotEmpty && type == "goal") {
-        final pid = _pid(player);
         final currentIndex = _playerGoalAudioIndices[pid] ?? 0;
         final customSound = sounds[currentIndex % sounds.length];
         _playerGoalAudioIndices[pid] = (currentIndex + 1) % sounds.length;

@@ -158,7 +158,7 @@ const List<Map<String, String>> availableGoalAudios = [
 
 /// Extrai a lista de áudios de gol configurados a partir de uma string separada por vírgula.
 List<String> parseGoalSounds(String? raw) {
-  if (raw == null || raw.trim().isEmpty) return const [];
+  if (raw == null || raw.trim().isEmpty) return <String>[];
   return raw
       .split(',')
       .map((s) => s.trim())
