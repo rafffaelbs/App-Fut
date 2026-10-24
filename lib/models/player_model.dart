@@ -1,6 +1,8 @@
+import '../utils/constants.dart';
 import '../utils/overall_calculator.dart';
 import 'cosmetic_effect.dart';
 import 'player_badge_model.dart';
+
 
 /// Data model for the `players` table in Supabase PostgreSQL.
 class PlayerModel {
@@ -98,6 +100,9 @@ class PlayerModel {
 
   // Compatibility getters
   String? get avatarUrl => icon;
+
+  /// Lista de áudios de gol configurados para este jogador (para loop em sequência).
+  List<String> get goalSoundUrls => parseGoalSounds(goalSoundUrl);
 
   /// Efeito de nome completo, incluindo 'fire' e 'diamond' armazenados em
   /// [advancedStats] (o constraint do banco não permite esses valores em [nameEffect]).

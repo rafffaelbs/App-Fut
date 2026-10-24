@@ -5,10 +5,12 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/constants.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/overall_calculator.dart';
 import '../utils/team_balancer.dart';
+
 import '../utils/roster_utils.dart';
 import '../utils/stats_calculator.dart';
 import '../services/sync_service.dart';
@@ -60,6 +62,8 @@ class _MatchScreenState extends State<MatchScreen>
   // e compartilhar uma única instância entre asset local e URL de rede é o
   // que causava os áudios "engasgando"/não tocando no mobile.
   final AudioPlayer _goalSoundPlayer = AudioPlayer()..setPlayerMode(PlayerMode.mediaPlayer);
+  /// Controla o índice do áudio atual no loop de gols de cada jogador.
+  final Map<String, int> _playerGoalAudioIndices = {};
 
   List<Map<String, dynamic>> allSavedPlayers = [];
   Timer? _siteSyncTimer;
@@ -324,7 +328,9 @@ class _MatchScreenState extends State<MatchScreen>
     final String id = widget.tournamentId;
 
     _showTacticalPitch = prefs.getBool('show_tactical_pitch') ?? true;
-    _pitchUseChips = prefs.getBool('pitch_use_chips') ?? false;
+    final bool useCards = prefs.getBool('pitch_use_cards') ??
+        (!(prefs.getBool('pitch_use_chips') ?? false));
+    _pitchUseChips = !useCards;
     _requireGk = prefs.getBool('require_gk') ?? true;
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
@@ -953,6 +959,17 @@ class _MatchScreenState extends State<MatchScreen>
                                       bool isRed =
                                           removed['team'] == 'Vermelho';
                                       if (removed['type'] == 'goal') {
+                                        final pid =
+                                            removed['playerId']?.toString();
+                                        if (pid != null &&
+                                            _playerGoalAudioIndices
+                                                .containsKey(pid)) {
+                                          _playerGoalAudioIndices[pid] = max(
+                                              0,
+                                              (_playerGoalAudioIndices[pid] ??
+                                                      1) -
+                                                  1);
+                                        }
                                         if (isRed)
                                           scoreRed = max(0, scoreRed - 1);
                                         else
@@ -1562,19 +1579,20 @@ class _MatchScreenState extends State<MatchScreen>
             SwitchListTile(
               activeColor: AppColors.accentBlue,
               title: const Text(
-                "Jogadores como chips no campo",
+                "Usar cards no campo tático",
                 style: TextStyle(color: Colors.white),
               ),
               subtitle: const Text(
-                "Desligado: cartas com OVR. Ligado: só foto (sempre assim no 11x11)",
+                "Desligado: chips com foto (padrão). Ligado: cards estilo FIFA",
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
-              value: _pitchUseChips,
+              value: !_pitchUseChips,
               onChanged: (val) async {
-                setState(() => _pitchUseChips = val);
-                setModalState(() => _pitchUseChips = val);
+                setState(() => _pitchUseChips = !val);
+                setModalState(() => _pitchUseChips = !val);
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.setBool('pitch_use_chips', val);
+                await prefs.setBool('pitch_use_cards', val);
+                await prefs.setBool('pitch_use_chips', !val);
               },
             ),
             SwitchListTile(
@@ -3060,18 +3078,24 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
-  /// Toca o som do gol SEM bloquear o placar. Antes, o `await` do áudio
-  /// customizado (URL de rede) vinha antes do setState: com internet ruim o
-  /// gol demorava segundos pra aparecer. Sem rede / URL lenta -> som padrão.
+  /// Toca o som do gol SEM bloquear o placar. Suporta loop de áudios: se o
+  /// jogador tiver múltiplos sons configurados, toca o próximo da sequência.
   Future<void> _playGoalSound(String type, Map<String, dynamic> player) async {
     if (type != "goal" && type != "own_goal") return;
-    final String? customSound = player['goal_sound_url']?.toString();
+    final List<String> sounds =
+        parseGoalSounds(player['goal_sound_url']?.toString());
     try {
-      if (customSound != null && customSound.isNotEmpty && type == "goal") {
+      if (sounds.isNotEmpty && type == "goal") {
+        final pid = _pid(player);
+        final currentIndex = _playerGoalAudioIndices[pid] ?? 0;
+        final customSound = sounds[currentIndex % sounds.length];
+        _playerGoalAudioIndices[pid] = (currentIndex + 1) % sounds.length;
+
         // Só quem fez o gol de verdade tem seu áudio tocado; gol contra
         // sempre usa o som padrão.
         await _goalSoundPlayer.stop();
-        if (customSound.startsWith('http://') || customSound.startsWith('https://')) {
+        if (customSound.startsWith('http://') ||
+            customSound.startsWith('https://')) {
           await _goalSoundPlayer
               .play(UrlSource(customSound))
               .timeout(const Duration(seconds: 4));
@@ -3093,6 +3117,7 @@ class _MatchScreenState extends State<MatchScreen>
       } catch (_) {}
     }
   }
+
 
   void _registerEvent(
     String type,

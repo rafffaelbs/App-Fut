@@ -65,10 +65,12 @@ class PitchLayout {
   /// (× 0.88 de profundidade) mantém os textos da carta em 10sp ou mais.
   static const cardScales = [1.55, 1.4, 1.27, 1.14];
 
+  static const chipScales = [1.15, 1.0];
+
   static Size _baseSize(CardDensity d) {
     switch (d) {
       case CardDensity.small:
-        return const Size(52, 62);
+        return const Size(64, 84);
       case CardDensity.medium:
         return const Size(60, 84);
       case CardDensity.large:
@@ -104,7 +106,10 @@ class PitchLayout {
   static List<({CardDensity density, double scale})> candidates(int lineCount,
           {bool chips = false}) =>
       chips || lineCount > 7
-          ? const [(density: CardDensity.small, scale: 1.0)]
+          ? [
+              for (final s in chipScales)
+                (density: CardDensity.small, scale: s),
+            ]
           : [
               for (final s in cardScales)
                 (density: CardDensity.medium, scale: s),

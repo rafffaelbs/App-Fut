@@ -1087,6 +1087,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     if (!_canEditProfile) return;
     String? playingFile;
     final localPlayer = AudioPlayer();
+    final List<String> selectedFiles = parseGoalSounds(_goalSoundUrl);
 
     showModalBottomSheet(
       context: context,
@@ -1115,9 +1116,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     ),
                   ),
                 ),
-                Text(
+                const Text(
                   "Escolher Som de Gol",
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -1125,13 +1126,71 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  "Selecione o som que tocará quando você marcar um gol na partida.",
+                  "Toque nos sons na ordem desejada para criar um loop de gols (1º gol, 2º gol...).",
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
-                const SizedBox(height: 16),
+                if (selectedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.deepBlue.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Sequência do Loop (${selectedFiles.length} ${selectedFiles.length == 1 ? 'som' : 'sons'}):",
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (int i = 0; i < selectedFiles.length; i++)
+                              Chip(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                backgroundColor: Colors.amber.withValues(alpha: 0.2),
+                                side: const BorderSide(color: Colors.amber, width: 0.8),
+                                label: Text(
+                                  "${i + 1}º ${getGoalAudioLabel(selectedFiles[i])}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                deleteIcon: const Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.amber,
+                                ),
+                                onDeleted: () {
+                                  setModalState(() {
+                                    selectedFiles.removeAt(i);
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                    maxHeight: MediaQuery.of(context).size.height * 0.4,
                   ),
                   child: ListView.separated(
                     shrinkWrap: true,
@@ -1141,7 +1200,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                       final item = availableGoalAudios[idx];
                       final file = item['file']!;
                       final label = item['label']!;
-                      final isSelected = _goalSoundUrl == file;
+                      final orderIndex = selectedFiles.indexOf(file);
+                      final isSelected = orderIndex != -1;
                       final isPlayingThis = playingFile == file;
 
                       return ListTile(
@@ -1180,29 +1240,76 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           style: const TextStyle(color: Colors.white38, fontSize: 11),
                         ),
                         trailing: isSelected
-                            ? const Icon(Icons.check_circle, color: Colors.amber)
-                            : const Icon(Icons.chevron_right, color: Colors.white24),
+                            ? Container(
+                                width: 28,
+                                height: 28,
+                                alignment: Alignment.center,
+                                decoration: const BoxDecoration(
+                                  color: Colors.amber,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  "${orderIndex + 1}º",
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.add_circle_outline, color: Colors.white24, size: 22),
                         onTap: () {
-                          localPlayer.stop();
-                          localPlayer.dispose();
-                          Navigator.pop(ctx);
-                          _saveGoalSound(file);
+                          setModalState(() {
+                            if (isSelected) {
+                              selectedFiles.remove(file);
+                            } else {
+                              selectedFiles.add(file);
+                            }
+                          });
                         },
                       );
                     },
                   ),
                 ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.check, size: 20),
+                    label: Text(
+                      selectedFiles.isEmpty
+                          ? "Usar Som Padrão"
+                          : selectedFiles.length == 1
+                              ? "Salvar Som Selecionado"
+                              : "Salvar Loop (${selectedFiles.length} Sons)",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      localPlayer.stop();
+                      localPlayer.dispose();
+                      Navigator.pop(ctx);
+                      _saveGoalSound(formatGoalSounds(selectedFiles));
+                    },
+                  ),
+                ),
                 if (_goalSoundUrl != null && _goalSoundUrl!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.redAccent),
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
                         foregroundColor: Colors.redAccent,
                       ),
                       icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text("Remover Som (Usar Padrão)"),
+                      label: const Text("Redefinir para Padrão"),
                       onPressed: () {
                         localPlayer.stop();
                         localPlayer.dispose();
@@ -1222,6 +1329,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       localPlayer.dispose();
     });
   }
+
 
   Future<void> _saveManualBadge(String? id, String icon, String title) async {
     final prefs = await SharedPreferences.getInstance();

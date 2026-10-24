@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../repositories/supabase_service.dart';
-import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
 import '../widgets/shared/icon_picker_modal.dart';
@@ -12,7 +11,7 @@ import '../widgets/shared/player_avatar_frame.dart';
 import '../widgets/shared/ranking_player_bits.dart';
 import 'player_detail.dart';
 
-enum _RosterFilter { all, legendary, platinum, gold, silver, bronze, effects }
+enum _RosterFilter { all, legendary, platinum, gold, effects }
 
 enum _RosterSort { ovr, name, rating, games }
 
@@ -21,8 +20,6 @@ const _filterLabels = {
   _RosterFilter.legendary: 'Lendária',
   _RosterFilter.platinum: 'Platina',
   _RosterFilter.gold: 'Ouro',
-  _RosterFilter.silver: 'Prata',
-  _RosterFilter.bronze: 'Bronze',
   _RosterFilter.effects: 'Com efeitos',
 };
 
@@ -375,10 +372,6 @@ class _PlayersScreenState extends State<PlayersScreen> {
         return tierForOverall(_overallOf(p)) == CardTier.platinum;
       case _RosterFilter.gold:
         return tierForOverall(_overallOf(p)) == CardTier.gold;
-      case _RosterFilter.silver:
-        return tierForOverall(_overallOf(p)) == CardTier.silver;
-      case _RosterFilter.bronze:
-        return tierForOverall(_overallOf(p)) == CardTier.bronze;
       case _RosterFilter.effects:
         return cosmeticOfMap(p).frame != null;
     }

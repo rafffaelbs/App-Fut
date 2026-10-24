@@ -164,21 +164,18 @@ double playerOverallOf(Map<String, dynamic> player) {
 // Faixas visuais do card (bronze / prata / ouro / platina / lendária)
 // ─────────────────────────────────────────────────────────────
 
-/// Menor Overall de cada faixa (docs/design/01, seção 2.5). Bronze é tudo
-/// abaixo de [kSilverMin]. Nenhuma tela compara Overall com número solto.
-const int kSilverMin = 65;
-const int kGoldMin = 75;
+/// Menor Overall de cada faixa (ouro até 79, platina 80-84, lendária 85+).
+/// Nenhuma tela compara Overall com número solto.
+const int kGoldMin = 0;
 const int kPlatinumMin = 80;
 const int kLegendaryMin = 85;
 
-enum CardTier { bronze, silver, gold, platinum, legendary }
+enum CardTier { gold, platinum, legendary }
 
 CardTier tierForOverall(int overall) {
   if (overall >= kLegendaryMin) return CardTier.legendary;
   if (overall >= kPlatinumMin) return CardTier.platinum;
-  if (overall >= kGoldMin) return CardTier.gold;
-  if (overall >= kSilverMin) return CardTier.silver;
-  return CardTier.bronze;
+  return CardTier.gold;
 }
 
 String cardTierLabel(CardTier tier) {
@@ -189,10 +186,6 @@ String cardTierLabel(CardTier tier) {
       return 'Platina';
     case CardTier.gold:
       return 'Ouro';
-    case CardTier.silver:
-      return 'Prata';
-    case CardTier.bronze:
-      return 'Bronze';
   }
 }
 
@@ -205,10 +198,6 @@ Color overallColor(num overall) {
       return AppColors.tierPlatinumBorder;
     case CardTier.gold:
       return AppColors.tierGold;
-    case CardTier.silver:
-      return AppColors.tierSilver;
-    case CardTier.bronze:
-      return AppColors.tierBronzeAccent;
   }
 }
 
@@ -278,20 +267,6 @@ CardPalette cardPaletteFor(CardTier tier) {
         text: AppColors.tierGoldText,
         nameText: AppColors.tierGoldText,
         pattern: AppColors.tierGold,
-      );
-    case CardTier.silver:
-      return CardPalette(
-        gradient: _tierGradient(AppColors.tierSilver),
-        text: AppColors.tierSilverText,
-        nameText: AppColors.tierSilverText,
-        pattern: AppColors.tierSilver,
-      );
-    case CardTier.bronze:
-      return CardPalette(
-        gradient: _tierGradient(AppColors.tierBronze),
-        text: AppColors.tierBronzeText,
-        nameText: AppColors.tierBronzeText,
-        pattern: AppColors.tierBronze,
       );
   }
 }

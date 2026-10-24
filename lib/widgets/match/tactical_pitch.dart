@@ -540,8 +540,9 @@ class _PitchCardState extends State<_PitchCard> {
           children: [
             Positioned.fill(child: card),
             Positioned(
-              top: 1,
-              left: 1,
+              top: widget.density == CardDensity.small ? 0 : 1,
+              left: widget.density == CardDensity.small ? null : 1,
+              right: widget.density == CardDensity.small ? 0 : null,
               child: widget.isGk
                   ? Container(
                       padding: const EdgeInsets.symmetric(horizontal: 3),

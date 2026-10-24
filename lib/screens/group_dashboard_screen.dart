@@ -165,6 +165,8 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                         final prefs = snapshot.data!;
                         bool showRadar = prefs.getBool('show_radar_chart') ?? true;
+                        bool useCards = prefs.getBool('pitch_use_cards') ??
+                            (!(prefs.getBool('pitch_use_chips') ?? true));
                         
                         return StatefulBuilder(
                           builder: (context, setDialogState) {
@@ -182,6 +184,17 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                                     onChanged: (val) {
                                       prefs.setBool('show_radar_chart', val);
                                       setDialogState(() { showRadar = val; });
+                                    },
+                                  ),
+                                  SwitchListTile(
+                                    title: const Text('Usar Cards no Campo Tático', style: TextStyle(color: Colors.white)),
+                                    subtitle: const Text('Desligado: chips (padrão). Ligado: cards estilo FIFA', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                    activeColor: AppColors.accentBlue,
+                                    value: useCards,
+                                    onChanged: (val) {
+                                      prefs.setBool('pitch_use_cards', val);
+                                      prefs.setBool('pitch_use_chips', !val);
+                                      setDialogState(() { useCards = val; });
                                     },
                                   ),
                                 ],

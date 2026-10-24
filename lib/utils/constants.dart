@@ -156,12 +156,43 @@ const List<Map<String, String>> availableGoalAudios = [
 },
 ];
 
-/// Helper para obter o label amigável de um arquivo de áudio.
-String getGoalAudioLabel(String? filename) {
-  if (filename == null || filename.isEmpty) return 'Padrão';
-  final found = availableGoalAudios.firstWhere(
-    (item) => item['file'] == filename,
-    orElse: () => {'file': filename, 'label': filename},
-  );
-  return found['label'] ?? filename;
+/// Extrai a lista de áudios de gol configurados a partir de uma string separada por vírgula.
+List<String> parseGoalSounds(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  return raw
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
 }
+
+/// Converte uma lista de áudios de volta para string delimitada por vírgula (ou null se vazia).
+String? formatGoalSounds(List<String> sounds) {
+  final clean = sounds.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  if (clean.isEmpty) return null;
+  return clean.join(',');
+}
+
+/// Helper para obter o label amigável de um arquivo de áudio ou loop de áudios.
+String getGoalAudioLabel(String? filename) {
+  final sounds = parseGoalSounds(filename);
+  if (sounds.isEmpty) return 'Padrão';
+  if (sounds.length == 1) {
+    final s = sounds.first;
+    final found = availableGoalAudios.firstWhere(
+      (item) => item['file'] == s,
+      orElse: () => {'file': s, 'label': s},
+    );
+    return found['label'] ?? s;
+  }
+
+  final labels = sounds.map((s) {
+    final found = availableGoalAudios.firstWhere(
+      (item) => item['file'] == s,
+      orElse: () => {'file': s, 'label': s},
+    );
+    return found['label'] ?? s;
+  }).join(' ➔ ');
+  return 'Loop (${sounds.length}): $labels';
+}
+
