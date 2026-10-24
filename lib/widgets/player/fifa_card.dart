@@ -4,7 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/cosmetic_resolver.dart';
 import '../../utils/overall_calculator.dart';
 import '../shared/cosmetic_frame.dart';
-import '../shared/cosmetic_name.dart';
+import '../shared/player_name_text.dart';
 import '../shared/player_avatar_frame.dart';
 import '../shared/stars_badge.dart';
 
@@ -212,7 +212,7 @@ class FifaCard extends StatelessWidget {
 
     final starsCompact = !full && !large || cosmetic.stars > 3;
 
-    Widget nameText = CosmeticName(
+    Widget nameText = PlayerNameText(
       name: full || large ? name.toUpperCase() : _shortName(name),
       cosmetic: cosmetic,
       solid: medium,
@@ -587,7 +587,7 @@ class _SmallChip extends StatelessWidget {
           left: 0,
           right: 0,
           top: 50,
-          child: CosmeticName(
+          child: PlayerNameText(
             name: shortName,
             cosmetic: cosmetic,
             solid: true,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
+import '../constants/cosmetic_effects.dart';
 import '../models/cosmetic_effect.dart';
 import '../models/player_model.dart';
 
@@ -85,48 +86,13 @@ const _goldenBallFrame = [
 
 const _sapphireFrame = [AppColors.cosmeticSapphire, AppColors.cosmeticSapphireHighlight];
 
-class _EffectSpec {
-  final NameStyle name;
-  final List<Color> frame;
-  final bool glow;
-  const _EffectSpec(this.name, this.frame, this.glow);
-}
-
-const _effects = <CosmeticEffect, _EffectSpec>{
-  CosmeticEffect.diamond: _EffectSpec(
-    NameStyle([AppColors.cosmeticDiamondFrom, AppColors.cosmeticDiamond]),
-    [AppColors.cosmeticDiamond],
-    true,
-  ),
-  CosmeticEffect.gold: _EffectSpec(
-    NameStyle([AppColors.cosmeticGoldFrom, AppColors.cosmeticGold]),
-    [AppColors.cosmeticGold],
-    true,
-  ),
-  CosmeticEffect.fire: _EffectSpec(
-    NameStyle([AppColors.cosmeticFireFrom, AppColors.cosmeticFire]),
-    [AppColors.cosmeticFire],
-    true,
-  ),
-  CosmeticEffect.silver: _EffectSpec(
-    NameStyle([AppColors.cosmeticSilverFrom, AppColors.cosmeticSilverTo]),
-    [AppColors.cosmeticSilverFrame],
-    false,
-  ),
-  CosmeticEffect.bronze: _EffectSpec(
-    NameStyle([AppColors.cosmeticBronzeFrom, AppColors.cosmeticBronze]),
-    [AppColors.cosmeticBronze],
-    false,
-  ),
-};
-
 /// Fonte única de verdade dos cosméticos. Nenhuma tela decide cor ou ícone
 /// de efeito por conta própria.
 ///
 /// - Moldura: Bola de Ouro > Efeito de nome > Craque do Mês. O Craque do Mês
 ///   vira linha interna (moldura dupla) quando há outra moldura.
 ResolvedCosmetic resolveCosmetic(PlayerCosmetics c) {
-  final effect = _effects[c.nameEffect];
+  final effect = cosmeticEffectDef(c.nameEffect);
   final stars = c.monthlyStars.clamp(0, 6);
   final hasMonthly = stars > 0;
 
@@ -138,7 +104,7 @@ ResolvedCosmetic resolveCosmetic(PlayerCosmetics c) {
         innerColor: hasMonthly ? AppColors.cosmeticSapphire : null);
   } else if (effect != null) {
     source = FrameSource.nameEffect;
-    frame = FrameStyle(effect.frame,
+    frame = FrameStyle([effect.frameColor],
         innerColor: hasMonthly ? AppColors.cosmeticSapphire : null);
   } else if (hasMonthly) {
     source = FrameSource.monthly;
@@ -147,7 +113,7 @@ ResolvedCosmetic resolveCosmetic(PlayerCosmetics c) {
 
   return ResolvedCosmetic(
     source: c,
-    nameStyle: effect?.name ?? NameStyle.plain,
+    nameStyle: effect == null ? NameStyle.plain : NameStyle(effect.nameColors),
     frame: frame,
     frameSource: source,
     stars: stars,

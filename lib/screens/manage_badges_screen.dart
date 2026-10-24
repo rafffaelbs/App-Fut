@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../constants/app_colors.dart';
 import '../repositories/supabase_service.dart';
+import '../constants/cosmetic_effects.dart';
 import '../models/cosmetic_effect.dart';
 import '../utils/constants.dart';
 import '../utils/cosmetic_resolver.dart';
@@ -563,7 +564,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                         subtitle: const Text(
-                          "Melhor da temporada (Coroa real + moldura nobre dourada)",
+                          "Melhor da temporada (moldura dourada)",
                           style: TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                         onChanged: (v) {
@@ -587,12 +588,9 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                     ),
 
                     // Ordem lógica e hierárquica dos efeitos:
-                    effectRadio(null, "Padrão (Sem efeito)", Colors.white54, "Sem contorno ou brilho extra"),
-                    effectRadio('diamond', "Diamante 💎", cosmeticEffectColor(CosmeticEffect.diamond)!, "Ciano cristalino (Jogador Lendário / MVP)"),
-                    effectRadio('gold', "Dourado 🏆", cosmeticEffectColor(CosmeticEffect.gold)!, "Ouro reluzente (Campeão / Destaque)"),
-                    effectRadio('fire', "Fogo 🔥", cosmeticEffectColor(CosmeticEffect.fire)!, "Chamas vivas (Artilheiro da temporada)"),
-                    effectRadio('silver', "Prata 🥈", cosmeticEffectColor(CosmeticEffect.silver)!, "Cromo prateado (Vice-artilheiro / Garçom)"),
-                    effectRadio('bronze', "Bronze 🥉", cosmeticEffectColor(CosmeticEffect.bronze)!, "Cobre nobre (3º colocado / Revelação)"),
+                    effectRadio(null, kNoCosmeticEffectLabel, Colors.white54, kNoCosmeticEffectDescription),
+                    for (final d in kCosmeticEffects)
+                      effectRadio(d.effect.dbValue, d.legendLabel, d.frameColor, d.description),
 
                     const Divider(color: Colors.white12),
 
@@ -904,14 +902,8 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                         final craqueCount = _resolveCraqueCountLocal(player);
 
                         String effectLabel(String? e) {
-                          switch (e) {
-                            case 'gold': return 'Dourado';
-                            case 'silver': return 'Prata';
-                            case 'bronze': return 'Bronze';
-                            case 'fire': return '🔥 Fogo';
-                            case 'diamond': return '💎 Diamante';
-                            default: return e ?? '';
-                          }
+                          final d = cosmeticEffectDef(CosmeticEffect.fromDb(e));
+                          return d == null ? (e ?? '') : d.legendLabel;
                         }
 
                         return Container(

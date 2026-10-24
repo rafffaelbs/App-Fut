@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/rating_calculator.dart';
-import '../shared/cosmetic_name.dart';
+import '../shared/player_name_text.dart';
 import '../shared/player_avatar_frame.dart';
 import '../shared/stars_badge.dart';
 
@@ -62,7 +62,7 @@ class PlayerCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: CosmeticName(
+                            child: PlayerNameText(
                               name: name,
                               cosmetic: frame.cosmetic,
                               maxLines: 1,

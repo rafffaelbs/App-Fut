@@ -6,7 +6,7 @@ import '../../utils/cosmetic_resolver.dart';
 import '../../utils/overall_calculator.dart';
 import '../player/fifa_card.dart';
 import 'cosmetic_frame.dart';
-import 'cosmetic_name.dart';
+import 'player_name_text.dart';
 import 'player_avatar_frame.dart';
 import 'stars_badge.dart';
 
@@ -78,7 +78,7 @@ class RankName extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = cosmeticOfMap(player);
-    final name = CosmeticName(
+    final name = PlayerNameText(
       name: (player['name'] ?? '').toString(),
       cosmetic: c,
       maxLines: 1,

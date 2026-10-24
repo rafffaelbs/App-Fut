@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
 import '../../utils/overall_calculator.dart';
+import '../shared/player_name_text.dart';
 
 class PlayerFieldSlot extends StatelessWidget {
   final Map<String, dynamic>? player;
@@ -64,8 +65,9 @@ class PlayerFieldSlot extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    hasPlayer ? player!['name'] : "Vazio",
+                  PlayerNameText(
+                    name: hasPlayer ? player!['name'].toString() : "Vazio",
+                    player: player,
                     style: TextStyle(
                       color: hasPlayer ? AppColors.textWhite : Colors.white38,
                       fontWeight: hasPlayer
@@ -73,6 +75,7 @@ class PlayerFieldSlot extends StatelessWidget {
                           : FontWeight.normal,
                       fontSize: 13,
                     ),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (hasPlayer && rating > 0)
