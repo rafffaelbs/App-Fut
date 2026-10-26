@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -440,7 +441,6 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     ).whenComplete(() async {
       await completeSub?.cancel();
       try {
-        await localPlayer.stop();
         await localPlayer.dispose();
       } catch (_) {}
     });
@@ -1141,7 +1141,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
     _previewPlayer.onPlayerComplete.first.then((_) {
       if (mounted) setState(() => _playingPreviewId = null);
-    });
+    }).catchError((_) {});
   }
 
   Future<void> _saveBadges() async {

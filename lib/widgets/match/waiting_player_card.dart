@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../constants/app_colors.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/overall_calculator.dart';
+import '../../utils/bench_time_calculator.dart';
 import '../player/fifa_card.dart';
 import '../shared/player_avatar_frame.dart';
 import '../shared/player_name_text.dart';
@@ -21,7 +22,12 @@ class WaitingPlayerCard extends StatelessWidget {
 
   /// Índice na lista reordenável (alça de arraste).
   final int dragIndex;
-  final DateTime waitingSince;
+
+  /// Estatísticas de tempo e jogos no banco derivadas do histórico.
+  final WaitingBenchStats? benchStats;
+
+  /// Legado: data desde quando está esperando (usado se [benchStats] for nulo).
+  final DateTime? waitingSince;
 
   /// Cor do grupo quando já forma um time completo; null = sobra.
   final Color? batchColor;
@@ -35,7 +41,8 @@ class WaitingPlayerCard extends StatelessWidget {
     required this.player,
     required this.position,
     required this.dragIndex,
-    required this.waitingSince,
+    this.benchStats,
+    this.waitingSince,
     required this.frame,
     required this.onTap,
     this.batchColor,
@@ -111,7 +118,14 @@ class WaitingPlayerCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      _WaitingClock(since: waitingSince),
+                      _WaitingClock(
+                        stats: benchStats ??
+                            WaitingBenchStats(
+                              hasPlayed: true,
+                              waitingSince: waitingSince,
+                              completedMatchesSinceLastPlayed: 0,
+                            ),
+                      ),
                     ],
                   ),
                 ),
@@ -134,10 +148,10 @@ class WaitingPlayerCard extends StatelessWidget {
   }
 }
 
-/// "Há 15 min no banco", atualizado a cada 30s sem reconstruir a tela.
+/// Exibe tempo e jogos no banco, atualizado periodicamente sem reconstruir a lista.
 class _WaitingClock extends StatefulWidget {
-  final DateTime since;
-  const _WaitingClock({required this.since});
+  final WaitingBenchStats stats;
+  const _WaitingClock({required this.stats});
 
   @override
   State<_WaitingClock> createState() => _WaitingClockState();
@@ -160,18 +174,10 @@ class _WaitingClockState extends State<_WaitingClock> {
     super.dispose();
   }
 
-  static String format(Duration d) {
-    if (d.inMinutes < 1) return 'Acabou de entrar no banco';
-    if (d.inMinutes < 60) return 'Há ${d.inMinutes} min no banco';
-    final h = d.inHours;
-    final m = d.inMinutes % 60;
-    return 'Há ${h}h${m.toString().padLeft(2, '0')} no banco';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Text(
-      format(DateTime.now().difference(widget.since)),
+      BenchTimeCalculator.formatDisplay(widget.stats, now: DateTime.now()),
       style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
     );
   }

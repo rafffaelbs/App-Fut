@@ -10,6 +10,7 @@ import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:app_do_fut/screens/manage_members_screen.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
+import 'package:app_do_fut/utils/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -167,6 +168,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                         bool showRadar = prefs.getBool('show_radar_chart') ?? true;
                         bool useCards = prefs.getBool('pitch_use_cards') ??
                             (!(prefs.getBool('pitch_use_chips') ?? true));
+                        bool confirmTimerEnabled = prefs.getBool(kPrefConfirmTimerEnabled) ?? true;
                         
                         return StatefulBuilder(
                           builder: (context, setDialogState) {
@@ -184,6 +186,16 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
                                     onChanged: (val) {
                                       prefs.setBool('show_radar_chart', val);
                                       setDialogState(() { showRadar = val; });
+                                    },
+                                  ),
+                                  SwitchListTile(
+                                    title: const Text('Timer de Proteção ao Encerrar', style: TextStyle(color: Colors.white)),
+                                    subtitle: const Text('Bloqueia o botão Confirmar por 3s para evitar cliques sem ler', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                    activeColor: AppColors.accentBlue,
+                                    value: confirmTimerEnabled,
+                                    onChanged: (val) {
+                                      prefs.setBool(kPrefConfirmTimerEnabled, val);
+                                      setDialogState(() { confirmTimerEnabled = val; });
                                     },
                                   ),
                                   SwitchListTile(

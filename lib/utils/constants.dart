@@ -196,3 +196,9 @@ String getGoalAudioLabel(String? filename) {
   return 'Loop (${sounds.length}): $labels';
 }
 
+/// Duração em segundos do timer de proteção no diálogo de encerramento da partida.
+const int kMatchFinishConfirmationDelaySeconds = 3;
+
+/// Chave do SharedPreferences para habilitar/desabilitar o timer de proteção.
+const String kPrefConfirmTimerEnabled = 'confirm_timer_enabled';
+

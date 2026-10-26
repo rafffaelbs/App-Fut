@@ -28,8 +28,10 @@ import '../widgets/match/tactical_pitch.dart';
 import '../widgets/match/match_events_panel.dart';
 import '../widgets/match/arrival_swipe.dart';
 import '../widgets/match/waiting_player_card.dart';
+import '../widgets/match/match_finish_confirmation_dialog.dart';
 import '../widgets/shared/player_name_text.dart';
 import '../widgets/shared/player_avatar_frame.dart';
+import '../utils/bench_time_calculator.dart';
 import 'draft_screen.dart';
 
 class MatchScreen extends StatefulWidget {
@@ -69,6 +71,9 @@ class _MatchScreenState extends State<MatchScreen>
   Timer? _siteSyncTimer;
   List<Map<String, dynamic>> presentPlayers = [];
   final Map<String, DateTime> _waitingSince = {};
+  List<FinishedMatchInfo> _finishedMatches = [];
+  DateTime? _sessionStartTime;
+  bool _confirmTimerEnabled = true;
   List<Map<String, dynamic>> teamRed = [];
   List<Map<String, dynamic>> teamWhite = [];
 
@@ -332,6 +337,8 @@ class _MatchScreenState extends State<MatchScreen>
         (!(prefs.getBool('pitch_use_chips') ?? false));
     _pitchUseChips = !useCards;
     _requireGk = prefs.getBool('require_gk') ?? true;
+    _confirmTimerEnabled = prefs.getBool(kPrefConfirmTimerEnabled) ?? true;
+    unawaited(_loadSessionMatches());
 
     final String? dbData = prefs.getString('players_${widget.groupId}');
     if (dbData != null) {
@@ -538,6 +545,44 @@ class _MatchScreenState extends State<MatchScreen>
     matchDurationSeconds = (s.durationMinutes ?? 8) * 60;
     streakAction = s.streakAction;
     isDraftMode = s.draftMode;
+    _sessionStartTime = s.sessionDate;
+  }
+
+  /// Carrega as partidas já encerradas desta sessão para cálculo do banco.
+  Future<void> _loadSessionMatches() async {
+    try {
+      final matches = await SupabaseService.instance.matches
+          .getMatchesBySession(widget.tournamentId);
+      if (matches.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _finishedMatches =
+              matches.map(FinishedMatchInfo.fromMatchModel).toList();
+        });
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error loading remote/cached matches for queue: $e');
+    }
+
+    // Fallback SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String historyKey = 'match_history_${widget.tournamentId}';
+      if (prefs.containsKey(historyKey)) {
+        final List<dynamic> local = jsonDecode(prefs.getString(historyKey)!);
+        if (!mounted) return;
+        setState(() {
+          _finishedMatches = local
+              .whereType<Map>()
+              .map((m) =>
+                  FinishedMatchInfo.fromMap(Map<String, dynamic>.from(m)))
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading local match history for queue: $e');
+    }
   }
 
   /// Em segundo plano, confere se a pelada foi editada (ex.: de 8 pra 7 min,
@@ -1613,6 +1658,24 @@ class _MatchScreenState extends State<MatchScreen>
                 await prefs.setBool('require_gk', val);
               },
             ),
+            SwitchListTile(
+              activeColor: AppColors.accentBlue,
+              title: const Text(
+                "Timer de proteção ao confirmar",
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                "Bloqueia o botão Confirmar por 3s após encerrar para evitar cliques sem ler",
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              value: _confirmTimerEnabled,
+              onChanged: (val) async {
+                setState(() => _confirmTimerEnabled = val);
+                setModalState(() => _confirmTimerEnabled = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool(kPrefConfirmTimerEnabled, val);
+              },
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -2401,12 +2464,6 @@ class _MatchScreenState extends State<MatchScreen>
         ),
       );
     final int teamSize = widget.totalPlayers;
-    // Tempo no banco: marca a primeira vez que o jogador aparece na fila.
-    final waitingIds = {for (final p in waiting) _pid(p)};
-    _waitingSince.removeWhere((id, _) => !waitingIds.contains(id));
-    for (final id in waitingIds) {
-      _waitingSince.putIfAbsent(id, DateTime.now);
-    }
     return ReorderableListView(
       padding: const EdgeInsets.all(16),
       buildDefaultDragHandles: false,
@@ -2506,12 +2563,18 @@ class _MatchScreenState extends State<MatchScreen>
       AppColors.goldAccent,
       AppColors.success,
     ];
+    final stats = BenchTimeCalculator.calculate(
+      playerId: _pid(player),
+      finishedMatches: _finishedMatches,
+      sessionStartTime: _sessionStartTime,
+    );
     return WaitingPlayerCard(
       key: ValueKey(_pid(player)),
       player: player,
       position: index + 1,
       dragIndex: index,
-      waitingSince: _waitingSince[_pid(player)] ?? DateTime.now(),
+      benchStats: stats,
+      waitingSince: stats.waitingSince ?? DateTime.now(),
       frame: resolvePlayerFrame(player),
       batchColor:
           isCompleteTeam ? batchColors[(teamBatch - 1) % batchColors.length] : null,
@@ -3369,162 +3432,204 @@ class _MatchScreenState extends State<MatchScreen>
 
     // Backup local do histórico: em segundo plano.
     unawaited(_appendLocalHistory(matchRecord));
-    // Notas ficam fixas durante a pelada (snapshot do GroupBootstrap).
+
+    // Atualiza imediatamente a lista de partidas finalizadas para a fila de espera
+    final newFinishedInfo = FinishedMatchInfo(
+      id: matchId,
+      endTime: DateTime.now(),
+      playerIds: {
+        for (final p in redSnap) playerIdFromObject(p),
+        for (final p in whiteSnap) playerIdFromObject(p),
+        if (gkRedSnap != null) playerIdFromObject(gkRedSnap),
+        if (gkWhiteSnap != null) playerIdFromObject(gkWhiteSnap),
+      }..removeWhere((id) => id.isEmpty),
+    );
+    _finishedMatches.add(newFinishedInfo);
 
     bool isTie = scoreRed == scoreWhite;
     bool redWon = scoreRed > scoreWhite;
-    List<Map<String, dynamic>> suggestedLeavers = [];
-    String popupTitle = "";
-    String popupMessage = "";
-    Color popupColor = AppColors.textWhite;
-
-    bool thresholdMet = false;
+    String popupTitle;
+    Color popupColor;
 
     if (isTie) {
       redWinStreak = 0;
       whiteWinStreak = 0;
-      suggestedLeavers.addAll(teamRed);
-      suggestedLeavers.addAll(teamWhite);
-      suggestedLeavers.shuffle(Random());
       popupTitle = "Empate!";
-      popupMessage = "Sugestão do Sistema:\nAmbos os times saem.";
       popupColor = Colors.orangeAccent;
     } else {
       _playVictorySound();
       if (redWon) {
-        redWinStreak++; whiteWinStreak = 0;
-        if (winLimit > 0 && redWinStreak >= winLimit) { 
-            thresholdMet = true;
-            suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); 
-            popupTitle = "🔥 VERMELHO INVICTO!"; popupMessage = "Vermelho ganhou $winLimit seguidas!\nAutomação acionada."; popupColor = Colors.redAccent; 
-        }
-        else { suggestedLeavers.addAll(teamWhite); popupTitle = "Vitória do VERMELHO!"; popupMessage = winLimit > 0 ? "Sugestão: Branco sai.\n(Sequência do Vermelho: $redWinStreak/$winLimit)" : "Sugestão: Branco sai.\n(Vitórias seguidas: $redWinStreak)"; popupColor = Colors.redAccent; }
+        redWinStreak++;
+        whiteWinStreak = 0;
+        popupTitle = winLimit > 0 && redWinStreak >= winLimit
+            ? "🔥 VERMELHO INVICTO!"
+            : "Vitória do VERMELHO!";
+        popupColor = Colors.redAccent;
       } else {
-        whiteWinStreak++; redWinStreak = 0;
-        if (winLimit > 0 && whiteWinStreak >= winLimit) { 
-            thresholdMet = true;
-            suggestedLeavers.addAll(teamRed); suggestedLeavers.addAll(teamWhite); suggestedLeavers.shuffle(Random()); 
-            popupTitle = "🔥 BRANCO INVICTO!"; popupMessage = "Branco ganhou $winLimit seguidas!\nAutomação acionada."; popupColor = Colors.white; 
-        }
-        else { suggestedLeavers.addAll(teamRed); popupTitle = "Vitória do BRANCO!"; popupMessage = winLimit > 0 ? "Sugestão: Vermelho sai.\n(Sequência do Branco: $whiteWinStreak/$winLimit)" : "Sugestão: Vermelho sai.\n(Vitórias seguidas: $whiteWinStreak)"; popupColor = Colors.white; }
+        whiteWinStreak++;
+        redWinStreak = 0;
+        popupTitle = winLimit > 0 && whiteWinStreak >= winLimit
+            ? "🔥 BRANCO INVICTO!"
+            : "Vitória do BRANCO!";
+        popupColor = Colors.white;
       }
     }
+
+    final bool thresholdMet = winLimit > 0 &&
+        ((redWon && redWinStreak >= winLimit) ||
+            (!isTie && !redWon && whiteWinStreak >= winLimit));
 
     _scheduleSiteSync();
 
-    if (thresholdMet) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("$popupTitle Aplicando regra: ${streakAction == 'dual_exit' ? 'Ambos Saem' : 'Dividir Vencedor'}"),
-          backgroundColor: popupColor,
-          duration: const Duration(seconds: 3),
-        ));
-      }
-      if (streakAction == 'dual_exit') {
-        _processMatchExit(suggestedLeavers); // Ambos saem
-      } else {
-        final winners = redWon ? List<Map<String, dynamic>>.from(teamRed)  : List<Map<String, dynamic>>.from(teamWhite);
-        final losers  = redWon ? List<Map<String, dynamic>>.from(teamWhite) : List<Map<String, dynamic>>.from(teamRed);
-        _splitWinner(winners, losers);
-      }
-      return;
+    final whiteLeavers = List<Map<String, dynamic>>.from(teamWhite);
+    final redLeavers = List<Map<String, dynamic>>.from(teamRed);
+    final bothLeavers = <Map<String, dynamic>>[
+      ...teamRed,
+      ...teamWhite,
+    ]..shuffle(Random());
+
+    final winners = redWon
+        ? List<Map<String, dynamic>>.from(teamRed)
+        : List<Map<String, dynamic>>.from(teamWhite);
+    final losers = redWon
+        ? List<Map<String, dynamic>>.from(teamWhite)
+        : List<Map<String, dynamic>>.from(teamRed);
+
+    final optWhite = MatchExitAction(
+      type: MatchExitType.removeWhite,
+      title: "Tirar o Time Branco",
+      badgeText: isTie
+          ? "Ação Manual"
+          : (redWon && !thresholdMet ? "Sugestão da Pelada" : "Ação Manual"),
+      description: "O Time Branco sai de campo e dá lugar aos próximos da fila.",
+      leavingSummary: "Time Branco (${whiteLeavers.length} jogadores)",
+      stayingSummary: "Time Vermelho continua em campo",
+      leavers: whiteLeavers,
+      entering: _calculateEnteringPlayers(whiteLeavers),
+    );
+
+    final optRed = MatchExitAction(
+      type: MatchExitType.removeRed,
+      title: "Tirar o Time Vermelho",
+      badgeText: isTie
+          ? "Ação Manual"
+          : (!redWon && !thresholdMet ? "Sugestão da Pelada" : "Ação Manual"),
+      description: "O Time Vermelho sai de campo e dá lugar aos próximos da fila.",
+      leavingSummary: "Time Vermelho (${redLeavers.length} jogadores)",
+      stayingSummary: "Time Branco continua em campo",
+      leavers: redLeavers,
+      entering: _calculateEnteringPlayers(redLeavers),
+    );
+
+    final optBoth = MatchExitAction(
+      type: MatchExitType.removeBoth,
+      title: "Sair os 2 Times",
+      badgeText: isTie
+          ? "Sugestão do Sistema"
+          : (thresholdMet && streakAction == 'dual_exit'
+              ? "Regra de Vitórias"
+              : "Ação Manual"),
+      description: "Ambos os times saem de campo e 2 novos times da fila entram.",
+      leavingSummary: "Time Vermelho e Time Branco",
+      stayingSummary: "Nenhum time continua em campo",
+      leavers: bothLeavers,
+      entering: _calculateEnteringPlayers(bothLeavers),
+    );
+
+    final winnerIds = winners.map(_pid).toSet();
+    final enteringForSplit = presentPlayers
+        .where((p) => p['desistiu'] != true && !winnerIds.contains(_pid(p)))
+        .take(widget.totalPlayers)
+        .toList();
+
+    final optSplit = MatchExitAction(
+      type: MatchExitType.splitWinner,
+      title: isTie
+          ? "Dividir um dos Times"
+          : "Dividir o Time Vencedor (${redWon ? 'Vermelho' : 'Branco'})",
+      badgeText: thresholdMet && streakAction == 'split'
+          ? "Regra de Vitórias"
+          : "Ação Manual",
+      description: isTie
+          ? "Escolha qual time dividir entre os dois lados."
+          : "O time vencedor é dividido equilibradamente entre os dois lados.",
+      leavingSummary: isTie
+          ? "Time perdedor a definir"
+          : (redWon ? "Time Branco" : "Time Vermelho"),
+      stayingSummary: isTie
+          ? "Time escolhido é dividido"
+          : "Time vencedor (${redWon ? 'Vermelho' : 'Branco'}) é dividido",
+      leavers: losers,
+      entering: enteringForSplit,
+      splitWinners: winners,
+      splitLosers: losers,
+    );
+
+    MatchExitAction defaultAction;
+    if (isTie) {
+      defaultAction = optBoth;
+    } else if (thresholdMet) {
+      defaultAction = streakAction == 'dual_exit' ? optBoth : optSplit;
+    } else {
+      defaultAction = redWon ? optWhite : optRed;
     }
+
+    final manualOptions = [optWhite, optRed, optBoth, optSplit];
 
     if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          backgroundColor: AppColors.headerBlue,
-          title: Text(
-            popupTitle,
-            style: TextStyle(
-              color: popupColor,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events, color: Colors.amber, size: 60),
-              const SizedBox(height: 16),
-              Text(
-                "Placar Final: $scoreRed x $scoreWhite",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  popupMessage,
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _showManualExitDialog();
-              },
-              child: const Text(
-                "Alterar na Mão",
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-            ),
-            if (!isTie)
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  final winners = redWon
-                      ? List<Map<String, dynamic>>.from(teamRed)
-                      : List<Map<String, dynamic>>.from(teamWhite);
-                  final losers = redWon
-                      ? List<Map<String, dynamic>>.from(teamWhite)
-                      : List<Map<String, dynamic>>.from(teamRed);
-                  _splitWinner(winners, losers);
-                },
-                child: const Text(
-                  "Dividir Vencedor",
-                  style: TextStyle(
-                    color: Colors.purpleAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(suggestedLeavers);
-              },
-              child: const Text(
-                "Confirmar >>",
-                style: TextStyle(
-                  color: AppColors.accentBlue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ],
-        ),
+      builder: (ctx) => MatchFinishConfirmationDialog(
+        scoreRed: redScoreSnap,
+        scoreWhite: whiteScoreSnap,
+        resultTitle: popupTitle,
+        resultColor: popupColor,
+        defaultAction: defaultAction,
+        manualOptions: manualOptions,
+        timerEnabled: _confirmTimerEnabled,
+        timerDurationSeconds: kMatchFinishConfirmationDelaySeconds,
+        onConfirm: (action) {
+          if (action.type == MatchExitType.splitWinner) {
+            if (isTie) {
+              _showChooseWinnerForSplitDialog();
+            } else {
+              _splitWinner(
+                action.splitWinners ?? winners,
+                action.splitLosers ?? losers,
+              );
+            }
+          } else {
+            _processMatchExit(action.leavers);
+          }
+        },
       ),
     );
   }
+
+  /// Calcula quem da fila deve entrar caso [leavers] saiam de campo.
+  List<Map<String, dynamic>> _calculateEnteringPlayers(
+    List<Map<String, dynamic>> leavers,
+  ) {
+    final leavingIds = leavers.map(_pid).toSet();
+    final stayingIds = {
+      for (final p in teamRed) _pid(p),
+      for (final p in teamWhite) _pid(p),
+    }..removeAll(leavingIds);
+
+    final List<Map<String, dynamic>> entering = [];
+    final int needed = leavers.length;
+    for (final p in presentPlayers) {
+      if (entering.length >= needed) break;
+      if (p['desistiu'] == true) continue;
+      final id = _pid(p);
+      if (!stayingIds.contains(id)) {
+        entering.add(p);
+      }
+    }
+    return entering;
+  }
+
 
   Future<void> _appendLocalHistory(Map<String, dynamic> matchRecord) async {
     try {
@@ -3667,89 +3772,6 @@ class _MatchScreenState extends State<MatchScreen>
       _saveMatchState();
       _showLeaversPopup(losers, bench);
     });
-  }
-
-  void _showManualExitDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          backgroundColor: AppColors.headerBlue,
-          title: const Text(
-            "Intervenção Manual",
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            "Quem deve sair de campo?",
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              child: const Text(
-                "Vermelho Sai",
-                style: TextStyle(color: Colors.redAccent),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(List.from(teamRed));
-              },
-            ),
-            TextButton(
-              child: const Text(
-                "Branco Sai",
-                style: TextStyle(color: Colors.white),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processMatchExit(List.from(teamWhite));
-              },
-            ),
-            TextButton(
-              child: const Text(
-                "Ambos Saem",
-                style: TextStyle(color: Colors.orangeAccent),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                List<Map<String, dynamic>> both = [];
-                both.addAll(teamRed);
-                both.addAll(teamWhite);
-                both.shuffle(Random());
-                _processMatchExit(both);
-              },
-            ),
-            TextButton(
-              child: const Text(
-                "Dividir Vencedor",
-                style: TextStyle(
-                  color: Colors.purpleAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                bool redWon = scoreRed > scoreWhite;
-                bool whitWon = scoreWhite > scoreRed;
-                if (!redWon && !whitWon) {
-                  // Empate: pergunta quem é o "vencedor" a dividir
-                  _showChooseWinnerForSplitDialog();
-                } else {
-                  final winners = redWon
-                      ? List<Map<String, dynamic>>.from(teamRed)
-                      : List<Map<String, dynamic>>.from(teamWhite);
-                  final losers = redWon
-                      ? List<Map<String, dynamic>>.from(teamWhite)
-                      : List<Map<String, dynamic>>.from(teamRed);
-                  _splitWinner(winners, losers);
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showChooseWinnerForSplitDialog() {
