@@ -1,5 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
+import '../domain/services/auth_service.dart';
+import '../domain/services/permission_service.dart';
+import '../data/supabase/supabase_auth_service.dart';
+import '../data/supabase/supabase_permission_service.dart';
 import 'groups_repository.dart';
 import 'players_repository.dart';
 import 'group_members_repository.dart';
@@ -16,15 +20,18 @@ class SupabaseService {
 
   factory SupabaseService() => instance;
 
+  static final AuthService auth = SupabaseAuthService();
+  static final PermissionService permissions = SupabasePermissionService();
+
   SupabaseService._internal() {
     client = SupabaseConfig.client;
 
     // Initialize repositories
-    groupMembers = GroupMembersRepository(client: client);
+    groupMembers = GroupMembersRepository(client: client, permissions: permissions);
     actionLogs = ActionLogsRepository(client: client);
-    players = PlayersRepository(client: client, membersRepo: groupMembers, logsRepo: actionLogs);
-    groups = GroupsRepository(client: client, membersRepo: groupMembers);
-    seasons = SeasonsRepository(client: client, membersRepo: groupMembers);
+    players = PlayersRepository(client: client, permissions: permissions, logsRepo: actionLogs);
+    groups = GroupsRepository(client: client, permissions: permissions);
+    seasons = SeasonsRepository(client: client, permissions: permissions);
     sessions = SessionsRepository(client: client);
     matches = MatchesRepository(client: client);
     ratings = RatingsRepository(client: client);
