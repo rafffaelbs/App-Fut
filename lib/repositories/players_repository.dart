@@ -7,8 +7,9 @@ import '../models/player_model.dart';
 import '../utils/overall_calculator.dart';
 import '../models/player_badge_model.dart';
 import '../services/cache_store.dart';
-import 'group_members_repository.dart';
+import '../domain/services/permission_service.dart';
 import 'action_logs_repository.dart';
+import 'supabase_service.dart';
 
 /// Nome do bucket público no Supabase Storage usado para os áudios
 /// customizados de comemoração de gol. Precisa existir e ser público
@@ -19,18 +20,18 @@ const String goalSoundsBucket = 'goal-sounds';
 class PlayersRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
-  final GroupMembersRepository _membersRepo;
+  final PermissionService _permissions;
   final ActionLogsRepository _logs;
   static const _uuid = Uuid();
 
   PlayersRepository({
     SupabaseClient? client,
     CacheStore? cache,
-    GroupMembersRepository? membersRepo,
+    PermissionService? permissions,
     ActionLogsRepository? logsRepo,
   })  : _client = client ?? supabase,
         _cache = cache ?? CacheStore(),
-        _membersRepo = membersRepo ?? GroupMembersRepository(client: client ?? supabase),
+        _permissions = permissions ?? SupabaseService.permissions,
         _logs = logsRepo ?? ActionLogsRepository(client: client ?? supabase);
 
   /// Returns every player linked to a given group.
@@ -293,10 +294,10 @@ class PlayersRepository {
     required Uint8List fileBytes,
     required String fileExtension,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem definir áudios de gol.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem definir áudios de gol.',
+    );
 
     final ext = fileExtension.replaceAll('.', '').toLowerCase();
     final path = '$playerId/goal_${DateTime.now().millisecondsSinceEpoch}.$ext';
@@ -334,10 +335,10 @@ class PlayersRepository {
     required String groupId,
     required String playerId,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem remover áudios de gol.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem remover áudios de gol.',
+    );
 
     final response = await _client
         .from('players')
@@ -367,10 +368,10 @@ class PlayersRepository {
     required String playerId,
     required String? effect,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem definir efeitos de nome.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem definir efeitos de nome.',
+    );
     if (effect != null && !validNameEffects.contains(effect)) {
       throw ArgumentError('Efeito de nome inválido: $effect');
     }
@@ -399,10 +400,10 @@ class PlayersRepository {
     required String playerId,
     required bool value,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem definir o selo de craque do mês.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem definir o selo de craque do mês.',
+    );
 
     final response = await _client
         .from('players')
@@ -431,10 +432,10 @@ class PlayersRepository {
     required CosmeticEffect nameEffect,
     required int monthlyStarCount,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem definir cosméticos.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem definir cosméticos.',
+    );
     if (monthlyStarCount < 0 || monthlyStarCount > 6) {
       throw ArgumentError('Estrelas do Craque do Mês devem estar entre 0 e 6.');
     }
@@ -472,10 +473,10 @@ class PlayersRepository {
     required String playerId,
     required CommunityAttributes attributes,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem editar os atributos da comunidade.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem editar os atributos da comunidade.',
+    );
 
     for (final key in kAttributeKeys) {
       final v = attributes.valueOf(key);
@@ -538,10 +539,10 @@ class PlayersRepository {
     required String playerId,
     required Map<String, dynamic> patch,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Acesso negado: somente administradores podem editar advanced_stats.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Acesso negado: somente administradores podem editar advanced_stats.',
+    );
 
     // Busca o valor atual para fazer o merge manual (Supabase REST não suporta || diretamente)
     final current = await getPlayerById(playerId);
