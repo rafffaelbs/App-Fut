@@ -87,3 +87,17 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** `rating_history` só continha dados da migração inicial legada (`tool/legacy/data_migration_service.dart:540`). Em tempo de execução real, as notas exibidas nas telas são calculadas puramente em memória pelos calculators a partir do histórico de partidas.
 - **Ação:** Registrado no inventário `docs/INVENTARIO_SHAREDPREFS.md`.
 
+---
+
+### 10. `lib/screens/tournament_screen.dart` (linhas 1–134) e `lib/screens/blank_screen.dart` (linha 5) — Tarefa T0e
+- **O que viu:** O arquivo `lib/screens/tournament_screen.dart` não possui nenhum chamador no aplicativo (0 chamadores, não é importado em nenhum outro arquivo). A tela `BlankScreen` (`lib/screens/blank_screen.dart`) só é aberta dentro de `tournament_screen.dart:122` via `MaterialPageRoute(builder: (c) => const BlankScreen())`. Além disso, em `lib/main.dart:5` existe um `import 'package:app_do_fut/screens/blank_screen.dart';` não utilizado.
+- **Impacto:** Tanto `TournamentScreen` quanto `BlankScreen` são telas inalcançáveis no aplicativo.
+- **Ação:** Registrado em `docs/CODIGO_MORTO.md`.
+
+---
+
+### 11. `lib/repositories/ratings_repository.dart` (linhas 11–72) — Tarefa T0e
+- **O que viu:** Todos os 4 métodos públicos de `RatingsRepository` (`getPlayerHistoryBySeason`, `getFullPlayerHistory`, `getLatestRatingsBySeason`, `recordRatingsBatch`) possuem 0 chamadores externos à própria classe no aplicativo. A propriedade `SupabaseService.instance.ratings` nunca é consumida.
+- **Impacto:** Toda a classe `RatingsRepository` não possui chamadores ativos na aplicação atual.
+- **Ação:** Registrado em `docs/CODIGO_MORTO.md`.
+
