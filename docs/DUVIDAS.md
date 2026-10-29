@@ -65,3 +65,11 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   ```
 - **Impacto:** Partidas que não pertencem à temporada exata atual não contam como jogos jogados (`games == 0`), mas impactam a `nota` final do jogador.
 - **Ação no teste:** Congelado no teste de caracterização.
+
+---
+
+### 7. `lib/main.dart` (linhas 191–260 e 497–502) — Tarefa T0b
+- **O que viu:** O drawer do `main.dart` continha o botão "Corrigir Tempos", que executava `FixEventTimesService().run(...)` com um caminho absoluto local hardcoded (`/home/marinho/Documents/github/App-Fut/pelada_backup_1789226662128.json`).
+- **Impacto:** Era o único ponto do app em `lib/` com dependência direta de `FixEventTimesService`.
+- **Ação:** Com a confirmação de que os scripts de migração/correção não são mais usados, o método e o item do drawer foram removidos de `lib/main.dart`, e os arquivos foram movidos para `tool/legacy/`. Caso essa rotina ainda seja necessária como script manual, ela deve ser executada a partir de `tool/legacy/fix_event_times_service.dart`.
+

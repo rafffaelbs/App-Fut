@@ -9,7 +9,6 @@ import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/screens/complete_profile_screen.dart';
 import 'package:app_do_fut/screens/join_group_screen.dart';
 import 'package:app_do_fut/services/sync_service.dart';
-import 'package:app_do_fut/services/fix_event_times_service.dart';
 import 'package:app_do_fut/config/supabase_config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -188,76 +187,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // --- MAINTENANCE: Fix event times from backup ---
-  Future<void> _runFixEventTimes() async {
-    Navigator.pop(context); // fecha o drawer
-
-    // Caminho absoluto do arquivo de backup
-    const backupPath = '/home/marinho/Documents/github/App-Fut/pelada_backup_1789226662128.json';
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        final List<String> progressLines = ['Iniciando...'];
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.headerBlue,
-              title: const Text('Corrigindo Tempos', style: TextStyle(color: Colors.white)),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 280,
-                child: ListView.builder(
-                  itemCount: progressLines.length,
-                  itemBuilder: (_, i) => Text(
-                    progressLines[i],
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    try {
-      final result = await FixEventTimesService().run(
-        backupJsonPath: backupPath,
-        onProgress: (msg) => debugPrint(msg),
-      );
-
-      if (mounted) Navigator.pop(context); // fecha o loading dialog
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.headerBlue,
-            title: const Text('Concluído!', style: TextStyle(color: Colors.white)),
-            content: Text(
-              '✅ ${result['updated']} eventos atualizados\n⏭️ ${result['skipped']} partidas sem alteração\n❌ ${(result['errors'] as List).length} erros',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK', style: TextStyle(color: AppColors.accentBlue)),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
 
   // --- UNIFIED DIALOG: CREATE OR EDIT ---
   void _showGroupDialog({int? index}) {
@@ -564,12 +493,6 @@ class _HomePageState extends State<HomePage> {
                     title: 'Sobre',
                     subtitle: 'Versão 1.2.0',
                     onTap: () {},
-                  ),
-                  _buildDrawerTile(
-                    icon: Icons.timer_rounded,
-                    title: 'Corrigir Tempos',
-                    subtitle: 'Restaurar horários dos eventos do backup',
-                    onTap: () => _runFixEventTimes(),
                   ),
                   _buildDrawerTile(
                     icon: Icons.group_add_rounded,

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../config/supabase_config.dart';
+import 'package:app_do_fut/config/supabase_config.dart';
 
 /// Detailed result of running the data migration to Supabase.
 class MigrationResult {
