@@ -64,22 +64,22 @@ docs/
 |---|---|---|
 | `GroupsRepository` | `groups_repository.dart` | `getMyGroups`, `createGroup`, `updateGroup`, `deleteGroup`. No public: um grupo único criado no primeiro uso. |
 | `SeasonsRepository` | `seasons_repository.dart` | Todos os 5 métodos, assinaturas iguais. |
-| `SessionsRepository` | `sessions_repository.dart` | Todos os 9 métodos **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). |
-| `MatchesRepository` | `matches_repository.dart` | **Só métodos com chamadores** (ver `docs/CODIGO_MORTO.md`). `saveFullMatch` e `updateFullMatch` têm 0 chamadores (INVENTARIO_SHAREDPREFS, pergunta 2) e **não entram** na interface. `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
-| `RatingsRepository` | `ratings_repository.dart` | `recordRatingsBatch` tem 0 chamadores e não entra. Os outros 3 só entram se tiverem chamadores (T0e). **Hoje nada grava `rating_history`**: as notas são calculadas em memória a partir de partidas e eventos. |
+| `SessionsRepository` | `sessions_repository.dart` | 7 métodos (`getCachedSession`, `getSessionById`, `getSessionsByGroup`, `createSession`, `updateSession`, `updateRuntimeState`, `deleteSession`) **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). Fora: `getSessionsBySeason`, `finalizeSession` (0 chamadores). |
+| `MatchesRepository` | `matches_repository.dart` | **Só estes (5):** `getMatchesBySession`, `getMatchesByGroup`, `savePendingMatch`, `updatePartialMatch`, `deleteMatch`. Fora: `saveFullMatch` e `updateFullMatch` (0 chamadores). `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
+| `RatingsRepository` | `ratings_repository.dart` | **Não terá interface:** os 4 métodos (`getPlayerHistoryBySeason`, `getFullPlayerHistory`, `getLatestRatingsBySeason`, `recordRatingsBatch`) têm 0 chamadores. **Hoje nada lê nem grava `rating_history`**: as notas são calculadas em memória a partir de partidas e eventos. |
 | `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)` e `saveCustomBadges(groupId, badges)`. Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: SharedPreferences (igual hoje). Public: tabela no SQLite. |
 | `MatchHistoryStore` (novo) | `match_screen`, ranking, `stats_calculator` | `readSession(sessionId)` e `appendToSession(sessionId, record)`. Hoje é `match_history_<sessão>` em `SharedPreferences`. Personal: igual hoje. Public: derivado das tabelas do SQLite. Quem usa é decidido na T3e. |
-| `SessionArrivalsRepository` | `session_arrivals_repository.dart` | Todos os 4 métodos. |
-| `PlayersRepository` | `players_repository.dart` | **Só estes:** `getPlayersByGroup`, `createGhostPlayer`, `updatePlayer`, `setPlayerIcon`, `removePlayerFromGroup`, `getPlayerById`, `setNameEffect`, `setMonthlyHighlight`, `setCosmetics`, `setCommunityAttributes`, `setAdvancedStat`. |
+| `SessionArrivalsRepository` | `session_arrivals_repository.dart` | `getArrivals`, `getPlayerIdsBySessions`, `replaceArrivals`. Fora: `clearArrivals` (0 chamadores). |
+| `PlayersRepository` | `players_repository.dart` | **Só estes (11):** `getPlayersByGroup`, `createGhostPlayer`, `updatePlayer`, `setPlayerIcon`, `setGoalSound`, `removePlayerFromGroup`, `getPlayerById`, `setNameEffect`, `setMonthlyHighlight`, `setCommunityAttributes`, `setAdvancedStat`. Fora: `setCosmetics` (0 chamadores). |
 
 ### 4.2 Específicas de online / multiusuário
 
 | Interface | Métodos | Por quê é separada |
 |---|---|---|
-| `PlayerAccountRepository` | `createPlayerWithUser`, `linkEmailToPlayer`, `claimGhostProfiles` (RPC), `getMyPlayers` | Dependem de usuário logado (`auth.uid`). |
-| `MembershipRepository` | `getMembers`, `getMyMembership`, `promoteToAdmin`, `demoteToMember`, `addMember`, `removeMember`, `findGroupByCode` (RPC), `requestToJoin`, `listPendingRequests`, `approveRequest` (RPC), `rejectRequest` (RPC) | Convites, pedidos de entrada e papéis só fazem sentido com vários usuários. **`isCurrentUserAdmin` sai daqui** (vai para `PermissionService`). |
-| `GoalSoundRepository` | `setGoalSound`, `uploadGoalSound`, `clearGoalSound` | Usa Storage (`goal-sounds`). Flag `hasGoalSounds`. |
-| `ActionLogsRepository` | `log`, `getRecentLogs`, `exportAndCleanOldLogs` (RPC) | Auditoria de admin. No public: implementação que não faz nada. |
+| `PlayerAccountRepository` | `claimGhostProfiles` (RPC), `getMyPlayers` | Dependem de usuário logado (`auth.uid`). Fora: `createPlayerWithUser`, `linkEmailToPlayer` (0 chamadores). |
+| `MembershipRepository` | `getMembers`, `getMyMembership`, `promoteToAdmin`, `demoteToMember`, `findGroupByCode` (RPC), `requestToJoin`, `listPendingRequests`, `approveRequest` (RPC), `rejectRequest` (RPC) | Convites, pedidos de entrada e papéis só fazem sentido com vários usuários. **`isCurrentUserAdmin` sai daqui** (vai para `PermissionService`). Fora: `addMember`, `removeMember` (0 chamadores). |
+| ~~`GoalSoundRepository`~~ | — | **Não existe.** `setGoalSound` ficou em `PlayersRepository`; `uploadGoalSound` e `clearGoalSound` têm 0 chamadores (o bucket `goal-sounds` não é usado). Flag `hasGoalSounds` continua valendo. |
+| `ActionLogsRepository` | `log` (somente) | Auditoria de admin (gravação). `getRecentLogs` e `exportAndCleanOldLogs` têm 0 chamadores. No public: implementação que não faz nada. |
 
 ### 4.3 Serviços novos (transversais)
 
@@ -129,6 +129,12 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 ### 4.4 Consulta solta a corrigir
 
 `lib/screens/match_screen.dart:410-415` consulta `sessions` direto. Vira `SessionsRepository.getRuntimeState(sessionId)` retornando `Map<String, dynamic>?` com as colunas `seconds_played, is_running, score_red, score_white, red_streak, white_streak, is_overtime, started_at`. Mesmo resultado de hoje.
+
+### 4.5 Métodos sem chamadores e telas inalcançáveis (de `docs/CODIGO_MORTO.md`)
+
+- **Métodos com 0 chamadores** (não entram em nenhuma interface e não serão implementados no SQLite; **permanecem** nas classes Supabase por enquanto, não apagar nesta fase): `ActionLogsRepository.getRecentLogs/exportAndCleanOldLogs`; `GroupMembersRepository.addMember/removeMember`; `MatchesRepository.saveFullMatch/updateFullMatch`; `PlayersRepository.createPlayerWithUser/linkEmailToPlayer/uploadGoalSound/clearGoalSound/setCosmetics`; `RatingsRepository` (os 4 métodos); `SessionArrivalsRepository.clearArrivals`; `SessionsRepository.getSessionsBySeason/finalizeSession`.
+- **Telas inalcançáveis** (nenhuma rota ou botão as abre): `expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`. Removidas na T0g (se o Enzo confirmar).
+- Se algum desses itens for planejado (ex.: tela de logs do admin, login por e-mail, gráfico de evolução usando `rating_history`), reavaliar antes de apagar o código.
 
 ## 5. Feature flags (`AppFeatures`)
 

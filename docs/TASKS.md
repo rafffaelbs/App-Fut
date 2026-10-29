@@ -125,10 +125,31 @@ Apenas fatos, com arquivo e número de linha. Não proponha mudanças.
 
 ---
 
+### T0g · Remover telas inalcançáveis (parte da Fase 0) — AG
+Branch: `chore/remove-unreachable-screens` · Revisão: não · **Só rodar se o Enzo confirmar** (pergunta em aberto 3) · Pode rodar antes ou depois da T1; precisa estar pronta antes da T3e
+
+```
+[cabeçalho]
+Conforme docs/CODIGO_MORTO.md, estas telas não são abertas por nenhuma rota ou botão:
+lib/screens/expanded_ranking_screen.dart, group_ranking_screen.dart, tournament_screen.dart
+e blank_screen.dart (esta só é aberta por tournament_screen).
+1) Confirme com grep em lib/ e test/ que continuam sem uso. Se houver uso, NÃO apague e
+   registre em docs/DUVIDAS.md.
+2) Apague os 4 arquivos, o import não utilizado em lib/main.dart (~linha 5) e quaisquer
+   imports que ficarem sem uso.
+3) Widgets, utils ou constantes que ficarem sem NENHUM uso depois disso: NÃO apague; liste-os
+   em docs/DUVIDAS.md.
+Aceite: flutter analyze sem erros novos e flutter test ok;
+`grep -rnw "ExpandedRankingScreen\|GroupRankingScreen\|TournamentScreen\|BlankScreen" lib test`
+retorna nada; checklist manual itens 1 a 4.
+```
+
+---
+
 ## FASE 1 — Interfaces (o app personal continua idêntico)
 
 ### T1 · Criar as interfaces de repositório — AG, revisão CLAUDE
-Branch: `refactor/domain-interfaces` · Depende de T0e (precisa do `docs/CODIGO_MORTO.md`)
+Branch: `refactor/domain-interfaces` · T0e concluída (o `docs/CODIGO_MORTO.md` já existe)
 
 ```
 [cabeçalho]
@@ -136,8 +157,8 @@ Crie classes abstratas em lib/domain/repositories/ (um arquivo por interface, no
 snake_case, ex.: players_repository.dart) seguindo EXATAMENTE a seção 4 do
 docs/ARCHITECTURE.md:
 GroupsRepository, SeasonsRepository, SessionsRepository, MatchesRepository,
-RatingsRepository, SessionArrivalsRepository, PlayersRepository,
-PlayerAccountRepository, MembershipRepository, GoalSoundRepository,
+SessionArrivalsRepository, PlayersRepository,
+PlayerAccountRepository, MembershipRepository,
 ActionLogsRepository.
 Copie as assinaturas públicas dos repositórios atuais em lib/repositories/
 (mesmos nomes, parâmetros, valores padrão e tipos de retorno). Distribua os métodos
@@ -147,9 +168,27 @@ MembershipRepository. Em SessionsRepository adicione:
 Crie também lib/domain/services/auth_service.dart e permission_service.dart com as
 assinaturas da seção 4.3 (e a classe AppAuthException(String message)).
 Regras novas (vieram dos inventários):
-- Leia docs/CODIGO_MORTO.md (gerado na T0e). Método marcado "0 CHAMADORES" NÃO entra na
-  interface (na prática: saveFullMatch, updateFullMatch e recordRatingsBatch). Não apague
+- Leia docs/CODIGO_MORTO.md (já existe na main). Método marcado "0 CHAMADORES" NÃO entra em
+  nenhuma interface. Não apague
   esses métodos das classes atuais; só não os liste nas interfaces e anote em docs/DUVIDAS.md.
+  LISTA EXATA do que ENTRA em cada interface (nada a mais, nada a menos):
+    GroupsRepository: getMyGroups, createGroup, updateGroup, deleteGroup
+    SeasonsRepository: getSeasons, getCurrentSeason, createSeason, updateSeason, deleteSeason
+    SessionsRepository: getCachedSession, getSessionById, getSessionsByGroup, createSession,
+      updateSession, updateRuntimeState, deleteSession + getRuntimeState (novo)
+    MatchesRepository: getMatchesBySession, getMatchesByGroup, savePendingMatch,
+      updatePartialMatch, deleteMatch
+    SessionArrivalsRepository: getArrivals, getPlayerIdsBySessions, replaceArrivals
+    PlayersRepository: getPlayersByGroup, createGhostPlayer, updatePlayer, setPlayerIcon,
+      setGoalSound, removePlayerFromGroup, getPlayerById, setNameEffect,
+      setMonthlyHighlight, setCommunityAttributes, setAdvancedStat
+    PlayerAccountRepository: claimGhostProfiles, getMyPlayers
+    MembershipRepository: getMembers, getMyMembership, promoteToAdmin, demoteToMember,
+      findGroupByCode, requestToJoin, listPendingRequests, approveRequest, rejectRequest
+    ActionLogsRepository: log
+  NÃO crie GoalSoundRepository nem RatingsRepository (todos os métodos de Ratings têm 0
+  chamadores; setGoalSound fica em PlayersRepository). isCurrentUserAdmin NÃO entra em
+  nenhuma interface repositório (vai para PermissionService).
 - Crie CustomBadgesRepository em lib/domain/repositories/custom_badges_repository.dart:
     Future<List<Map<String, dynamic>>> getCustomBadges(String groupId);
     Future<void> saveCustomBadges(String groupId, List<Map<String, dynamic>> badges);
@@ -206,7 +245,7 @@ Branch: `refactor/supabase-data-layer` · Depende de T1 e T2
    (PlayersRepository -> SupabasePlayersRepository, etc.).
 2) Cada classe passa a "implements" a(s) interface(s) de lib/domain/repositories/
    conforme o mapa da seção 4. SupabasePlayersRepository implementa
-   PlayersRepository, PlayerAccountRepository e GoalSoundRepository;
+   PlayersRepository e PlayerAccountRepository;
    SupabaseGroupMembersRepository implementa MembershipRepository.
 3) Implemente SessionsRepository.getRuntimeState com a consulta que hoje está em
    match_screen.dart linhas ~410-415 (mesmas colunas, mesmo comportamento).
@@ -224,8 +263,8 @@ Branch: `refactor/app-services` · Depende de T3a
 ```
 [cabeçalho]
 1) Crie lib/app/app_services.dart: uma classe que guarda as INTERFACES
-   (groups, members, seasons, players, playerAccounts, goalSounds, sessions, matches,
-   ratings, sessionArrivals, actionLogs, auth, permissions) e um acesso estático
+   (groups, members, seasons, players, playerAccounts, sessions, matches,
+   sessionArrivals, actionLogs, auth, permissions) e um acesso estático
    AppServices.instance (definido uma vez na inicialização). Deixe campos previstos mas
    ainda nulos/vazios para outbox, siteSync e diagnostics (serão preenchidos na T3c e T3d).
 2) Crie lib/bootstrap_personal.dart que inicializa o Supabase (o que hoje está em
@@ -303,9 +342,9 @@ Aceite: analyze/test ok; checklist manual completo; teste do modo avião (item 9
 Revisão CLAUDE: `supabase_match_outbox.dart` (o diff completo dele; é crítico para não perder partidas).
 
 ### T3e · Histórico de partidas e insígnias via interfaces — AG, revisão CLAUDE
-Branch: `refactor/local-only-data` · Depende de T3b e do resultado da T0e · **Prompt detalhado: eu escrevo depois da T0e**, porque depende do que for código morto
+Branch: `refactor/local-only-data` · Depende de T3b e da T0g · **Prompt detalhado: eu escrevo depois da T1**
 
-Objetivo: telas e cálculos deixam de ler `match_history_*` e `custom_badges_*` direto do `SharedPreferences` e passam a usar `MatchHistoryStore` e `CustomBadgesRepository` (implementação do personal = SharedPreferences, **comportamento idêntico**). Se a T0e mostrar que `GroupRankingScreen` é inalcançável, ela e as chaves legadas (`sessions_*`, `seasons_*`, `app_groups`, `players_grupo_`) são removidas aqui em vez de adaptadas. Exige os testes da T0 cobrindo `getAllGroupMatches`.
+Objetivo: telas e cálculos deixam de ler `match_history_*` e `custom_badges_*` direto do `SharedPreferences` e passam a usar `MatchHistoryStore` e `CustomBadgesRepository` (implementação do personal = SharedPreferences, **comportamento idêntico**). A T0e confirmou que `GroupRankingScreen` é inalcançável (removida na T0g). Ainda leem `match_history_*`: `RankingScreen` (fallback), `MatchScreen` (fallback e gravação), `PlayerDetail` e `getAllGroupMatches` (usado por `PlayerComparisonScreen`). Leem `custom_badges_*`: `ManageBadgesScreen` e `PlayerDetail`. As chaves legadas (`sessions_*`, `seasons_*`, `app_groups`, `players_grupo_`) ficam sem leitores depois da T0g e podem ser limpas aqui. Antes de refatorar, escreva o teste de caracterização de `getAllGroupMatches` usando repositórios falsos (via `AppServices`): hoje ele não tem teste (DUVIDAS.md item 3).
 
 ### T4 · AppFeatures e flavor personal — AG
 Branch: `feat/app-features` · Depende de T3c, T3d e T3e
@@ -372,3 +411,4 @@ Decisão tomada: **link secreto, sem login**. Segurança por token + funções n
 
 1. ~~Site antigo em React~~ **Resolvido:** será substituído pelo site novo. Até lá o envio do pacote do site continua funcionando como hoje (T3c o mantém) e é removido na T7b.
 2. ~~Resultado do inventário (T0d)~~ **Recebido** (ver seção 10 do ARCHITECTURE). Pergunta que ficou: as insígnias personalizadas (`custom_badges_*`, que existem só no aparelho) são criadas só por você, ou outros admins também criam?
+3. Posso apagar as 4 telas inalcançáveis (`expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`; T0g)? E o `RatingsRepository` inteiro está sem uso: se o gráfico de evolução do redesign for usar `rating_history`, avise; senão ele fica fora do SQLite e pode ser apagado depois.
