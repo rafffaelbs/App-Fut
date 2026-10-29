@@ -29,6 +29,8 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
 7. **Não adicionar pacotes** sem estar listado na tarefa. Pacotes previstos mais à frente: `drift`, `drift_flutter` (ou `sqlite3_flutter_libs`), `path`.
 8. Exceções e mensagens de erro existentes (ex.: "sem permissão") devem ser **preservadas com o mesmo texto**.
 9. Dúvida ou achado fora do escopo → `docs/DUVIDAS.md` (arquivo, linha, o que viu). Não resolver por conta própria.
+10. **Não renomear nem alterar chaves de `SharedPreferences`** (lista na seção 9). Uma chave alterada faz o app perder partidas pendentes ou o estado da partida em andamento de quem já tem o app instalado.
+11. **Não mexer na lógica de proteção contra queda de internet** (fila de envio, cache, estado local da partida; seção 9). Só é permitido movê-la de pasta/abstraí-la como descrito nas tarefas, preservando o comportamento.
 
 ## 3. Estrutura alvo de pastas
 
@@ -36,7 +38,7 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
 lib/
   domain/
     repositories/      # interfaces (classes abstratas) — Fase 1 / T1
-    services/          # AuthService, PermissionService, BackupService
+    services/          # AuthService, PermissionService, MatchOutbox, SiteSyncService, DiagnosticsService
   data/
     supabase/          # implementações Supabase* (e supabase_config.dart)
     local/             # drift/SQLite (Fase 3)
@@ -99,7 +101,28 @@ abstract class PermissionService {
 - Os repositórios Supabase recebem `PermissionService` no construtor e deixam de chamar `_membersRepo.isCurrentUserAdmin`.
 - No app public: `AuthService` sempre logado com id fixo local; `PermissionService.isAdmin` sempre `true`.
 
-`BackupService` (`sync_service`, `cache_sync_manager`): só personal; ver T3c.
+### 4.3b Serviços da camada de rede (descobertos no `INVENTARIO_OFFLINE.md`)
+
+```dart
+abstract class MatchOutbox {            // fila de envio de partidas (hoje: PendingMatchQueue)
+  ValueListenable<int> get pending;
+  ValueListenable<String?> get lastError;
+  Future<void> enqueue(Map<String, dynamic> job);
+  Future<void> flush();
+}
+abstract class SiteSyncService {        // hoje: sync_service (o que sobra após a T0c)
+  Future<String> getOrCreateSyncCode();
+  Future<void> exportDataToSupabase(String syncCode);
+}
+abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de debug do admin)
+  // mesmos métodos públicos de CacheSyncManager + a classe CacheSyncStatus
+}
+```
+
+- `MatchOutbox` — personal: `SupabaseMatchOutbox` (a atual `PendingMatchQueue`, comportamento idêntico). Public: `LocalMatchOutbox`, que grava direto no SQLite; `pending` fica sempre 0 e `flush` não faz nada.
+- `SiteSyncService` e `DiagnosticsService` — só personal; no public ficam `null` em `AppServices`.
+- `CacheStore` (cache de leitura usado só pelos repositórios Supabase) vai junto com eles para `lib/data/supabase/`.
+- `GroupBootstrap` (snapshot local do elenco) fica em `lib/services/`; só depende de repositórios via `AppServices`.
 
 ### 4.4 Consulta solta a corrigir
 
@@ -114,7 +137,9 @@ abstract class PermissionService {
 | `hasCosmetics` (efeitos de nome, Bola de Ouro, Craque do Mês) | true | false (ou simplificado) | true |
 | `hasGoalSounds` | true | false | false |
 | `hasAuditLog` | true | false | false |
-| `hasCloudBackup` (sync_data) | true | false | false |
+| `hasSiteSync` (envio do "pacote do site" para `sync_data` a cada ~90 s) | true | false | false |
+| `hasCloudDraftSync` (rascunho da partida no Supabase: `replaceArrivals`/`updateRuntimeState`, restauração remota no `_loadMatchState`) | true | false | false |
+| `hasAdminDebug` (painel de debug, teste de conexão) | true | false | false |
 | `hasDbExportImport` | false | true | false |
 | `isReadOnly` | false | false | true |
 
@@ -125,7 +150,9 @@ Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e**
 - Schema drift espelha os nomes do Supabase (inglês). IDs `TEXT` (uuid). Sem tipos específicos de Postgres. `PRAGMA foreign_keys = ON`. `schemaVersion` do drift = `user_version`.
 - **Devem rodar em uma transação SQLite:** `createGroup`, `saveFullMatch`, `updateFullMatch`, `updatePartialMatch`, `deleteMatch`, `savePendingMatch`, `createGhostPlayer`, `replaceArrivals`.
 - No Supabase essas operações hoje são sequenciais sem transação (risco de registros órfãos se falhar no meio). **Fora do escopo agora**; candidato futuro: mover para função Postgres (RPC).
-- `_syncToCloud` (`match_screen.dart:281-329`) grava `session_arrivals` e `sessions` a cada mudança; no local fica barato, mas manter a mesma chamada.
+- O rascunho em nuvem da partida (`_syncToCloud`/`_scheduleCloudSync`, `match_screen.dart` ~268-329) grava `session_arrivals` e `sessions` a cada mudança. No public fica desligado pela flag `hasCloudDraftSync` (o estado em andamento já está em `SharedPreferences`).
+- No public, finalizar partida passa por `LocalMatchOutbox` (grava direto no SQLite, na mesma transação do resto). A lista de tabelas é a mesma de `savePendingMatch`: `matches`, `match_lineups`, `match_events`. **Pendência:** confirmar em `INVENTARIO_SHAREDPREFS.md` onde `rating_history` é gravado no fluxo de finalizar.
+- `SharedPreferences` guarda hoje dados que podem ser de domínio (ex.: `match_history_<id>`, `players_<groupId>`). No public, o `.db` exportado precisa conter tudo que importa; o que for "só local em SharedPreferences" precisa ser migrado ou descartado de forma consciente. Decidir após `INVENTARIO_SHAREDPREFS.md`.
 - Export: `VACUUM INTO`. Import: validar (`integrity_check`, `user_version`), backup do banco atual, trocar o arquivo, reabrir.
 
 ## 7. Web somente leitura (Fase 2)
@@ -148,3 +175,17 @@ Modelo de acesso (login por e-mail ou link público) **ainda em decisão**; a se
 6. Abrir um jogador: carta e comparação.
 7. Com usuário **não admin**: engrenagem não aparece em Peladas/Elenco/Estatísticas.
 8. Com admin: gerenciar membros e temporadas abre normalmente.
+9. **Modo avião:** finalizar uma partida, ver o selo de pendente e o banner vermelho; desligar o modo avião, tocar "Reenviar agora" e conferir que a partida aparece no Supabase. (Obrigatório depois de qualquer tarefa que toque fila, cache ou `match_screen`.)
+
+## 9. Proteção contra queda de internet — como funciona hoje (NÃO MEXER)
+
+Fonte: `docs/INVENTARIO_OFFLINE.md`. São 4 camadas independentes; **nenhuma é o `sync_service`**:
+
+1. **Estado da partida em andamento** — `match_screen._saveMatchState()` grava a cada ação no `SharedPreferences` (placar, eventos, times, cronômetro, goleiros...). Se o app fecha, `_loadMatchState()` restaura e recalcula o cronômetro pela hora de início.
+2. **Fila de envio (outbox)** — `PendingMatchQueue`: ao finalizar, a partida é gravada em `pending_matches_v1` e enviada em segundo plano, com reenvio automático (5s, 10s, 20s, 40s, 60s), ao abrir a tela, ao iniciar partida, ao voltar do background e pelo botão "Reenviar agora". Telas de histórico/ranking mesclam as pendentes via `_pendingMatches()`.
+3. **Cache de leitura** — `CacheStore` (chaves `cache:*`) usado pelos repositórios de partidas, sessões e jogadores como fallback quando a rede falha.
+4. **Snapshot do elenco** — `GroupBootstrap` (`players_<groupId>`, `ratings_snapshot_at_<groupId>`) permite sorteio/draft sem rede.
+
+Chaves de `SharedPreferences` que NÃO podem mudar: `pending_matches_v1`, `cache:*`, `my_sync_code`, `cache_has_pending_cloud_sync`, `cache_last_cloud_sync_at`, `cache_last_cloud_fetch_at`, `present_players_*`, `team_red_*`, `team_white_*`, `score_red_*`, `score_white_*`, `match_events_*`, `is_overtime_*`, `seconds_played_*`, `is_running_*`, `start_timestamp_*`, `red_streak_*`, `white_streak_*`, `active_gk_*`, `first_gk_*`, `match_history_*`, `players_*`, `ratings_snapshot_at_*`.
+
+O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envia o "pacote do site" (JSON do `SiteDataGenerator`) para `sync_data` a cada ~90 s e ao fechar a tela de partida (alimenta o site antigo); `cache_sync_manager` é diagnóstico do painel de debug do admin (ping e dump do storage). Nenhum dos dois dispara reenvio da fila.
