@@ -1,11 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:file_picker/file_picker.dart';
 import '../utils/player_identity.dart';
 import '../utils/site_data_generator.dart';
 import '../config/supabase_config.dart';
@@ -41,52 +37,6 @@ class SyncService {
     await _cacheSyncManager.recordCloudSyncSuccess();
   }
 
-  /// Restaura os dados do Supabase para o armazenamento local, substituindo tudo.
-  Future<void> importDataFromSupabase(String syncCode) async {
-    final response = await _supabase
-        .from('sync_data')
-        .select()
-        .eq('sync_code', syncCode)
-        .maybeSingle();
-
-    if (response == null) {
-      throw Exception("Código de sincronização não encontrado na nuvem.");
-    }
-
-    final docData = response as Map<String, dynamic>;
-    if (!docData.containsKey('data')) {
-      throw Exception("Dados mal formatados ou ausentes neste código.");
-    }
-
-    final Map<String, dynamic> data = Map<String, dynamic>.from(docData['data']);
-    final prefs = await SharedPreferences.getInstance();
-
-    // We could optionally clear first. The user approved the restore overwriting existing data.
-    await prefs.clear();
-
-    for (var entry in data.entries) {
-      final key = entry.key;
-      final value = entry.value;
-
-      if (value is String) {
-        await prefs.setString(key, value);
-      } else if (value is int) {
-        await prefs.setInt(key, value);
-      } else if (value is double) {
-        await prefs.setDouble(key, value);
-      } else if (value is bool) {
-        await prefs.setBool(key, value);
-      } else if (value is List) {
-        // Se for uma lista armazenada no Firestore
-        List<String> strList = value.map((e) => e.toString()).toList();
-        await prefs.setStringList(key, strList);
-      }
-    }
-
-    await _normalizeUuidData(prefs);
-    await _pushNormalizedDataToSupabase(syncCode, prefs);
-    await _cacheSyncManager.recordCloudFetchSuccess();
-  }
 
   /// Gera um novo sync code
   String? _cachedCode;
@@ -124,106 +74,6 @@ class SyncService {
     await prefs.setString('my_sync_code', newCode);
     _cachedCode = newCode;
     return newCode;
-  }
-
-  /// BACKUP LOCAL: Exportar SharedPreferences para um arquivo JSON local e compartilhar
-  Future<void> exportToFile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys();
-    
-    Map<String, dynamic> data = {};
-    for (String key in keys) {
-      data[key] = prefs.get(key);
-    }
-    
-    final siteData = await SiteDataGenerator.generate(prefs);
-    data['site_data'] = siteData;
-    
-    // Converte para String JSON
-    final jsonString = jsonEncode(data);
-    
-    // Gets the device's temporary directory
-    final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/pelada_backup_${DateTime.now().millisecondsSinceEpoch}.json');
-    
-    // Escreve o JSON no arquivo
-    await file.writeAsString(jsonString);
-    
-    // Abre a tela de compartilhamento nativa (salvar no Google Drive, Whatsapp, etc)
-    await Share.shareXFiles([XFile(file.path)], text: 'Meu Backup do Pelada App');
-  }
-
-  /// RESTAURAR LOCAL: Importar de um arquivo JSON selecionado usando file_picker
-  Future<bool> importFromFile() async {
-    try {
-      // Abre o explorador de arquivos
-     final result = await FilePicker.pickFiles(
-       type: FileType.any,
-      );
-
-      if (result != null && result.files.single.path != null) {
-        File file = File(result.files.single.path!);
-        
-        // Reads the content
-        String jsonString = await file.readAsString();
-        
-        // Decodifica JSON
-        final Map<String, dynamic> data = jsonDecode(jsonString);
-        
-        final prefs = await SharedPreferences.getInstance();
-        
-        // Sobrescreve dados atuais (Limpando tudo primeiro para evitar lixo)
-        await prefs.clear();
-        
-        for (var entry in data.entries) {
-          final key = entry.key;
-          final value = entry.value;
-
-          if (key == 'site_data') continue; // Ignora o dado computado do site na restauração local
-
-          if (value is String) {
-            await prefs.setString(key, value);
-          } else if (value is int) {
-            await prefs.setInt(key, value);
-          } else if (value is double) {
-            await prefs.setDouble(key, value);
-          } else if (value is bool) {
-            await prefs.setBool(key, value);
-          } else if (value is List) {
-            List<String> strList = value.map((e) => e.toString()).toList();
-            await prefs.setStringList(key, strList);
-          }
-        }
-
-        await _normalizeUuidData(prefs);
-        
-        return true; // Sucesso
-      }
-      return false; // Usuário cancelou
-    } catch (e) {
-      throw Exception("Erro ao importar arquivo: $e");
-    }
-  }
-
-Future<void> _pushNormalizedDataToSupabase(
-    String syncCode,
-    SharedPreferences prefs,
-  ) async {
-    final keys = prefs.getKeys();
-    final Map<String, dynamic> data = {};
-    for (final key in keys) {
-      data[key] = prefs.get(key);
-    }
-    
-    // 1. Generate the site_data again with the normalized UUIDs
-    final siteData = await SiteDataGenerator.generate(prefs);
-
-    await _supabase.from('sync_data').upsert({
-      'sync_code': syncCode,
-      'data': data,
-      'site_data': siteData,
-      'last_updated': DateTime.now().toIso8601String(),
-    });
   }
 
   Future<void> _normalizeUuidData(SharedPreferences prefs) async {
