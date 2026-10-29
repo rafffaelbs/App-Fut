@@ -1,4 +1,4 @@
-# TASKS.md — Plano de tarefas
+# TASKS.md — Plano de tarefas (v2, após INVENTARIO_OFFLINE)
 
 Legenda de quem faz: **AG** = Antigravity (executa) · **CLAUDE** = Claude (desenha ou revisa).
 Fluxo de cada tarefa: criar a branch → fazer → `flutter analyze` + `flutter test` → commit → (se houver revisão) mandar para o Claude → merge na `main` → teste manual (checklist da seção 8 do `ARCHITECTURE.md`) quando indicado.
@@ -6,18 +6,20 @@ Fluxo de cada tarefa: criar a branch → fazer → `flutter analyze` + `flutter 
 ## Cabeçalho a colar no INÍCIO de todo prompt
 
 ```
-Contexto: leia docs/ARCHITECTURE.md e docs/INVENTARIO_SUPABASE.md antes de começar.
+Contexto: leia docs/ARCHITECTURE.md e docs/INVENTARIO_SUPABASE.md (e docs/INVENTARIO_OFFLINE.md
+quando a tarefa tocar fila, cache ou match_screen) antes de começar.
 Regras: não mude comportamento visível do app; não altere fórmulas dos calculators,
-nomes de tabelas/colunas do Supabase, RLS ou RPCs; não adicione pacotes; preserve os
-textos de erro existentes. Se encontrar algo que o documento não cobre, NÃO decida:
-registre em docs/DUVIDAS.md (arquivo, linha, o que viu) e continue com o resto.
+nomes de tabelas/colunas do Supabase, RLS ou RPCs; não altere chaves de SharedPreferences;
+não adicione pacotes; preserve os textos de erro existentes. Se encontrar algo que o
+documento não cobre, NÃO decida: registre em docs/DUVIDAS.md (arquivo, linha, o que viu)
+e continue com o resto.
 Ao terminar: rode `flutter analyze` e `flutter test`, faça commits pequenos e
 me diga em 5 linhas o que mudou e o que ficou pendente.
 ```
 
 ---
 
-## FASE 0 — Rede de segurança
+## FASE 0 — Rede de segurança e limpeza (todas podem rodar em paralelo)
 
 ### T0 · Testes de caracterização dos cálculos — AG
 Branch: `test/characterization-calculators` · Revisão: não precisa
@@ -36,8 +38,8 @@ Se alguma função não for testável sem Flutter binding ou Supabase, anote no 
 Aceite: flutter test passa; flutter analyze sem erros novos; lib/ sem alterações (git diff main --stat).
 ```
 
-### T0b · Separar scripts legados — AG
-Branch: `chore/move-legacy-scripts` · Revisão: não · **Só execute depois que o Enzo confirmar que não usa mais**
+### T0b · Mover scripts de migração antigos — AG
+Branch: `chore/move-legacy-scripts` · Revisão: não · **Confirmado pelo Enzo: não são mais usados**
 
 ```
 [cabeçalho]
@@ -48,6 +50,53 @@ lib/ (telas, botões de debug, main). Se algo no app depender deles, liste em
 docs/DUVIDAS.md e NÃO apague a funcionalidade: apenas deixe um comentário TODO.
 Aceite: flutter analyze sem erros; app compila; grep por "data_migration_service" e
 "fix_event_times_service" em lib/ retorna nada.
+```
+
+### T0c · Remover código morto do sync — AG
+Branch: `chore/remove-dead-sync-code` · Revisão: não
+
+Motivo (do `INVENTARIO_OFFLINE.md`): a `SyncScreen` não é alcançável por nenhuma rota; o campo `_syncService` em `main.dart` nunca é usado; `importDataFromSupabase` (que apaga todo o `SharedPreferences` antes de restaurar) só é chamado pela tela órfã; `exportToFile`/`importFromFile` não têm chamadores. Remover isso também elimina o problema do `file_picker` v11 e os usos de `dart:io` desse arquivo.
+
+```
+[cabeçalho]
+Remova código morto confirmado em docs/INVENTARIO_OFFLINE.md. Antes de apagar cada item,
+confirme com grep em lib/ que não há outro uso. Se houver, NÃO apague e registre em
+docs/DUVIDAS.md.
+1) lib/screens/sync_screen.dart (sem rota que leve a ela) e seus imports.
+2) lib/main.dart (~linha 154): o campo `_syncService` de _HomePageState, que nunca é usado
+   (e o import, se ficar sem uso).
+3) lib/services/sync_service.dart: remova importDataFromSupabase, exportToFile e
+   importFromFile, e os imports que ficarem sem uso (dart:io, file_picker, share_plus,
+   path_provider, se só esses métodos os usavam).
+MANTENHA: exportDataToSupabase e getOrCreateSyncCode (usados por
+match_screen._triggerBackgroundSync e admin_debug_screen) e as chamadas a
+CacheSyncManager.recordCloudSyncSuccess.
+MANTENHA a dependência file_picker no pubspec.yaml (será usada de novo mais adiante).
+Aceite: analyze/test ok; checklist manual itens 1 a 4; 
+`grep -rn "SyncScreen\|importDataFromSupabase\|exportToFile\|importFromFile" lib` retorna nada.
+```
+
+### T0d · Inventário de SharedPreferences (somente leitura) — AG
+Branch: `docs/inventario-sharedprefs` · Revisão: **CLAUDE** (me mande o `.md`)
+
+```
+Tarefa somente de leitura. NÃO altere arquivos em lib/.
+Gere docs/INVENTARIO_SHAREDPREFS.md. Liste TODAS as chaves usadas em SharedPreferences
+(getString/setString/getInt/setInt/getBool/setBool/remove/containsKey e prefixos como
+cache:, players_$groupId, match_history_$id, present_players_$id, pending_matches_v1,
+ratings_snapshot_at_$groupId...). Para cada chave ou prefixo informe: arquivo e linha de
+quem ESCREVE, quem LÊ, o que contém e a categoria:
+ (a) cache de algo que também existe no Supabase
+ (b) estado temporário de partida em andamento
+ (c) fila de envio
+ (d) preferência de configuração
+ (e) dado que SÓ existe localmente (não está no Supabase)
+Responda também:
+1. Quais telas leem match_history_* (histórico local) em vez de repositórios?
+2. Onde rating_history é gravado no fluxo de finalizar partida (savePendingMatch não
+   grava rating_history)? Quem chama recordRatingsBatch, saveFullMatch e updateFullMatch, e quando?
+3. Existe algum dado exibido nas telas que NÃO venha de repositório (só de SharedPreferences)?
+Apenas fatos, com arquivo e número de linha. Não proponha mudanças.
 ```
 
 ---
@@ -124,7 +173,10 @@ Branch: `refactor/supabase-data-layer` · Depende de T1 e T2
 3) Implemente SessionsRepository.getRuntimeState com a consulta que hoje está em
    match_screen.dart linhas ~410-415 (mesmas colunas, mesmo comportamento).
 4) Mova lib/config/supabase_config.dart para lib/data/supabase/supabase_config.dart.
-5) Atualize os imports. Não mude a lógica interna dos métodos.
+5) Mova lib/services/cache_store.dart para lib/data/supabase/cache_store.dart (só os
+   repositórios o usam). Mantenha o prefixo de chaves "cache:".
+6) Atualize os imports. Não mude a lógica interna dos métodos (inclusive o uso de
+   CacheStore como fallback e de PendingMatchQueue.readAll em _pendingMatches).
 Aceite: flutter analyze ok; flutter test ok; app compila.
 ```
 
@@ -136,86 +188,144 @@ Branch: `refactor/app-services` · Depende de T3a
 1) Crie lib/app/app_services.dart: uma classe que guarda as INTERFACES
    (groups, members, seasons, players, playerAccounts, goalSounds, sessions, matches,
    ratings, sessionArrivals, actionLogs, auth, permissions) e um acesso estático
-   AppServices.instance (definido uma vez na inicialização).
+   AppServices.instance (definido uma vez na inicialização). Deixe campos previstos mas
+   ainda nulos/vazios para outbox, siteSync e diagnostics (serão preenchidos na T3c e T3d).
 2) Crie lib/bootstrap_personal.dart que inicializa o Supabase (o que hoje está em
    SupabaseConfig/ main) e monta o AppServices com as implementações Supabase*.
 3) Crie lib/main_personal.dart chamando o bootstrap e rodando o app. lib/main.dart
    passa a apenas chamar main_personal.
 4) Substitua em TODO o código fora de lib/data/supabase/ os usos de
    SupabaseService.instance.* por AppServices.instance.* (tipados pelas interfaces).
+   Isso inclui lib/services/pending_match_queue.dart (que chama
+   SupabaseService.instance.matches).
 5) Apague lib/repositories/supabase_service.dart e a pasta lib/repositories/ se vazia.
 Aceite: flutter analyze ok; flutter test ok; a verificação de isolamento do Supabase
-(seção 2, regra 2 do ARCHITECTURE.md) imprime apenas services legados
-(sync_service, cache_sync_manager e, se a T0b ainda não foi feita, data_migration_service
-e fix_event_times_service), que serão tratados na T3c/T0b; checklist manual completo.
+(seção 2, regra 2 do ARCHITECTURE.md) imprime apenas os serviços que a T3c e a T3d vão tratar
+(sync_service, cache_sync_manager e, se a T0b ainda não foi feita, data_migration_service e
+fix_event_times_service); checklist manual completo.
 ```
 
-### T3c · Tirar sync_service e cache_sync_manager do caminho — AG
-Branch: `refactor/backup-service` · Depende de T3b · **Responder antes**: esses dois ainda são usados?
+### T3c · SiteSyncService e DiagnosticsService — AG
+Branch: `refactor/site-sync-diagnostics` · Depende de T3b · Pode rodar em paralelo com a T3d
+
+Contexto: `sync_service` e `cache_sync_manager` **não** são a proteção contra queda de internet. Servem para (a) enviar o "pacote do site" para `sync_data` em segundo plano e (b) o painel de debug do admin.
 
 ```
 [cabeçalho]
-lib/services/sync_service.dart e lib/services/cache_sync_manager.dart usam a tabela
-sync_data do Supabase.
-1) Crie lib/domain/services/backup_service.dart (interface mínima com os métodos
-   públicos que as telas usam hoje de SyncService e CacheSyncManager).
-2) Mova as implementações para lib/data/supabase/ (supabase_backup_service.dart etc.)
-   implementando essa interface; registre no AppServices.
-3) As telas passam a usar AppServices.instance.backup (pode ser nulo quando
-   AppFeatures.hasCloudBackup for false; trate o nulo escondendo o recurso).
-Aceite: a verificação de isolamento (regra 2) imprime NADA; flutter analyze ok;
-checklist manual completo.
+1) Crie lib/domain/services/site_sync_service.dart com a interface
+   SiteSyncService { Future<String> getOrCreateSyncCode();
+                     Future<void> exportDataToSupabase(String syncCode); }
+   Mova o que restou de lib/services/sync_service.dart para
+   lib/data/supabase/supabase_site_sync_service.dart (class SupabaseSiteSyncService
+   implements SiteSyncService), levando junto o SiteDataGenerator se ele só serve a isso.
+2) Crie lib/domain/services/diagnostics_service.dart com a interface DiagnosticsService,
+   expondo os métodos públicos de CacheSyncManager (markDirty, recordCloudSyncSuccess,
+   recordCloudFetchSuccess, testSupabaseConnection, getStatus, getDebugStorageDump), e
+   mova a classe CacheSyncStatus para esse arquivo. Mova a implementação para
+   lib/data/supabase/supabase_diagnostics_service.dart. SupabaseSiteSyncService usa
+   DiagnosticsService nas chamadas record*.
+3) Registre ambos no AppServices como siteSync e diagnostics (nuláveis).
+4) match_screen (_triggerBackgroundSync e _scheduleSiteSync) e admin_debug_screen passam a
+   usar AppServices.instance.siteSync / diagnostics. Nulo = recurso desligado (não faz nada
+   ou esconde o item).
+5) NÃO altere chaves de SharedPreferences: my_sync_code, cache_has_pending_cloud_sync,
+   cache_last_cloud_sync_at, cache_last_cloud_fetch_at.
+Aceite: analyze/test ok; a verificação de isolamento não lista mais sync_service nem
+cache_sync_manager; checklist manual completo, incluindo abrir o painel de debug do admin
+e tocar "TESTAR CONEXÃO AGORA".
 ```
 
+### T3d · MatchOutbox (a fila de envio) — AG, revisão CLAUDE
+Branch: `refactor/match-outbox` · Depende de T3b · **Teste extra do Enzo obrigatório (modo avião)**
+
+```
+[cabeçalho]
+Objetivo: abstrair a fila de envio de partidas (PendingMatchQueue), que protege contra
+queda de internet. O COMPORTAMENTO deve ficar idêntico.
+1) Crie lib/domain/services/match_outbox.dart:
+     abstract class MatchOutbox {
+       ValueListenable<int> get pending;
+       ValueListenable<String?> get lastError;
+       Future<void> enqueue(Map<String, dynamic> job);
+       Future<void> flush();
+     }
+2) Mova PendingMatchQueue para lib/data/supabase/supabase_match_outbox.dart
+   (class SupabaseMatchOutbox implements MatchOutbox). PRESERVE: chave
+   'pending_matches_v1', formato do job, backoff 5/10/20/40/60s, timeout de 25s,
+   reenvio ao voltar do background e demais gatilhos. O método estático readAll continua
+   existindo e é usado por SupabaseMatchesRepository (mesma camada).
+3) Registre no AppServices como outbox. Em match_screen (linhas ~129, 605, 1705, 3418, 3660,
+   3676, 3678, 3690), troque PendingMatchQueue.instance por AppServices.instance.outbox.
+4) Evite a dependência circular: SupabaseMatchOutbox recebe por construtor a implementação
+   de savePendingMatch (SupabaseMatchesRepository), em vez de buscar em um singleton.
+5) Registre em docs/DUVIDAS.md qualquer outro ponto que enfileire/reenvie partidas.
+Aceite: analyze/test ok; checklist manual completo; teste do modo avião (item 9 do checklist).
+```
+
+Revisão CLAUDE: `supabase_match_outbox.dart` (o diff completo dele; é crítico para não perder partidas).
+
 ### T4 · AppFeatures e flavor personal — AG
-Branch: `feat/app-features` · Depende de T3c
+Branch: `feat/app-features` · Depende de T3c e T3d
 
 ```
 [cabeçalho]
 1) Crie lib/app/app_features.dart com as flags da seção 5 do ARCHITECTURE.md
    (hasAuth, hasMembershipManagement, hasCosmetics, hasGoalSounds, hasAuditLog,
-   hasCloudBackup, hasDbExportImport, isReadOnly) e a configuração "personal"
-   (tudo como na coluna personal).
+   hasSiteSync, hasCloudDraftSync, hasAdminDebug, hasDbExportImport, isReadOnly)
+   e a configuração "personal" (como na coluna personal).
 2) Registre em AppServices.
 3) Nas telas, a visibilidade de recursos passa a ser: AppFeatures permite E
-   PermissionService.isAdmin (quando aplicável) E !isReadOnly. Telas e botões a
-   cobrir: engrenagem do GroupDashboardScreen (ManageJoinRequests, ManageMembers,
-   ManageBadges, ManageSeasons, AdminDebug), FAB de SessionsScreen e PlayersScreen,
-   opções de cosméticos/atributos no PlayerDetail e ManageBadgesScreen, upload de
-   som de gol, tela de login/AuthGate (hasAuth).
-No personal tudo continua aparecendo exatamente como hoje.
-Aceite: flutter analyze/test ok; checklist manual completo idêntico ao anterior.
+   PermissionService.isAdmin (quando aplicável) E !isReadOnly. Cobrir: engrenagem do
+   GroupDashboardScreen (ManageJoinRequests, ManageMembers, ManageBadges, ManageSeasons,
+   AdminDebug), FAB de SessionsScreen e PlayersScreen, opções de cosméticos/atributos no
+   PlayerDetail e ManageBadgesScreen, upload de som de gol, tela de login/AuthGate (hasAuth).
+4) Em match_screen, condicione por flag: o envio do pacote do site
+   (_scheduleSiteSync/_triggerBackgroundSync -> hasSiteSync), o rascunho em nuvem
+   (_scheduleCloudSync e a restauração remota do _loadMatchState -> hasCloudDraftSync).
+No personal tudo continua aparecendo e funcionando exatamente como hoje.
+Aceite: analyze/test ok; checklist manual completo (inclui item 9, modo avião).
 ```
 
-**Gate:** Enzo roda o checklist manual no celular → merge na `main` → me avisa. A partir daqui eu entrego os prompts detalhados da Fase 2 e 3.
+**Gate:** Enzo roda o checklist manual no celular → merge na `main` → me avisa. A partir daqui eu entrego os prompts detalhados das Fases 2 e 3.
 
 ---
 
-## FASE 2 — Site somente leitura (iPhone)  ·  *detalhar depois do gate*
+## FASE 2 — Site somente leitura (iPhone), link sem login  ·  *detalhar depois do gate*
+
+Decisão tomada: **link secreto, sem login**. Segurança por token + funções no banco, e não por leitura pública das tabelas (a chave `anon` fica embutida no site).
 
 | # | Tarefa | Quem |
 |---|---|---|
 | T5 | Proteger `dart:io`/`path_provider`/`screenshot`/`share_plus` nas 3 telas de ranking/histórico (import condicional ou `kIsWeb`); `main_web.dart` com `isReadOnly = true`; esconder todo recurso de escrita | AG |
-| T6 | Modelo de acesso e policies RLS de `SELECT` (login por e-mail **ou** link público) | **CLAUDE** |
+| T6 | Token por grupo (`share_token`) + funções `SECURITY DEFINER` que devolvem só os dados daquele grupo (sem e-mail de jogadores, sem logs de admin); `anon` sem `SELECT` direto nas tabelas; como girar/revogar o token | **CLAUDE** |
+| T6b | Repositórios "somente leitura via token" (implementam as interfaces de leitura) e `AuthService` nulo | **CLAUDE** (interfaces) + AG (tela) |
 | T7 | Build web, hospedagem e checagem no Safari do iPhone | AG |
+| T7b | **Aposentar o site antigo:** depois que o site novo estiver no ar e o grupo já estiver usando, remover `SiteSyncService`, `SiteDataGenerator`, `hasSiteSync`, `_scheduleSiteSync`/`_triggerBackgroundSync` do `match_screen` e o `my_sync_code`; desligar o site React; (opcional) apagar a tabela `sync_data` no Supabase | AG (código) + Enzo (desligar o site e a tabela) |
 
-## FASE 3 — App público offline  ·  *detalhar depois do gate*
+## FASE 3 — App público offline (1 grupo)  ·  *detalhar depois do gate*
 
 | # | Tarefa | Quem |
 |---|---|---|
 | T8 | Schema drift + `schemaVersion` + migrações | **CLAUDE** |
 | T9 | Repositórios locais simples (CRUD) seguindo o modelo que eu entregar | AG |
-| T10 | Repositórios locais com transação (`createGroup`, `saveFullMatch`, `updateFullMatch`, `updatePartialMatch`, `deleteMatch`, `savePendingMatch`, `replaceArrivals`, `createGhostPlayer`) | **CLAUDE** |
+| T10 | Repositórios locais com transação (`createGroup`, `saveFullMatch`, `updateFullMatch`, `updatePartialMatch`, `deleteMatch`, `savePendingMatch`, `replaceArrivals`, `createGhostPlayer`) + `LocalMatchOutbox` (grava direto, `pending` sempre 0) | **CLAUDE** |
 | T11 | Exportar/importar `.db` (`VACUUM INTO`, `integrity_check`, backup antes de importar) | **CLAUDE** |
 | T12 | `bootstrap_public.dart`, `main_public.dart`, auth local fixo, grupo e temporada criados no primeiro uso | AG |
-| T13 | Tema neutro, nome, ícone, remover recursos do personal no public | AG |
-| T14 | Build Android do app público (assinatura, ícone, nome) | AG |
+| T13 | Tema neutro, nome, ícone, flags do public desligando recursos do personal | AG |
+| T14 | Decidir o destino dos dados de domínio hoje só em `SharedPreferences` (conforme `INVENTARIO_SHAREDPREFS.md`) | **CLAUDE** |
+| T15 | Build Android do app público (assinatura, ícone, nome) | AG |
 
 ---
 
-## Perguntas em aberto (afetam as tarefas)
+## Decisões já tomadas
 
-1. `sync_service` / `cache_sync_manager` (tabela `sync_data`) ainda são usados? → define T3c.
-2. `data_migration_service` / `fix_event_times_service` ainda são usados? → define T0b (se não, mover ou apagar).
-3. Web somente leitura: quem usa iPhone entra com **e-mail e senha** ou abre **um link sem login**? → define T6.
-4. App público: **um grupo só** (suposição atual) ou várias peladas/grupos?
+- Site antigo (React, lê `sync_data`): será trocado pelo site novo. O site novo **não** usa `sync_data`: lê os dados reais por funções com token (T6). Os dois convivem até a T7b.
+- `data_migration_service` e `fix_event_times_service`: não usados → T0b.
+- Web somente leitura: link sem login (token). Login por e-mail pode ser acrescentado depois sem refazer a arquitetura.
+- App público: **um grupo só** por enquanto; migrar para vários depois.
+- `sync_service`/`cache_sync_manager`: não são a proteção offline; viram `SiteSyncService` e `DiagnosticsService` (T3c). A proteção offline é a fila, o cache, o estado local da partida e o snapshot do elenco (T3d e seção 9 do `ARCHITECTURE.md`).
+
+## Perguntas em aberto
+
+1. ~~Site antigo em React~~ **Resolvido:** será substituído pelo site novo. Até lá o envio do pacote do site continua funcionando como hoje (T3c o mantém) e é removido na T7b.
+2. Resultado do `INVENTARIO_SHAREDPREFS.md` (T0d): há telas lendo histórico só do `SharedPreferences`? E onde `rating_history` é gravado ao finalizar partida?
