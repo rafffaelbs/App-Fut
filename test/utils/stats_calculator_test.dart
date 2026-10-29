@@ -208,7 +208,14 @@ void main() {
         expect(p1['wins'], equals(0));
         expect(p1['goals'], equals(0));
         expect((p1['ratings'] as List<double>).length, equals(1)); // STILL added
-        expect(p1['nota'], isNotNull);
+        expect((p1['ratings'] as List<double>).first, closeTo(10.0, 1e-4));
+        expect(p1['nota'], closeTo(8.0, 1e-4));
+
+        final p2 = stats['p2']!;
+        expect(p2['games'], equals(0));
+        expect((p2['ratings'] as List<double>).length, equals(1));
+        expect((p2['ratings'] as List<double>).first, closeTo(6.1, 1e-4));
+        expect(p2['nota'], closeTo(6.7, 1e-4));
       });
     });
   });
