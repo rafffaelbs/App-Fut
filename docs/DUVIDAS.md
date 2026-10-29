@@ -101,3 +101,11 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Toda a classe `RatingsRepository` não possui chamadores ativos na aplicação atual.
 - **Ação:** Registrado em `docs/CODIGO_MORTO.md`.
 
+---
+
+### 12. `lib/domain/services/permission_service.dart` e mensagens de erro de `requireAdmin` — Tarefa T2
+- **O que viu:** O `ARCHITECTURE.md` (linha 99) e o enunciado da tarefa T2 afirmam que `requireAdmin` deve lançar "a MESMA exceção e mensagem que os repositórios lançam hoje". No entanto, inspecionando os repositórios (`groups`, `seasons`, `players`, `group_members`), verificou-se que cada método lança uma mensagem de erro distinta e específica (ex.: `'Access denied: Only administrators can create seasons.'`, `'Access denied: Only administrators can edit the group.'`, `'Acesso negado: somente administradores podem definir áudios de gol.'`, etc.).
+- **Impacto:** Uma assinatura rígida `requireAdmin(String groupId)` sem mensagem forçaria a unificação sob uma mensagem genérica arbitrária, violando a Regra de Ouro nº 8 ("Exceções e mensagens de erro existentes devem ser preservadas com o mesmo texto").
+- **Ação:** A interface `PermissionService` foi ajustada para aceitar um parâmetro opcional `Future<void> requireAdmin(String groupId, [String? message])`. Quando chamada sem mensagem, utiliza o padrão `'Access denied: Only administrators can perform this action.'`. Nos repositórios, cada método repassa o seu texto original de erro, preservando 100% da compatibilidade e das mensagens existentes.
+
+
