@@ -46,7 +46,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
     // Fail-safe: qualquer erro na checagem = não é admin = sem engrenagem.
     bool isAdmin = false;
     try {
-      isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+      isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
     } catch (_) {
       isAdmin = false;
     }

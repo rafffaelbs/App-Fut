@@ -32,7 +32,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   Future<void> _checkAdmin() async {
-    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    final isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 

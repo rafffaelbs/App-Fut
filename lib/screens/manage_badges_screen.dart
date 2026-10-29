@@ -111,7 +111,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
 
     try {
-      _isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(
+      _isAdmin = await SupabaseService.permissions.isAdmin(
         widget.groupId,
       );
     } catch (_) {
