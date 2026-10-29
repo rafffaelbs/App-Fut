@@ -35,6 +35,9 @@ jogador sem nota da comunidade). O valor esperado é o resultado ATUAL do códig
 rode, copie o valor e fixe no teste. Não "corrija" nada que pareça estranho: apenas
 registre em docs/DUVIDAS.md.
 Se alguma função não for testável sem Flutter binding ou Supabase, anote no DUVIDAS.md.
+Atenção: stats_calculator.dart lê SharedPreferences direto (getAllGroupMatches, ~linhas 100-124).
+Para testar essas funções use SharedPreferences.setMockInitialValues({...}) com dados fixos
+(não precisa de Supabase).
 Aceite: flutter test passa; flutter analyze sem erros novos; lib/ sem alterações (git diff main --stat).
 ```
 
@@ -99,12 +102,33 @@ Responda também:
 Apenas fatos, com arquivo e número de linha. Não proponha mudanças.
 ```
 
+### T0e · Código morto e telas inalcançáveis (somente leitura) — AG
+Branch: `docs/codigo-morto` · Revisão: não (me mande só o resumo) · **Fazer antes da T1**
+
+```
+Tarefa somente de leitura. NÃO altere arquivos em lib/.
+Gere docs/CODIGO_MORTO.md com:
+1. Para CADA método público das classes em lib/repositories/ (actions_logs, group_members,
+   groups, matches, players, ratings, seasons, session_arrivals, sessions): o número de
+   chamadores FORA da própria classe, com arquivo:linha de cada um. Escreva "0 CHAMADORES"
+   quando não houver nenhum. Considere chamadas via SupabaseService.instance.<repo>.<método>,
+   por campos injetados e por outros repositórios.
+2. Para CADA arquivo em lib/screens/: quem o abre (Navigator.push, rotas nomeadas,
+   MaterialPageRoute, home:), com arquivo:linha. Escreva "INALCANÇÁVEL" se nenhuma rota ou
+   botão chega nele. Atenção especial: group_ranking_screen.dart, ranking_screen.dart,
+   expanded_ranking_screen.dart, season_stats_screen.dart, history_screen.dart,
+   blank_screen.dart.
+3. Para cada tela ALCANÇÁVEL de ranking ou estatística: de onde vêm os dados (repositório,
+   SharedPreferences ou ambos), em uma linha por tela.
+Apenas fatos, com arquivo e número de linha. Não proponha mudanças.
+```
+
 ---
 
 ## FASE 1 — Interfaces (o app personal continua idêntico)
 
 ### T1 · Criar as interfaces de repositório — AG, revisão CLAUDE
-Branch: `refactor/domain-interfaces`
+Branch: `refactor/domain-interfaces` · Depende de T0e (precisa do `docs/CODIGO_MORTO.md`)
 
 ```
 [cabeçalho]
@@ -122,6 +146,20 @@ MembershipRepository. Em SessionsRepository adicione:
   Future<Map<String, dynamic>?> getRuntimeState(String sessionId);
 Crie também lib/domain/services/auth_service.dart e permission_service.dart com as
 assinaturas da seção 4.3 (e a classe AppAuthException(String message)).
+Regras novas (vieram dos inventários):
+- Leia docs/CODIGO_MORTO.md (gerado na T0e). Método marcado "0 CHAMADORES" NÃO entra na
+  interface (na prática: saveFullMatch, updateFullMatch e recordRatingsBatch). Não apague
+  esses métodos das classes atuais; só não os liste nas interfaces e anote em docs/DUVIDAS.md.
+- Crie CustomBadgesRepository em lib/domain/repositories/custom_badges_repository.dart:
+    Future<List<Map<String, dynamic>>> getCustomBadges(String groupId);
+    Future<void> saveCustomBadges(String groupId, List<Map<String, dynamic>> badges);
+  (hoje essa lista vive em SharedPreferences, chave custom_badges_<groupId>, usada em
+  manage_badges_screen e player_detail).
+- Crie MatchHistoryStore em lib/domain/repositories/match_history_store.dart:
+    Future<List<Map<String, dynamic>>> readSession(String sessionId);
+    Future<void> appendToSession(String sessionId, Map<String, dynamic> record);
+  (hoje: SharedPreferences, chave match_history_<sessionId>). Só a interface: quem a usa
+  será decidido na T3e.
 Somente arquivos NOVOS: não altere nenhum arquivo existente nesta tarefa.
 Aceite: flutter analyze ok; git diff main --stat mostra apenas arquivos novos em lib/domain/.
 ```
@@ -264,8 +302,13 @@ Aceite: analyze/test ok; checklist manual completo; teste do modo avião (item 9
 
 Revisão CLAUDE: `supabase_match_outbox.dart` (o diff completo dele; é crítico para não perder partidas).
 
+### T3e · Histórico de partidas e insígnias via interfaces — AG, revisão CLAUDE
+Branch: `refactor/local-only-data` · Depende de T3b e do resultado da T0e · **Prompt detalhado: eu escrevo depois da T0e**, porque depende do que for código morto
+
+Objetivo: telas e cálculos deixam de ler `match_history_*` e `custom_badges_*` direto do `SharedPreferences` e passam a usar `MatchHistoryStore` e `CustomBadgesRepository` (implementação do personal = SharedPreferences, **comportamento idêntico**). Se a T0e mostrar que `GroupRankingScreen` é inalcançável, ela e as chaves legadas (`sessions_*`, `seasons_*`, `app_groups`, `players_grupo_`) são removidas aqui em vez de adaptadas. Exige os testes da T0 cobrindo `getAllGroupMatches`.
+
 ### T4 · AppFeatures e flavor personal — AG
-Branch: `feat/app-features` · Depende de T3c e T3d
+Branch: `feat/app-features` · Depende de T3c, T3d e T3e
 
 ```
 [cabeçalho]
@@ -312,7 +355,7 @@ Decisão tomada: **link secreto, sem login**. Segurança por token + funções n
 | T11 | Exportar/importar `.db` (`VACUUM INTO`, `integrity_check`, backup antes de importar) | **CLAUDE** |
 | T12 | `bootstrap_public.dart`, `main_public.dart`, auth local fixo, grupo e temporada criados no primeiro uso | AG |
 | T13 | Tema neutro, nome, ícone, flags do public desligando recursos do personal | AG |
-| T14 | Decidir o destino dos dados de domínio hoje só em `SharedPreferences` (conforme `INVENTARIO_SHAREDPREFS.md`) | **CLAUDE** |
+| T14 | Implementar no SQLite: tabela `custom_badges`, `MatchHistoryStore` derivado das tabelas (convertendo para o formato da súmula local), e limpar `players_*`/`cache:*` depois de importar um `.db` (decisões na seção 10 do ARCHITECTURE) | **CLAUDE** |
 | T15 | Build Android do app público (assinatura, ícone, nome) | AG |
 
 ---
@@ -328,4 +371,4 @@ Decisão tomada: **link secreto, sem login**. Segurança por token + funções n
 ## Perguntas em aberto
 
 1. ~~Site antigo em React~~ **Resolvido:** será substituído pelo site novo. Até lá o envio do pacote do site continua funcionando como hoje (T3c o mantém) e é removido na T7b.
-2. Resultado do `INVENTARIO_SHAREDPREFS.md` (T0d): há telas lendo histórico só do `SharedPreferences`? E onde `rating_history` é gravado ao finalizar partida?
+2. ~~Resultado do inventário (T0d)~~ **Recebido** (ver seção 10 do ARCHITECTURE). Pergunta que ficou: as insígnias personalizadas (`custom_badges_*`, que existem só no aparelho) são criadas só por você, ou outros admins também criam?

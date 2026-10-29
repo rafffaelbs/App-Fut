@@ -23,7 +23,7 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
    grep -rl "supabase_flutter" lib | grep -v "^lib/data/supabase/" | grep -v "^lib/bootstrap_personal.dart"
    ```
 3. Telas, widgets, serviços e utils dependem de **interfaces** (`lib/domain/`) e de `AppServices` / `AppFeatures`. Nunca de classes `Supabase*`.
-4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.**
+4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.** **Exceção conhecida:** `stats_calculator.dart` (~linhas 100-124) e `site_data_generator.dart` leem `SharedPreferences` direto (`match_history_*`, `sessions_*`, `seasons_*`). Não mexer agora; tratar na T3e.
 5. **Não alterar:** nomes de tabelas/colunas do Supabase, policies RLS, RPCs, fórmulas dos calculators.
 6. Uma tarefa = uma branch = commits pequenos. Antes de terminar: `flutter analyze` e `flutter test`.
 7. **Não adicionar pacotes** sem estar listado na tarefa. Pacotes previstos mais à frente: `drift`, `drift_flutter` (ou `sqlite3_flutter_libs`), `path`.
@@ -65,8 +65,10 @@ docs/
 | `GroupsRepository` | `groups_repository.dart` | `getMyGroups`, `createGroup`, `updateGroup`, `deleteGroup`. No public: um grupo único criado no primeiro uso. |
 | `SeasonsRepository` | `seasons_repository.dart` | Todos os 5 métodos, assinaturas iguais. |
 | `SessionsRepository` | `sessions_repository.dart` | Todos os 9 métodos **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). |
-| `MatchesRepository` | `matches_repository.dart` | Todos os 7 métodos. `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
-| `RatingsRepository` | `ratings_repository.dart` | Todos os 4 métodos. |
+| `MatchesRepository` | `matches_repository.dart` | **Só métodos com chamadores** (ver `docs/CODIGO_MORTO.md`). `saveFullMatch` e `updateFullMatch` têm 0 chamadores (INVENTARIO_SHAREDPREFS, pergunta 2) e **não entram** na interface. `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
+| `RatingsRepository` | `ratings_repository.dart` | `recordRatingsBatch` tem 0 chamadores e não entra. Os outros 3 só entram se tiverem chamadores (T0e). **Hoje nada grava `rating_history`**: as notas são calculadas em memória a partir de partidas e eventos. |
+| `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)` e `saveCustomBadges(groupId, badges)`. Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: SharedPreferences (igual hoje). Public: tabela no SQLite. |
+| `MatchHistoryStore` (novo) | `match_screen`, ranking, `stats_calculator` | `readSession(sessionId)` e `appendToSession(sessionId, record)`. Hoje é `match_history_<sessão>` em `SharedPreferences`. Personal: igual hoje. Public: derivado das tabelas do SQLite. Quem usa é decidido na T3e. |
 | `SessionArrivalsRepository` | `session_arrivals_repository.dart` | Todos os 4 métodos. |
 | `PlayersRepository` | `players_repository.dart` | **Só estes:** `getPlayersByGroup`, `createGhostPlayer`, `updatePlayer`, `setPlayerIcon`, `removePlayerFromGroup`, `getPlayerById`, `setNameEffect`, `setMonthlyHighlight`, `setCosmetics`, `setCommunityAttributes`, `setAdvancedStat`. |
 
@@ -151,8 +153,8 @@ Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e**
 - **Devem rodar em uma transação SQLite:** `createGroup`, `saveFullMatch`, `updateFullMatch`, `updatePartialMatch`, `deleteMatch`, `savePendingMatch`, `createGhostPlayer`, `replaceArrivals`.
 - No Supabase essas operações hoje são sequenciais sem transação (risco de registros órfãos se falhar no meio). **Fora do escopo agora**; candidato futuro: mover para função Postgres (RPC).
 - O rascunho em nuvem da partida (`_syncToCloud`/`_scheduleCloudSync`, `match_screen.dart` ~268-329) grava `session_arrivals` e `sessions` a cada mudança. No public fica desligado pela flag `hasCloudDraftSync` (o estado em andamento já está em `SharedPreferences`).
-- No public, finalizar partida passa por `LocalMatchOutbox` (grava direto no SQLite, na mesma transação do resto). A lista de tabelas é a mesma de `savePendingMatch`: `matches`, `match_lineups`, `match_events`. **Pendência:** confirmar em `INVENTARIO_SHAREDPREFS.md` onde `rating_history` é gravado no fluxo de finalizar.
-- `SharedPreferences` guarda hoje dados que podem ser de domínio (ex.: `match_history_<id>`, `players_<groupId>`). No public, o `.db` exportado precisa conter tudo que importa; o que for "só local em SharedPreferences" precisa ser migrado ou descartado de forma consciente. Decidir após `INVENTARIO_SHAREDPREFS.md`.
+- No public, finalizar partida passa por `LocalMatchOutbox` (grava direto no SQLite, na mesma transação do resto). A lista de tabelas é a mesma de `savePendingMatch`: `matches`, `match_lineups`, `match_events`. **Resolvido (T0d):** `rating_history` não é gravado em lugar nenhum no fluxo atual; no SQLite v1 a tabela não é criada (só se o T0e achar um leitor ativo).
+- `SharedPreferences` guarda hoje dados que podem ser de domínio (ex.: `match_history_<id>`, `players_<groupId>`). No public, o `.db` exportado precisa conter tudo que importa; o que for "só local em SharedPreferences" precisa ser migrado ou descartado de forma consciente. Decisões na seção 10.
 - Export: `VACUUM INTO`. Import: validar (`integrity_check`, `user_version`), backup do banco atual, trocar o arquivo, reabrir.
 
 ## 7. Web somente leitura (Fase 2)
@@ -189,3 +191,16 @@ Fonte: `docs/INVENTARIO_OFFLINE.md`. São 4 camadas independentes; **nenhuma é 
 Chaves de `SharedPreferences` que NÃO podem mudar: `pending_matches_v1`, `cache:*`, `my_sync_code`, `cache_has_pending_cloud_sync`, `cache_last_cloud_sync_at`, `cache_last_cloud_fetch_at`, `present_players_*`, `team_red_*`, `team_white_*`, `score_red_*`, `score_white_*`, `match_events_*`, `is_overtime_*`, `seconds_played_*`, `is_running_*`, `start_timestamp_*`, `red_streak_*`, `white_streak_*`, `active_gk_*`, `first_gk_*`, `match_history_*`, `players_*`, `ratings_snapshot_at_*`.
 
 O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envia o "pacote do site" (JSON do `SiteDataGenerator`) para `sync_data` a cada ~90 s e ao fechar a tela de partida (alimenta o site antigo); `cache_sync_manager` é diagnóstico do painel de debug do admin (ping e dump do storage). Nenhum dos dois dispara reenvio da fila.
+
+## 10. Dados que hoje vivem só no SharedPreferences (de `INVENTARIO_SHAREDPREFS.md`)
+
+| Dado | Chave | Situação hoje | Decisão |
+|---|---|---|---|
+| Súmula local das partidas | `match_history_<sessão>` | Única fonte do ranking do grupo (`GroupRankingScreen`); fallback de `RankingScreen` e `MatchScreen`; lida também por `stats_calculator`. Escrita por `match_screen` ao finalizar. | Interface `MatchHistoryStore` (T3e). Personal: SharedPreferences, igual hoje. Public: derivada das tabelas do SQLite (somente leitura; `appendToSession` não faz nada). Se o T0e confirmar que `GroupRankingScreen` é inalcançável, ela é removida em vez de adaptada. |
+| Insígnias personalizadas | `custom_badges_<grupo>` | Não existe no Supabase; cada aparelho tem as suas. | `CustomBadgesRepository`. Personal: igual hoje. Public: tabela `custom_badges` no SQLite (entra no `.db`). Web: vazio por enquanto. |
+| Elenco com campos calculados | `players_<grupo>` | Cache do Supabase, recriado pelo `GroupBootstrap`. | Continua como cache nos dois apps. Depois de importar um `.db`, apagar esses snapshots e `cache:*` (T11). |
+| Cache de leitura | `cache:*` | Só repositórios Supabase. | Fica em `lib/data/supabase/`; não existe no public. |
+| Estado da partida em andamento | `present_players_*`, `team_*`, `score_*`, `is_running_*`... | Temporário. | Continua em SharedPreferences nos dois apps; **não** vai para o `.db`. Avisar na tela que exportar/importar deve ser feito entre partidas. |
+| Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
+| Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Lidos por `GroupRankingScreen`, `stats_calculator` e `site_data_generator`; praticamente ninguém grava. | Se o T0e confirmar tela inalcançável, remover junto com ela. |
+| Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
