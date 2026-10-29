@@ -21,50 +21,50 @@ void main() {
         expect(rating, closeTo(7.5, 1e-4));
       });
 
-      test('case 2: win streak scaling (1, 2, 3+ wins)', () {
-        // Status 1 (win 1-0): goals 1, clean sheet bonus (+0.5), win result (+0.8), goal (+1.5), goalDiff (+0.1)
-        // With streak 0/1: streakBonus = 0
+      test('case 2: win streak scaling (0, 2, 3+ wins)', () {
+        // Status 1 (win 2-1): goals 1, win result (+0.8), goal (+1.5), goalDiff (+0.1), teamGoal (+0.1), conceded (-0.1)
+        // With streak 0: streakBonus = 0 -> 9.4
         final ratingStreak0 = calculateMatchRating(
           status: 1,
           goals: 1,
           assists: 0,
           ownGoals: 0,
-          teamGoals: 1,
-          conceded: 0,
+          teamGoals: 2,
+          conceded: 1,
           yellow: 0,
           red: 0,
-          teamWinStreak: 1,
+          teamWinStreak: 0,
         );
 
-        // With streak 2: streakBonus = 0.2
+        // With streak 2: streakBonus = 0.2 -> 9.6
         final ratingStreak2 = calculateMatchRating(
           status: 1,
           goals: 1,
           assists: 0,
           ownGoals: 0,
-          teamGoals: 1,
-          conceded: 0,
+          teamGoals: 2,
+          conceded: 1,
           yellow: 0,
           red: 0,
           teamWinStreak: 2,
         );
 
-        // With streak 3: streakBonus = 0.4
+        // With streak 3: streakBonus = 0.4 -> 9.8
         final ratingStreak3 = calculateMatchRating(
           status: 1,
           goals: 1,
           assists: 0,
           ownGoals: 0,
-          teamGoals: 1,
-          conceded: 0,
+          teamGoals: 2,
+          conceded: 1,
           yellow: 0,
           red: 0,
           teamWinStreak: 3,
         );
 
-        expect(ratingStreak0, closeTo(10.0, 1e-4)); // Clamped to 10.0
-        expect(ratingStreak2, closeTo(10.0, 1e-4));
-        expect(ratingStreak3, closeTo(10.0, 1e-4));
+        expect(ratingStreak0, closeTo(9.4, 1e-4));
+        expect(ratingStreak2, closeTo(9.6, 1e-4));
+        expect(ratingStreak3, closeTo(9.8, 1e-4));
       });
 
       test('case 3: win streaks in moderate match to observe un-clamped delta', () {
@@ -231,6 +231,85 @@ void main() {
         expect(withBoth, closeTo(8.2, 1e-4));
         expect(withComeback - base, closeTo(0.4, 1e-4)); // kBonusComebackGoal = 0.4
         expect(withBoth - withComeback, closeTo(0.8, 1e-4)); // kBonusClutchGoal = 0.8
+      });
+
+      test('case 8: diminishing decay with 2 and 3 goals in neutral draw', () {
+        // Neutral draw (status 0) without bonuses that exceed the 10.0 limit.
+        // In a 10-10 draw (teamGoals: 10, conceded: 10), neither 2 goals nor 3 goals
+        // (even with hat-trick bonus +0.8) hits the 10.0 clamp, so both ratings
+        // stay strictly below 10.0 and depend directly on kDiminishingDecay:
+        final r2Goals = calculateMatchRating(
+          status: 0,
+          goals: 2,
+          assists: 0,
+          ownGoals: 0,
+          teamGoals: 10,
+          conceded: 10,
+          yellow: 0,
+          red: 0,
+          teamWinStreak: 0,
+        );
+
+        final r3Goals = calculateMatchRating(
+          status: 0,
+          goals: 3,
+          assists: 0,
+          ownGoals: 0,
+          teamGoals: 10,
+          conceded: 10,
+          yellow: 0,
+          red: 0,
+          teamWinStreak: 0,
+        );
+
+        // Also test 2 goals in a standard 2-2 draw:
+        final r2GoalsIn22 = calculateMatchRating(
+          status: 0,
+          goals: 2,
+          assists: 0,
+          ownGoals: 0,
+          teamGoals: 2,
+          conceded: 2,
+          yellow: 0,
+          red: 0,
+          teamWinStreak: 0,
+        );
+
+        expect(r2Goals, closeTo(8.5, 1e-4));
+        expect(r3Goals, closeTo(9.84, 1e-4));
+        expect(r2GoalsIn22, closeTo(9.3, 1e-4));
+      });
+
+      test('case 9: diminishing decay with 2 and 3 assists in neutral draw', () {
+        // Neutral draw (status 0) without bonuses that exceed the 10.0 limit.
+        // In a 3-3 draw (teamGoals: 3, conceded: 3), neither 2 assists nor 3 assists
+        // (even with playmaker bonus +0.6) hits the 10.0 clamp:
+        final r2Assists = calculateMatchRating(
+          status: 0,
+          goals: 0,
+          assists: 2,
+          ownGoals: 0,
+          teamGoals: 3,
+          conceded: 3,
+          yellow: 0,
+          red: 0,
+          teamWinStreak: 0,
+        );
+
+        final r3Assists = calculateMatchRating(
+          status: 0,
+          goals: 0,
+          assists: 3,
+          ownGoals: 0,
+          teamGoals: 3,
+          conceded: 3,
+          yellow: 0,
+          red: 0,
+          teamWinStreak: 0,
+        );
+
+        expect(r2Assists, closeTo(8.4, 1e-4));
+        expect(r3Assists, closeTo(9.36, 1e-4));
       });
     });
 
