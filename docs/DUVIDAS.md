@@ -73,3 +73,17 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Era o único ponto do app em `lib/` com dependência direta de `FixEventTimesService`.
 - **Ação:** Com a confirmação de que os scripts de migração/correção não são mais usados, o método e o item do drawer foram removidos de `lib/main.dart`, e os arquivos foram movidos para `tool/legacy/`. Caso essa rotina ainda seja necessária como script manual, ela deve ser executada a partir de `tool/legacy/fix_event_times_service.dart`.
 
+---
+
+### 8. `lib/screens/group_ranking_screen.dart` (linhas 106–128 e 173–176) — Tarefa T0d
+- **O que viu:** A tela `GroupRankingScreen` é alimentada exclusivamente por `SharedPreferences` (`players_$groupId`, `seasons_$groupId`, `sessions_$groupId` e `match_history_$tournamentId`) e não consulta nenhum repositório (`SessionsRepository`, `SeasonsRepository`, `MatchesRepository` ou `PlayersRepository`). Além disso, as chaves `seasons_$groupId` e `sessions_$groupId` não são mais gravadas em nenhuma tela ou repositório ativo (sessões e temporadas são salvas direto no Supabase).
+- **Impacto:** Temporadas e peladas recém-criadas ou editadas no app não aparecem no `GroupRankingScreen`.
+- **Ação:** Registrado no inventário `docs/INVENTARIO_SHAREDPREFS.md` e aguardando migração nas tarefas de repositórios/telas.
+
+---
+
+### 9. `lib/repositories/ratings_repository.dart` (linha 65) e `lib/repositories/matches_repository.dart` (linhas 193, 271) — Tarefa T0d
+- **O que viu:** A tabela `rating_history` não é gravada no fluxo de encerramento de partidas (`_finishMatch` chama `PendingMatchQueue.enqueue`, que executa `savePendingMatch`, o qual grava apenas em `matches`, `match_lineups` e `match_events`). Os únicos métodos que gravam em `rating_history` no app (`recordRatingsBatch`, `saveFullMatch`, `updateFullMatch`) não são chamados em nenhum ponto do código (0 chamadores / código morto).
+- **Impacto:** `rating_history` só continha dados da migração inicial legada (`tool/legacy/data_migration_service.dart:540`). Em tempo de execução real, as notas exibidas nas telas são calculadas puramente em memória pelos calculators a partir do histórico de partidas.
+- **Ação:** Registrado no inventário `docs/INVENTARIO_SHAREDPREFS.md`.
+
