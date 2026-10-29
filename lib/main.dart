@@ -4,11 +4,9 @@ import 'package:app_do_fut/theme/app_theme.dart';
 import 'package:app_do_fut/widgets/player/fifa_card.dart';
 import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
-import 'package:app_do_fut/screens/sync_screen.dart';
 import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/screens/complete_profile_screen.dart';
 import 'package:app_do_fut/screens/join_group_screen.dart';
-import 'package:app_do_fut/services/sync_service.dart';
 import 'package:app_do_fut/config/supabase_config.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -150,7 +148,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final SyncService _syncService = SyncService();
   List<GroupModel> groups = [];
   bool isLoading = true;
 
