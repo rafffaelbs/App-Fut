@@ -103,6 +103,7 @@ class _MatchScreenState extends State<MatchScreen>
   DateTime? _lastStartTime;
 
   bool _showTacticalPitch = true;
+  bool _pitchHorizontal = true;
   bool _pitchUseChips = false;
   // Jogador destacado no campo ao tocar num evento da timeline.
   final ValueNotifier<String?> _highlightedPlayer = ValueNotifier(null);
@@ -333,6 +334,7 @@ class _MatchScreenState extends State<MatchScreen>
     final String id = widget.tournamentId;
 
     _showTacticalPitch = prefs.getBool('show_tactical_pitch') ?? true;
+    _pitchHorizontal = prefs.getBool('pitch_horizontal') ?? true;
     final bool useCards = prefs.getBool('pitch_use_cards') ??
         (!(prefs.getBool('pitch_use_chips') ?? false));
     _pitchUseChips = !useCards;
@@ -1624,6 +1626,24 @@ class _MatchScreenState extends State<MatchScreen>
             SwitchListTile(
               activeColor: AppColors.accentBlue,
               title: const Text(
+                "Campo tático horizontal",
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                "Ligado: horizontal (padrão). Desligado: vertical",
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              value: _pitchHorizontal,
+              onChanged: (val) async {
+                setState(() => _pitchHorizontal = val);
+                setModalState(() => _pitchHorizontal = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('pitch_horizontal', val);
+              },
+            ),
+            SwitchListTile(
+              activeColor: AppColors.accentBlue,
+              title: const Text(
                 "Usar cards no campo tático",
                 style: TextStyle(color: Colors.white),
               ),
@@ -2206,6 +2226,7 @@ class _MatchScreenState extends State<MatchScreen>
               highlightedPlayerId: _highlightedPlayer,
               availableHeight: box.maxHeight - MatchEventsPanel.peekHeight - 90,
               useChips: _pitchUseChips,
+              isHorizontal: _pitchHorizontal,
             )
           else ...[
             Row(

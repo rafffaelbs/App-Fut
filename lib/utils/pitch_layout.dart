@@ -46,10 +46,15 @@ class PitchLayoutResult {
 class PitchLayout {
   PitchLayout._();
 
-  /// Faixa de y de cada metade (fração da altura do campo).
+  /// Faixa de y de cada metade (fração da altura do campo no modo vertical).
   static const redZone = (top: 0.06, bottom: 0.44);
   static const whiteZone = (top: 0.56, bottom: 0.94);
   static const _focusZone = (top: 0.07, bottom: 0.93);
+
+  /// Faixa de x de cada metade (fração da largura do campo no modo horizontal).
+  static const redZoneH = (left: 0.04, right: 0.46);
+  static const whiteZoneH = (left: 0.54, right: 0.96);
+  static const _focusZoneH = (left: 0.05, right: 0.95);
 
   /// Folga lateral entre cartas e espaço da trilha de eventos.
   static const double gap = 8;
@@ -64,8 +69,10 @@ class PitchLayout {
   /// Escalas tentadas da maior para a menor (carta M no campo). O piso 1.14
   /// (× 0.88 de profundidade) mantém os textos da carta em 10sp ou mais.
   static const cardScales = [1.55, 1.4, 1.27, 1.14];
-
   static const chipScales = [1.15, 1.0];
+
+  static const cardScalesHorizontal = [1.1, 1.0, 0.9, 0.8, 0.72, 0.65, 0.55, 0.48, 0.42];
+  static const chipScalesHorizontal = [1.1, 1.0, 0.9, 0.8, 0.72, 0.65, 0.55, 0.48, 0.42];
 
   static Size _baseSize(CardDensity d) {
     switch (d) {
@@ -101,19 +108,41 @@ class PitchLayout {
     return (((rows - 1) * (item + vGap) + item + 2) / zone).ceilToDouble();
   }
 
-  /// Tamanhos tentados, do maior para o menor. Cartas nunca viram chip por
-  /// falta de espaço: o campo cresce. Chip só por escolha ou 11×11.
+  /// Altura mínima no modo horizontal com base na coluna com mais jogadores.
+  static double minHeightHorizontal(int lineCount,
+      {CardDensity? density, List<int>? formation, double? scale}) {
+    final d = density ?? preferredDensity(lineCount);
+    scale ??= cardScalesHorizontal.last;
+    final rows = formation ?? formationRows(lineCount);
+    final maxCols = rows.isEmpty ? 1 : rows.reduce(math.max);
+    final item = cardSize(d, scale).height + eventTrail;
+    return (((maxCols - 1) * (item + vGap) + item + 16) / 0.88).ceilToDouble();
+  }
+
+  /// Tamanhos tentados, do maior para o menor.
   static List<({CardDensity density, double scale})> candidates(int lineCount,
-          {bool chips = false}) =>
-      chips || lineCount > 7
+      {bool chips = false, bool isHorizontal = false}) {
+    if (isHorizontal) {
+      return chips || lineCount > 7
           ? [
-              for (final s in chipScales)
+              for (final s in chipScalesHorizontal)
                 (density: CardDensity.small, scale: s),
             ]
           : [
-              for (final s in cardScales)
+              for (final s in cardScalesHorizontal)
                 (density: CardDensity.medium, scale: s),
             ];
+    }
+    return chips || lineCount > 7
+        ? [
+            for (final s in chipScales)
+              (density: CardDensity.small, scale: s),
+          ]
+        : [
+            for (final s in cardScales)
+              (density: CardDensity.medium, scale: s),
+          ];
+  }
 
   static PitchLayoutResult compute({
     required int lineCount,
@@ -121,16 +150,17 @@ class PitchLayout {
     PitchFocus focus = PitchFocus.both,
     List<int>? formation,
     bool chips = false,
+    bool isHorizontal = false,
   }) {
-    final order = candidates(lineCount, chips: chips);
+    final order = candidates(lineCount, chips: chips, isHorizontal: isHorizontal);
     for (final c in order) {
       final r = _layoutWith(c.density, c.scale, lineCount, field, focus,
-          formation: formation);
+          formation: formation, isHorizontal: isHorizontal);
       if (r != null) return r;
     }
     final c = order.last;
     return _layoutWith(c.density, c.scale, lineCount, field, focus,
-        formation: formation, force: true)!;
+        formation: formation, force: true, isHorizontal: isHorizontal)!;
   }
 
   static PitchLayoutResult? _layoutWith(
@@ -141,19 +171,39 @@ class PitchLayout {
     PitchFocus focus, {
     List<int>? formation,
     bool force = false,
+    bool isHorizontal = false,
   }) {
     final rows = formation ?? formationRows(lineCount);
     final slots = <PitchSlotRect>[];
     for (final isRed in const [true, false]) {
       if (focus == PitchFocus.red && !isRed) continue;
       if (focus == PitchFocus.white && isRed) continue;
-      final zone = focus == PitchFocus.both
-          ? (isRed ? redZone : whiteZone)
-          : _focusZone;
-      final team = _layoutTeam(d, scale, rows, field, zone.top, zone.bottom, isRed);
-      if (team == null && !force) return null;
-      slots.addAll(team ?? _layoutTeam(d, scale, rows, field, zone.top, zone.bottom, isRed, force: true)!);
+
+      if (isHorizontal) {
+        final zone = focus == PitchFocus.both
+            ? (isRed ? redZoneH : whiteZoneH)
+            : _focusZoneH;
+        final team = _layoutTeamHorizontal(
+            d, scale, rows, field, zone.left, zone.right, isRed,
+            force: force);
+        if (team == null && !force) return null;
+        slots.addAll(team ??
+            _layoutTeamHorizontal(
+                d, scale, rows, field, zone.left, zone.right, isRed,
+                force: true)!);
+      } else {
+        final zone = focus == PitchFocus.both
+            ? (isRed ? redZone : whiteZone)
+            : _focusZone;
+        final team =
+            _layoutTeam(d, scale, rows, field, zone.top, zone.bottom, isRed);
+        if (team == null && !force) return null;
+        slots.addAll(team ??
+            _layoutTeam(d, scale, rows, field, zone.top, zone.bottom, isRed,
+                force: true)!);
+      }
     }
+    if (!force && hasOverlap(slots)) return null;
     return PitchLayoutResult(slots, d, scale);
   }
 
@@ -204,7 +254,8 @@ class PitchLayout {
           if (cx - prev < cw + gap) return null;
         }
         if (!force && cols > 0 && cw > rowW) return null;
-        final rect = Rect.fromCenter(center: Offset(cx, cy), width: cw, height: ch);
+        final rect =
+            Rect.fromCenter(center: Offset(cx, cy), width: cw, height: ch);
         out.add(PitchSlotRect(
           isRed: isRed,
           isGk: k == 0,
@@ -212,6 +263,80 @@ class PitchLayout {
           rect: rect,
           itemRect: Rect.fromLTRB(
               rect.left, rect.top, rect.right, rect.bottom + eventTrail),
+          density: d,
+        ));
+      }
+    }
+    return out;
+  }
+
+  static List<PitchSlotRect>? _layoutTeamHorizontal(
+    CardDensity d,
+    double scale,
+    List<int> rows,
+    Size field,
+    double left,
+    double right,
+    bool isRed, {
+    bool force = false,
+  }) {
+    final base = cardSize(d, scale);
+    final itemH = base.height + eventTrail;
+    final cw = base.width;
+    final ch = base.height;
+    final count = rows.length + 1; // linha 0 = goleiro
+    final zl = field.width * left;
+    final zr = field.width * right;
+    final teamW = zr - zl;
+
+    final pitchX = count == 1 ? 0.0 : (teamW - cw) / (count - 1);
+    if (!force && pitchX < cw + gap && count > 1) return null;
+
+    final out = <PitchSlotRect>[];
+    var playerIndex = 0;
+
+    const topY = 0.06;
+    const bottomY = 0.94;
+    final availH = field.height * (bottomY - topY);
+
+    for (var k = 0; k < count; k++) {
+      // Coluna k: 0 = goleiro, avançando em direção ao meio de campo
+      final cx = isRed
+          ? zl + cw / 2 + k * pitchX
+          : zr - cw / 2 - k * pitchX;
+
+      final cols = k == 0 ? 1 : rows[k - 1];
+      if (!force && cols > 1 && (availH - itemH) / (cols - 1) < itemH + vGap) {
+        return null;
+      }
+
+      for (var i = 0; i < cols; i++) {
+        final double cy;
+        if (cols == 1) {
+          cy = field.height * 0.5;
+        } else {
+          final step = (availH - itemH) / (cols - 1);
+          cy = field.height * topY + itemH / 2 + i * step;
+        }
+
+        final rect = Rect.fromCenter(
+          center: Offset(cx, cy - eventTrail / 2),
+          width: cw,
+          height: ch,
+        );
+        final itemRect = Rect.fromLTRB(
+          rect.left,
+          rect.top,
+          rect.right,
+          rect.bottom + eventTrail,
+        );
+
+        out.add(PitchSlotRect(
+          isRed: isRed,
+          isGk: k == 0,
+          index: k == 0 ? -1 : playerIndex++,
+          rect: rect,
+          itemRect: itemRect,
           density: d,
         ));
       }

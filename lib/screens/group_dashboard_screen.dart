@@ -2,17 +2,11 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/players_screen.dart';
 import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/season_stats_screen.dart';
-import 'package:app_do_fut/screens/manage_badges_screen.dart'; // <-- IMPORTANTE
-import 'package:app_do_fut/screens/manage_seasons_screen.dart';
-import 'package:app_do_fut/screens/manage_join_requests_screen.dart';
-import 'package:app_do_fut/screens/admin_debug_screen.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
-import 'package:app_do_fut/screens/manage_members_screen.dart';
+import 'package:app_do_fut/screens/settings_screen.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
-import 'package:app_do_fut/utils/constants.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class GroupDashboardScreen extends StatefulWidget {
   final String groupId;
@@ -123,136 +117,22 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
             onPressed: _openMyProfile,
           ),
           // Engrenagem (Peladas / Elenco / Estatísticas): só admin vê.
-          // A checagem real de permissão é feita pelo RLS no Supabase; isso
-          // aqui só evita mostrar botões de admin para um membro comum.
-          // (A engrenagem da tela de Partida continua visível para todos.)
           if (!_checkingAdmin && _isAdmin)
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            color: AppColors.headerBlue,
-            onSelected: (value) async {
-              if (value == 'requests') {
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Configurações',
+              onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ManageJoinRequestsScreen(groupId: widget.groupId)),
+                  MaterialPageRoute(
+                    builder: (context) => SettingsScreen(
+                      groupId: widget.groupId,
+                      isAdmin: _isAdmin,
+                    ),
+                  ),
                 );
-              } else if (value == 'members') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ManageMembersScreen(groupId: widget.groupId)),
-                );
-              } else if (value == 'badges') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ManageBadgesScreen(groupId: widget.groupId)),
-                );
-              } else if (value == 'seasons') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ManageSeasonsScreen(groupId: widget.groupId)),
-                );
-              } else if (value == 'debug') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => AdminDebugScreen(groupId: widget.groupId)),
-                );
-              } else if (value == 'settings') {
-                showDialog(
-                  context: context,
-                  builder: (ctx) {
-                    return FutureBuilder<SharedPreferences>(
-                      future: SharedPreferences.getInstance(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                        final prefs = snapshot.data!;
-                        bool showRadar = prefs.getBool('show_radar_chart') ?? true;
-                        bool useCards = prefs.getBool('pitch_use_cards') ??
-                            (!(prefs.getBool('pitch_use_chips') ?? true));
-                        bool confirmTimerEnabled = prefs.getBool(kPrefConfirmTimerEnabled) ?? true;
-                        
-                        return StatefulBuilder(
-                          builder: (context, setDialogState) {
-                            return AlertDialog(
-                              backgroundColor: AppColors.headerBlue,
-                              title: const Text('Configurações', style: TextStyle(color: Colors.white)),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SwitchListTile(
-                                    title: const Text('Exibir Gráfico Radar', style: TextStyle(color: Colors.white)),
-                                    subtitle: const Text('Mostra o gráfico no perfil e X1', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                    activeColor: AppColors.accentBlue,
-                                    value: showRadar,
-                                    onChanged: (val) {
-                                      prefs.setBool('show_radar_chart', val);
-                                      setDialogState(() { showRadar = val; });
-                                    },
-                                  ),
-                                  SwitchListTile(
-                                    title: const Text('Timer de Proteção ao Encerrar', style: TextStyle(color: Colors.white)),
-                                    subtitle: const Text('Bloqueia o botão Confirmar por 3s para evitar cliques sem ler', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                    activeColor: AppColors.accentBlue,
-                                    value: confirmTimerEnabled,
-                                    onChanged: (val) {
-                                      prefs.setBool(kPrefConfirmTimerEnabled, val);
-                                      setDialogState(() { confirmTimerEnabled = val; });
-                                    },
-                                  ),
-                                  SwitchListTile(
-                                    title: const Text('Usar Cards no Campo Tático', style: TextStyle(color: Colors.white)),
-                                    subtitle: const Text('Desligado: chips (padrão). Ligado: cards estilo FIFA', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                    activeColor: AppColors.accentBlue,
-                                    value: useCards,
-                                    onChanged: (val) {
-                                      prefs.setBool('pitch_use_cards', val);
-                                      prefs.setBool('pitch_use_chips', !val);
-                                      setDialogState(() { useCards = val; });
-                                    },
-                                  ),
-                                ],
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Fechar', style: TextStyle(color: AppColors.accentBlue)),
-                                ),
-                              ],
-                            );
-                          }
-                        );
-                      }
-                    );
-                  }
-                );
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'requests',
-                child: Row(children: [Icon(Icons.how_to_reg, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Solicitações de Entrada', style: TextStyle(color: Colors.white))]),
-              ),
-              const PopupMenuItem(
-                value: 'members',
-                child: Row(children: [Icon(Icons.admin_panel_settings, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Gerenciar Membros', style: TextStyle(color: Colors.white))]),
-              ),
-              const PopupMenuItem(
-                value: 'badges',
-                child: Row(children: [Icon(Icons.workspace_premium, color: Colors.amber, size: 20), SizedBox(width: 8), Text('Gerenciar Troféus', style: TextStyle(color: Colors.white))]),
-              ),
-              const PopupMenuItem(
-                value: 'seasons',
-                child: Row(children: [Icon(Icons.calendar_month, color: AppColors.accentBlue, size: 20), SizedBox(width: 8), Text('Gerenciar Temporadas', style: TextStyle(color: Colors.white))]),
-              ),
-              const PopupMenuItem(
-                value: 'debug',
-                child: Row(children: [Icon(Icons.terminal, color: AppColors.highlightGreen, size: 20), SizedBox(width: 8), Text('Admin & Debug Cache', style: TextStyle(color: Colors.white))]),
-              ),
-              const PopupMenuItem(
-                value: 'settings',
-                child: Row(children: [Icon(Icons.settings, color: Colors.grey, size: 20), SizedBox(width: 8), Text('Configurações', style: TextStyle(color: Colors.white))]),
-              ),
-            ],
-          ),
+              },
+            ),
         ],
       ),
 

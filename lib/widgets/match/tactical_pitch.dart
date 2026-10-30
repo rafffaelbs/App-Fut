@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
@@ -39,6 +40,9 @@ class TacticalPitch extends StatefulWidget {
   /// Mostra chips (foto) em vez de cartas. Acima de 7 de linha é automático.
   final bool useChips;
 
+  /// Orientação do campo: horizontal (padrão) ou vertical.
+  final bool isHorizontal;
+
   /// Jogador destacado (ex.: toque num evento da timeline).
   final ValueListenable<String?>? highlightedPlayerId;
 
@@ -62,6 +66,7 @@ class TacticalPitch extends StatefulWidget {
     this.highlightedPlayerId,
     this.availableHeight = 0,
     this.useChips = false,
+    this.isHorizontal = true,
   });
 
   @override
@@ -79,6 +84,7 @@ class _TacticalPitchState extends State<TacticalPitch> {
   int? _cachedN;
   int? _cachedFormation;
   bool? _cachedChips;
+  bool? _cachedHorizontal;
   PitchFocus? _cachedFocus;
   PitchLayoutResult? _both;
   PitchLayoutResult? _focused;
@@ -96,6 +102,7 @@ class _TacticalPitchState extends State<TacticalPitch> {
         _cachedN == widget.teamSize &&
         _cachedFormation == _formationIndex &&
         _cachedChips == widget.useChips &&
+        _cachedHorizontal == widget.isHorizontal &&
         _cachedFocus == _focus) {
       return;
     }
@@ -103,12 +110,14 @@ class _TacticalPitchState extends State<TacticalPitch> {
     _cachedN = widget.teamSize;
     _cachedFormation = _formationIndex;
     _cachedChips = widget.useChips;
+    _cachedHorizontal = widget.isHorizontal;
     _cachedFocus = _focus;
     _both = PitchLayout.compute(
       lineCount: widget.teamSize,
       field: size,
       formation: _rows,
       chips: widget.useChips,
+      isHorizontal: widget.isHorizontal,
     );
     _focused = _focus == PitchFocus.both
         ? null
@@ -118,6 +127,7 @@ class _TacticalPitchState extends State<TacticalPitch> {
             focus: _focus,
             formation: _rows,
             chips: widget.useChips,
+            isHorizontal: widget.isHorizontal,
           );
   }
 
@@ -134,6 +144,34 @@ class _TacticalPitchState extends State<TacticalPitch> {
     final rows = _rows;
     final avail =
         widget.availableHeight > 0 ? widget.availableHeight - 36 : 0.0;
+
+    if (widget.isHorizontal) {
+      final order = PitchLayout.candidates(widget.teamSize,
+          chips: widget.useChips, isHorizontal: true);
+      for (final c in order) {
+        final h = PitchLayout.minHeightHorizontal(widget.teamSize,
+            density: c.density, scale: c.scale, formation: rows);
+        if (avail > 0 && h > avail) continue;
+        final r = PitchLayout.compute(
+            lineCount: widget.teamSize,
+            field: Size(width, h),
+            formation: rows,
+            chips: widget.useChips,
+            isHorizontal: true);
+        if (r.scale == c.scale) {
+          final idealH = width * 0.62;
+          final targetH = h > idealH ? h : idealH;
+          return avail > 0 && targetH > avail ? avail : targetH;
+        }
+      }
+      final c = order.last;
+      final h = PitchLayout.minHeightHorizontal(widget.teamSize,
+          density: c.density, scale: c.scale, formation: rows);
+      final idealH = width * 0.62;
+      final targetH = h > idealH ? h : idealH;
+      return avail > 0 && targetH > avail ? avail : targetH;
+    }
+
     final order =
         PitchLayout.candidates(widget.teamSize, chips: widget.useChips);
     for (final c in order) {
@@ -220,9 +258,13 @@ class _TacticalPitchState extends State<TacticalPitch> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Positioned.fill(
+                  Positioned.fill(
                     child: RepaintBoundary(
-                      child: CustomPaint(painter: _PitchPainter()),
+                      child: CustomPaint(
+                        painter: _PitchPainter(
+                          isHorizontal: widget.isHorizontal,
+                        ),
+                      ),
                     ),
                   ),
                   _teamBand(size, isRed: true),
@@ -242,6 +284,52 @@ class _TacticalPitchState extends State<TacticalPitch> {
     final color = isRed ? AppColors.redTeam : AppColors.whiteTeam;
     final textColor = isRed ? AppColors.textWhite : AppColors.deepBlue;
     final focused = _focus == (isRed ? PitchFocus.red : PitchFocus.white);
+
+    final badge = AnimatedOpacity(
+      duration: _anim,
+      opacity: hidden ? 0.35 : 1,
+      child: GestureDetector(
+        onTap: () =>
+            _toggleFocus(isRed ? PitchFocus.red : PitchFocus.white),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isRed ? 'TIME VERMELHO' : 'TIME BRANCO',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                focused ? Icons.zoom_out_map : Icons.zoom_in,
+                size: 12,
+                color: textColor,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (widget.isHorizontal) {
+      return Positioned(
+        top: 6,
+        left: isRed ? 8 : null,
+        right: isRed ? null : 8,
+        child: badge,
+      );
+    }
+
     final top = isRed ? size.height * 0.012 : null;
     final bottom = isRed ? null : size.height * 0.012;
     return Positioned(
@@ -249,43 +337,7 @@ class _TacticalPitchState extends State<TacticalPitch> {
       bottom: bottom,
       left: 0,
       right: 0,
-      child: Center(
-        child: AnimatedOpacity(
-          duration: _anim,
-          opacity: hidden ? 0.35 : 1,
-          child: GestureDetector(
-            onTap: () =>
-                _toggleFocus(isRed ? PitchFocus.red : PitchFocus.white),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isRed ? 'TIME VERMELHO' : 'TIME BRANCO',
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    focused ? Icons.zoom_out_map : Icons.zoom_in,
-                    size: 12,
-                    color: textColor,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: Center(child: badge),
     );
   }
 
@@ -662,16 +714,122 @@ class _DashedRRect extends CustomPainter {
   bool shouldRepaint(covariant _DashedRRect old) => old.color != color;
 }
 
-/// Gramado em perspectiva (trapézio): estreito ao fundo, largo na frente,
-/// com a mesma escala de largura que [PitchLayout.widthScale] usa nas cartas.
+/// Gramado com suporte a desenho horizontal (padrão) ou vertical.
 class _PitchPainter extends CustomPainter {
-  const _PitchPainter();
+  final bool isHorizontal;
+  const _PitchPainter({this.isHorizontal = true});
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
     final rect = Offset.zero & size;
 
+    if (isHorizontal) {
+      _paintHorizontal(canvas, size, w, h, rect);
+    } else {
+      _paintVertical(canvas, size, w, h, rect);
+    }
+  }
+
+  void _paintHorizontal(
+      Canvas canvas, Size size, double w, double h, Rect rect) {
+    // Listras verticais alternadas, sutis.
+    const stripes = 12;
+    for (var i = 0; i < stripes; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(w * i / stripes, 0, w / stripes + 0.5, h),
+        Paint()
+          ..color = i.isEven ? AppColors.pitchStripeA : AppColors.pitchStripeB,
+      );
+    }
+
+    // Vinheta nas bordas (preto 25%).
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          radius: 0.9,
+          colors: [
+            Colors.transparent,
+            AppColors.pitchEdge.withValues(alpha: 0.5),
+          ],
+        ).createShader(rect),
+    );
+
+    final line = Paint()
+      ..color = AppColors.textWhite.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final soft = Paint()
+      ..color = AppColors.textWhite.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    const top = 0.04, bottom = 0.96, l = 0.03, r = 0.97;
+    // Borda externa do campo
+    canvas.drawRect(Rect.fromLTRB(w * l, h * top, w * r, h * bottom), line);
+    // Linha divisória de meio de campo
+    canvas.drawLine(
+        Offset(w * 0.5, h * top), Offset(w * 0.5, h * bottom), line);
+
+    // Círculo central e ponto do meio
+    final c = Offset(w * 0.5, h * 0.5);
+    final circleRadius = math.min(w, h) * 0.18;
+    canvas.drawCircle(c, circleRadius, soft);
+    canvas.drawCircle(c, 2.5, line);
+
+    // Áreas e gols nas duas extremidades (esquerda = Red, direita = White)
+    for (final isLeft in const [true, false]) {
+      final goalLineX = isLeft ? w * l : w * r;
+      final penaltyBoxDepth = w * 0.14;
+      final penaltyBoxW = isLeft
+          ? goalLineX + penaltyBoxDepth
+          : goalLineX - penaltyBoxDepth;
+      final boxLeft = math.min(goalLineX, penaltyBoxW);
+      final boxRight = math.max(goalLineX, penaltyBoxW);
+
+      // Grande área
+      canvas.drawRect(
+        Rect.fromLTRB(boxLeft, h * 0.22, boxRight, h * 0.78),
+        line,
+      );
+
+      // Pequena área
+      final smallBoxDepth = w * 0.055;
+      final smallBoxW =
+          isLeft ? goalLineX + smallBoxDepth : goalLineX - smallBoxDepth;
+      canvas.drawRect(
+        Rect.fromLTRB(
+          math.min(goalLineX, smallBoxW),
+          h * 0.36,
+          math.max(goalLineX, smallBoxW),
+          h * 0.64,
+        ),
+        line,
+      );
+
+      // Marca do pênalti
+      final penaltySpotX =
+          isLeft ? goalLineX + w * 0.095 : goalLineX - w * 0.095;
+      canvas.drawCircle(Offset(penaltySpotX, h * 0.5), 2.0, line);
+
+      // Trave do gol
+      final goalDepth = w * 0.015;
+      final goalX = isLeft ? goalLineX - goalDepth : goalLineX + goalDepth;
+      canvas.drawRect(
+        Rect.fromLTRB(
+          math.min(goalLineX, goalX),
+          h * 0.40,
+          math.max(goalLineX, goalX),
+          h * 0.60,
+        ),
+        line,
+      );
+    }
+  }
+
+  void _paintVertical(
+      Canvas canvas, Size size, double w, double h, Rect rect) {
     // Ponto do campo (fx 0..1 na largura, fy 0..1 de fundo a frente).
     Offset pt(double fx, double fy) {
       final ws = PitchLayout.widthScale(fy);
@@ -762,5 +920,6 @@ class _PitchPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PitchPainter old) => false;
+  bool shouldRepaint(covariant _PitchPainter old) =>
+      old.isHorizontal != isHorizontal;
 }
