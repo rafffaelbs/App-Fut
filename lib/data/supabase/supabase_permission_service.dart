@@ -2,38 +2,67 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/supabase_config.dart';
 import '../../domain/services/permission_service.dart';
 
-class SupabasePermissionService implements PermissionService {
+abstract class PermissionDataSource {
+  Future<String?> groupCreatorId(String groupId);
+  Future<Map<String, dynamic>?> membershipRow(String groupId, String userId);
+}
+
+class SupabasePermissionDataSource implements PermissionDataSource {
   final SupabaseClient? _providedClient;
 
-  SupabasePermissionService({SupabaseClient? client})
+  SupabasePermissionDataSource({SupabaseClient? client})
       : _providedClient = client;
 
   SupabaseClient get _client => _providedClient ?? SupabaseConfig.client;
 
   @override
-  Future<bool> isAdmin(String groupId) async {
-    final currentUserId = SupabaseConfig.currentUserId;
-    if (currentUserId == null) return false;
-
-    // 1. Verify if the user is the creator of the group
+  Future<String?> groupCreatorId(String groupId) async {
     final groupResp = await _client
         .from('groups')
         .select('creator_id')
         .eq('id', groupId)
         .maybeSingle();
 
-    if (groupResp != null && groupResp['creator_id']?.toString() == currentUserId) {
-      return true;
-    }
+    return groupResp?['creator_id']?.toString();
+  }
 
-    // 2. Verify the role column in group_members
+  @override
+  Future<Map<String, dynamic>?> membershipRow(String groupId, String userId) async {
     final memberResp = await _client
         .from('group_members')
         .select('*, players!inner(*)')
         .eq('group_id', groupId)
-        .eq('players.creator_id', currentUserId)
+        .eq('players.creator_id', userId)
         .maybeSingle();
 
+    return memberResp;
+  }
+}
+
+class SupabasePermissionService implements PermissionService {
+  final PermissionDataSource _dataSource;
+  final String? Function() _currentUserId;
+
+  SupabasePermissionService({
+    PermissionDataSource? dataSource,
+    String? Function()? currentUserId,
+    SupabaseClient? client,
+  })  : _dataSource = dataSource ?? SupabasePermissionDataSource(client: client),
+        _currentUserId = currentUserId ?? (() => SupabaseConfig.currentUserId);
+
+  @override
+  Future<bool> isAdmin(String groupId) async {
+    final currentUserId = _currentUserId();
+    if (currentUserId == null) return false;
+
+    // 1. Verify if the user is the creator of the group
+    final creatorId = await _dataSource.groupCreatorId(groupId);
+    if (creatorId != null && creatorId == currentUserId) {
+      return true;
+    }
+
+    // 2. Verify the role column in group_members
+    final memberResp = await _dataSource.membershipRow(groupId, currentUserId);
     if (memberResp != null) {
       final role = (memberResp['role'] ?? memberResp['papel'])
           ?.toString()
