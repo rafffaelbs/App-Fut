@@ -1,7 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../repositories/supabase_service.dart';
-import '../data/supabase/supabase_auth_service.dart';
 
 /// Supabase configuration for the App-Fut project.
 class SupabaseConfig {
@@ -19,13 +18,6 @@ class SupabaseConfig {
 
   /// The active Supabase client instance.
   static SupabaseClient get client => Supabase.instance.client;
-
-  /// The currently authenticated Supabase Auth user.
-  static User? get currentUser {
-    final auth = SupabaseService.auth;
-    if (auth is SupabaseAuthService) return auth.currentUser;
-    return null;
-  }
 
   /// The current authenticated user's ID (UUID), or null if not authenticated.
   static String? get currentUserId => SupabaseService.auth.currentUserId;

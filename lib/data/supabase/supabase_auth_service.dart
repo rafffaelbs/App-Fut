@@ -9,10 +9,11 @@ class SupabaseAuthService implements AuthService {
 
   SupabaseClient get _client => _providedClient ?? SupabaseConfig.client;
 
-  User? get currentUser => _client.auth.currentUser;
-
   @override
   String? get currentUserId => _client.auth.currentUser?.id;
+
+  @override
+  String? get currentUserEmail => _client.auth.currentUser?.email;
 
   @override
   bool get isSignedIn => _client.auth.currentSession != null;

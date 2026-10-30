@@ -113,7 +113,7 @@ class _ProfileCheckState extends State<_ProfileCheck> {
     }
 
     if (!_hasProfile) {
-      final email = SupabaseConfig.currentUser?.email ?? '';
+      final email = SupabaseService.auth.currentUserEmail ?? '';
       return CompleteProfileScreen(
         initialEmail: email,
         onDone: (name) {
@@ -500,7 +500,7 @@ class _HomePageState extends State<HomePage> {
                   _buildDrawerTile(
                     icon: Icons.logout_rounded,
                     title: 'Sair',
-                    subtitle: SupabaseConfig.currentUser?.email ?? '',
+                    subtitle: SupabaseService.auth.currentUserEmail ?? '',
                     onTap: () async {
                       Navigator.pop(context);
                       await SupabaseService.auth.signOut();
