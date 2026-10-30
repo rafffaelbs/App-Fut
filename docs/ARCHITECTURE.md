@@ -86,6 +86,7 @@ docs/
 ```dart
 abstract class AuthService {
   String? get currentUserId;
+  String? get currentUserEmail;          // usado por main.dart (decidido na T2)
   bool get isSignedIn;
   Stream<bool> get signedInChanges;      // substitui auth.onAuthStateChange no AuthGate
   Future<void> signIn(String email, String password);
@@ -96,7 +97,7 @@ abstract class AuthService {
 
 abstract class PermissionService {
   Future<bool> isAdmin(String groupId);      // mesma regra de hoje: creator_id OU role == 'admin'
-  Future<void> requireAdmin(String groupId); // lança a MESMA exceção/mensagem de hoje
+  Future<void> requireAdmin(String groupId, [String? message]); // lança Exception(message); cada repositório passa o texto que já usava (decidido na T2)
 }
 ```
 

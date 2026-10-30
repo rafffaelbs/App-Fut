@@ -58,7 +58,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Future<void> _checkAdmin() async {
-    final isAdmin = await SupabaseService.instance.groupMembers.isCurrentUserAdmin(widget.groupId);
+    final isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 

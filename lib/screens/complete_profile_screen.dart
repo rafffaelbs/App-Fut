@@ -91,7 +91,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () => SupabaseService.instance.client.auth.signOut(),
+                onPressed: () => SupabaseService.auth.signOut(),
                 child: const Text('Sair', style: TextStyle(color: Colors.white38)),
               ),
             ],

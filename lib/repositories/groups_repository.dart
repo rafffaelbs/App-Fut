@@ -5,18 +5,19 @@ import '../config/supabase_config.dart';
 import '../models/group_model.dart';
 import '../models/player_model.dart';
 import '../models/group_member_model.dart';
-import 'group_members_repository.dart';
+import '../domain/services/permission_service.dart';
+import 'supabase_service.dart';
 
 /// Groups repository integrated with Supabase PostgreSQL.
 class GroupsRepository {
   final SupabaseClient _client;
-  final GroupMembersRepository _membersRepo;
+  final PermissionService _permissions;
 
   GroupsRepository({
     SupabaseClient? client,
-    GroupMembersRepository? membersRepo,
+    PermissionService? permissions,
   })  : _client = client ?? supabase,
-        _membersRepo = membersRepo ?? GroupMembersRepository(client: client);
+        _permissions = permissions ?? SupabaseService.permissions;
 
   /// Returns groups that the authenticated user is a part of or created.
   Future<List<GroupModel>> getMyGroups() async {
@@ -140,10 +141,10 @@ class GroupsRepository {
 
   /// Updates the group name
   Future<GroupModel> updateGroup(GroupModel group) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(group.id);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can edit the group.');
-    }
+    await _permissions.requireAdmin(
+      group.id,
+      'Access denied: Only administrators can edit the group.',
+    );
 
     final response = await _client
         .from('groups')
@@ -157,10 +158,10 @@ class GroupsRepository {
 
   /// Deletes a group
   Future<void> deleteGroup(String groupId) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can delete the group.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Access denied: Only administrators can delete the group.',
+    );
 
     await _client.from('groups').delete().eq('id', groupId);
   }

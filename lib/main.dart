@@ -1,19 +1,14 @@
-import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/theme/app_theme.dart';
 import 'package:app_do_fut/widgets/player/fifa_card.dart';
-import 'package:app_do_fut/screens/blank_screen.dart';
 import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/screens/complete_profile_screen.dart';
 import 'package:app_do_fut/screens/join_group_screen.dart';
 import 'package:app_do_fut/config/supabase_config.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:app_do_fut/models/group_model.dart';
-import 'package:app_do_fut/models/player_model.dart';
 import 'package:app_do_fut/repositories/supabase_service.dart';
 
 // Global route observer for tracking navigation
@@ -61,14 +56,16 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<AuthState>(
-      stream: SupabaseConfig.client.auth.onAuthStateChange,
+    return StreamBuilder<bool>(
+      stream: SupabaseService.auth.signedInChanges,
+      initialData: SupabaseService.auth.isSignedIn,
       builder: (context, snapshot) {
-        final session = SupabaseConfig.client.auth.currentSession;
-        if (session == null) {
+        final isSignedIn = snapshot.data ?? SupabaseService.auth.isSignedIn;
+        final userId = SupabaseService.auth.currentUserId;
+        if (!isSignedIn || userId == null) {
           return const LoginScreen();
         }
-        return _ProfileCheck(key: ValueKey(session.user.id));
+        return _ProfileCheck(key: ValueKey(userId));
       },
     );
   }
@@ -116,7 +113,7 @@ class _ProfileCheckState extends State<_ProfileCheck> {
     }
 
     if (!_hasProfile) {
-      final email = SupabaseConfig.currentUser?.email ?? '';
+      final email = SupabaseService.auth.currentUserEmail ?? '';
       return CompleteProfileScreen(
         initialEmail: email,
         onDone: (name) {
@@ -503,10 +500,10 @@ class _HomePageState extends State<HomePage> {
                   _buildDrawerTile(
                     icon: Icons.logout_rounded,
                     title: 'Sair',
-                    subtitle: SupabaseConfig.currentUser?.email ?? '',
+                    subtitle: SupabaseService.auth.currentUserEmail ?? '',
                     onTap: () async {
                       Navigator.pop(context);
-                      await SupabaseConfig.client.auth.signOut();
+                      await SupabaseService.auth.signOut();
                     },
                   ),
                 ],

@@ -3,12 +3,19 @@ import '../config/supabase_config.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
 
+import '../domain/services/permission_service.dart';
+import 'supabase_service.dart';
+
 /// Repository responsible for the `group_members` table.
 class GroupMembersRepository {
   final SupabaseClient _client;
+  final PermissionService _permissions;
 
-  GroupMembersRepository({SupabaseClient? client})
-      : _client = client ?? supabase;
+  GroupMembersRepository({
+    SupabaseClient? client,
+    PermissionService? permissions,
+  })  : _client = client ?? supabase,
+        _permissions = permissions ?? SupabaseService.permissions;
 
   /// Returns all members of a group, including their Player data.
   Future<List<GroupMemberModel>> getMembers(String groupId) async {
@@ -40,39 +47,15 @@ class GroupMembersRepository {
     return GroupMemberModel.fromMap(Map<String, dynamic>.from(response));
   }
 
-  /// Checks if the current authenticated user has an 'admin' role in the group.
-  /// This is used to decide what the UI shows -- the real enforcement lives
-  /// in the Supabase RLS policies (see 004_auth_and_permissions.sql), so
-  /// this can never be used to grant more access than the database allows.
-  Future<bool> isCurrentUserAdmin(String groupId) async {
-    final currentUserId = SupabaseConfig.currentUserId;
-    if (currentUserId == null) return false;
-
-    // 1. Verify if the user is the creator of the group
-    final groupResp = await _client
-        .from('groups')
-        .select('creator_id')
-        .eq('id', groupId)
-        .maybeSingle();
-
-    if (groupResp != null && groupResp['creator_id']?.toString() == currentUserId) {
-      return true;
-    }
-
-    // 2. Verify the role column in group_members
-    final member = await getMyMembership(groupId);
-    return member != null && member.isAdmin;
-  }
-
   /// Promotes a player to 'admin'.
   Future<void> promoteToAdmin({
     required String groupId,
     required String playerId,
   }) async {
-    final isAdmin = await isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can promote other users to admin.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Access denied: Only administrators can promote other users to admin.',
+    );
 
     await _client
         .from('group_members')
@@ -86,10 +69,10 @@ class GroupMembersRepository {
     required String groupId,
     required String playerId,
   }) async {
-    final isAdmin = await isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can change member roles.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Access denied: Only administrators can change member roles.',
+    );
 
     await _client
         .from('group_members')

@@ -1,18 +1,19 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/season_model.dart';
-import 'group_members_repository.dart';
+import '../domain/services/permission_service.dart';
+import 'supabase_service.dart';
 
 /// Repository for Seasons integrated with Supabase PostgreSQL.
 class SeasonsRepository {
   final SupabaseClient _client;
-  final GroupMembersRepository _membersRepo;
+  final PermissionService _permissions;
 
   SeasonsRepository({
     SupabaseClient? client,
-    GroupMembersRepository? membersRepo,
+    PermissionService? permissions,
   })  : _client = client ?? supabase,
-        _membersRepo = membersRepo ?? GroupMembersRepository(client: client);
+        _permissions = permissions ?? SupabaseService.permissions;
 
   /// Lists all seasons for a group.
   Future<List<SeasonModel>> getSeasons(String groupId) async {
@@ -50,10 +51,10 @@ class SeasonsRepository {
     DateTime? endDate,
     bool isActive = true,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can create seasons.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Access denied: Only administrators can create seasons.',
+    );
 
     if (isActive) {
       await _client
@@ -85,10 +86,10 @@ class SeasonsRepository {
 
   /// Updates an existing season.
   Future<SeasonModel> updateSeason(SeasonModel season) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(season.groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can edit season configurations.');
-    }
+    await _permissions.requireAdmin(
+      season.groupId,
+      'Access denied: Only administrators can edit season configurations.',
+    );
 
     if (season.isActive) {
       await _client
@@ -112,10 +113,10 @@ class SeasonsRepository {
     required String groupId,
     required String seasonId,
   }) async {
-    final isAdmin = await _membersRepo.isCurrentUserAdmin(groupId);
-    if (!isAdmin) {
-      throw Exception('Access denied: Only administrators can delete seasons.');
-    }
+    await _permissions.requireAdmin(
+      groupId,
+      'Access denied: Only administrators can delete seasons.',
+    );
 
     await _client.from('seasons').delete().eq('id', seasonId);
   }

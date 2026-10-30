@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
+import '../domain/services/auth_service.dart';
+import '../repositories/supabase_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,21 +28,21 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       if (_isSignUp) {
-        await Supabase.instance.client.auth.signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+        await SupabaseService.auth.signUp(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
         );
       } else {
-        await Supabase.instance.client.auth.signInWithPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+        await SupabaseService.auth.signIn(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
         );
       }
-      // AuthGate (main.dart) escuta onAuthStateChange e navega sozinho;
+      // AuthGate (main.dart) escuta signedInChanges e navega sozinho;
       // se essa tela tiver sido aberta como um push (ex: fluxo de sync),
       // fechamos ela também.
       if (mounted && Navigator.canPop(context)) Navigator.pop(context, true);
-    } on AuthException catch (e) {
+    } on AppAuthException catch (e) {
       String message = e.message;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
