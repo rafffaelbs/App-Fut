@@ -4,7 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/player_identity.dart';
 import '../utils/site_data_generator.dart';
-import '../config/supabase_config.dart';
+import '../data/supabase/supabase_config.dart';
 import 'cache_sync_manager.dart';
 
 class SyncService {

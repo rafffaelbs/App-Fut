@@ -10,7 +10,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../models/season_model.dart';
 import '../models/player_badge_model.dart';
 import '../repositories/supabase_service.dart';
-import '../config/supabase_config.dart';
+import '../data/supabase/supabase_config.dart';
 import '../utils/constants.dart';
 import '../utils/player_identity.dart';
 import '../utils/overall_calculator.dart';

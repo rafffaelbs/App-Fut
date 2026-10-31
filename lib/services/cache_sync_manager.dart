@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
+import '../data/supabase/supabase_config.dart';
 
 class CacheSyncStatus {
   final bool isSupabaseConnected;

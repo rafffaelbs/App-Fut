@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:app_do_fut/config/supabase_config.dart';
+import 'package:app_do_fut/data/supabase/supabase_config.dart';
 
 /// One-off service to fix the `tempo` field on events
 /// already migrated to Supabase that were missing the event time.

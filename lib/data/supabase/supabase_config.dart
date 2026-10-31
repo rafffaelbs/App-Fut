@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../repositories/supabase_service.dart';
+import '../../repositories/supabase_service.dart';
 
 /// Supabase configuration for the App-Fut project.
 class SupabaseConfig {

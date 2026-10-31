@@ -5,7 +5,7 @@ import 'package:app_do_fut/screens/group_dashboard_screen.dart';
 import 'package:app_do_fut/screens/login_screen.dart';
 import 'package:app_do_fut/screens/complete_profile_screen.dart';
 import 'package:app_do_fut/screens/join_group_screen.dart';
-import 'package:app_do_fut/config/supabase_config.dart';
+import 'package:app_do_fut/data/supabase/supabase_config.dart';
 import 'package:flutter/material.dart';
 
 import 'package:app_do_fut/models/group_model.dart';
