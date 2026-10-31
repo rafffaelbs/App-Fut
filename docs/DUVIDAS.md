@@ -108,4 +108,13 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Uma assinatura rígida `requireAdmin(String groupId)` sem mensagem forçaria a unificação sob uma mensagem genérica arbitrária, violando a Regra de Ouro nº 8 ("Exceções e mensagens de erro existentes devem ser preservadas com o mesmo texto").
 - **Ação:** A interface `PermissionService` foi ajustada para aceitar um parâmetro opcional `Future<void> requireAdmin(String groupId, [String? message])`. Quando chamada sem mensagem, utiliza o padrão `'Access denied: Only administrators can perform this action.'`. Nos repositórios, cada método repassa o seu texto original de erro, preservando 100% da compatibilidade e das mensagens existentes.
 
+---
 
+### 13. Remoção de telas inalcançáveis e artefatos órfãos — Tarefa T0g
+- **O que viu:**
+  1. As 4 telas inalcançáveis mapeadas no `docs/CODIGO_MORTO.md` (`lib/screens/expanded_ranking_screen.dart`, `lib/screens/group_ranking_screen.dart`, `lib/screens/tournament_screen.dart`, `lib/screens/blank_screen.dart`) foram verificadas via grep em `lib/` e `test/` e confirmou-se que não possuíam chamadores externos. Foram removidas com sucesso.
+  2. O `import 'package:app_do_fut/screens/blank_screen.dart';` em `lib/main.dart:5` já havia sido removido em commit prévio; todos os imports atuais de `lib/main.dart` estão em uso.
+  3. O widget `PlayerCard` em `lib/widgets/player/player_card.dart` não possui nenhum importador ou chamador no projeto (apenas `FifaCard` e `WaitingPlayerCard` são utilizados). Conforme a regra de ouro do projeto, não foi apagado e fica registrado aqui.
+  4. A tela `BlankScreen` referenciava dois assets inexistentes no disco (`assets/images/imagem_teste.jpeg` e `assets/audio/whatsapp.mp3`). Não há referências a eles no restante do código.
+- **Impacto:** Nenhum impacto no comportamento visível do app. Redução de 34 avisos/lints legados no `flutter analyze`.
+- **Ação:** Arquivos de tela removidos e apontamentos registrados aqui.
