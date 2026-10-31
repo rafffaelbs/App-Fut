@@ -1,0 +1,52 @@
+import 'package:flutter/widgets.dart';
+
+import 'app/app_services.dart';
+import 'data/supabase/action_logs_repository.dart';
+import 'data/supabase/group_members_repository.dart';
+import 'data/supabase/groups_repository.dart';
+import 'data/supabase/matches_repository.dart';
+import 'data/supabase/players_repository.dart';
+import 'data/supabase/seasons_repository.dart';
+import 'data/supabase/session_arrivals_repository.dart';
+import 'data/supabase/sessions_repository.dart';
+import 'data/supabase/supabase_auth_service.dart';
+import 'data/supabase/supabase_config.dart';
+import 'data/supabase/supabase_permission_service.dart';
+
+/// Inicializa o Supabase e monta o [AppServices] com as implementações Supabase*.
+Future<void> bootstrapPersonal() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseConfig.initialize();
+
+  final client = SupabaseConfig.client;
+  final auth = SupabaseAuthService();
+  final permissions = SupabasePermissionService();
+
+  final members = SupabaseGroupMembersRepository(
+    client: client,
+    permissions: permissions,
+  );
+  final actionLogs = SupabaseActionLogsRepository(client: client);
+  final players = SupabasePlayersRepository(
+    client: client,
+    permissions: permissions,
+    logsRepo: actionLogs,
+  );
+
+  AppServices.instance = AppServices(
+    groups: SupabaseGroupsRepository(client: client, permissions: permissions),
+    members: members,
+    seasons: SupabaseSeasonsRepository(
+      client: client,
+      permissions: permissions,
+    ),
+    players: players,
+    playerAccounts: players,
+    sessions: SupabaseSessionsRepository(client: client),
+    matches: SupabaseMatchesRepository(client: client),
+    sessionArrivals: SupabaseSessionArrivalsRepository(client: client),
+    actionLogs: actionLogs,
+    auth: auth,
+    permissions: permissions,
+  );
+}
