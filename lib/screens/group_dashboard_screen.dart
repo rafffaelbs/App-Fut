@@ -4,7 +4,7 @@ import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/season_stats_screen.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:app_do_fut/screens/settings_screen.dart';
-import 'package:app_do_fut/repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
 import 'package:flutter/material.dart';
 
@@ -40,7 +40,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
     // Fail-safe: qualquer erro na checagem = não é admin = sem engrenagem.
     bool isAdmin = false;
     try {
-      isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
+      isAdmin = await AppServices.instance.permissions.isAdmin(widget.groupId);
     } catch (_) {
       isAdmin = false;
     }
@@ -55,7 +55,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
   /// Abre a tela de perfil (a mesma usada no Elenco/Ranking) já com o
   /// jogador do usuário logado, sem precisar passar pela lista do Elenco.
   Future<void> _openMyProfile() async {
-    final membership = await SupabaseService.instance.groupMembers.getMyMembership(widget.groupId);
+    final membership = await AppServices.instance.members.getMyMembership(widget.groupId);
     if (!mounted) return;
 
     if (membership == null) {

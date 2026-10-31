@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../domain/services/auth_service.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,12 +28,12 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       if (_isSignUp) {
-        await SupabaseService.auth.signUp(
+        await AppServices.instance.auth.signUp(
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );
       } else {
-        await SupabaseService.auth.signIn(
+        await AppServices.instance.auth.signIn(
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class JoinGroupScreen extends StatefulWidget {
   final String defaultName;
@@ -29,11 +29,11 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final group = await SupabaseService.instance.groupMembers.findGroupByCode(code);
+      final group = await AppServices.instance.members.findGroupByCode(code);
       if (group == null) {
         throw Exception('Código de convite inválido.');
       }
-      await SupabaseService.instance.groupMembers.requestToJoin(
+      await AppServices.instance.members.requestToJoin(
         inviteCode: code,
         desiredName: name,
       );

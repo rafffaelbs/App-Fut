@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/group_member_model.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 /// Tela para o admin ver todos os membros do grupo e promover/rebaixar
 /// entre "admin" e "member". A validação de permissão real é feita pelo
@@ -31,8 +31,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final members = await SupabaseService.instance.groupMembers.getMembers(widget.groupId);
-      final myMembership = await SupabaseService.instance.groupMembers.getMyMembership(widget.groupId);
+      final members = await AppServices.instance.members.getMembers(widget.groupId);
+      final myMembership = await AppServices.instance.members.getMyMembership(widget.groupId);
       if (mounted) {
         setState(() {
           _members = members;
@@ -55,12 +55,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     setState(() => _updating.add(member.playerId));
     try {
       if (member.isAdmin) {
-        await SupabaseService.instance.groupMembers.demoteToMember(
+        await AppServices.instance.members.demoteToMember(
           groupId: widget.groupId,
           playerId: member.playerId,
         );
       } else {
-        await SupabaseService.instance.groupMembers.promoteToAdmin(
+        await AppServices.instance.members.promoteToAdmin(
           groupId: widget.groupId,
           playerId: member.playerId,
         );

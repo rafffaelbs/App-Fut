@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 /// Fila ("outbox") de partidas finalizadas que ainda não subiram pro Supabase.
 ///
@@ -83,7 +83,7 @@ class PendingMatchQueue {
         final attempts = (job['attempts'] as num?)?.toInt() ?? 0;
 
         try {
-          await SupabaseService.instance.matches.savePendingMatch(
+          await AppServices.instance.matches.savePendingMatch(
             matchId: matchId,
             match: Map<String, dynamic>.from(job['match'] as Map),
             lineups: (job['lineups'] as List)

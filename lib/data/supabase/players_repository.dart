@@ -1,3 +1,4 @@
+import 'supabase_permission_service.dart';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -12,7 +13,6 @@ import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/players_repository.dart';
 import '../../domain/repositories/player_account_repository.dart';
 import '../../domain/repositories/action_logs_repository.dart';
-import '../../repositories/supabase_service.dart';
 
 /// Nome do bucket público no Supabase Storage usado para os áudios
 /// customizados de comemoração de gol. Precisa existir e ser público
@@ -34,7 +34,7 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
     ActionLogsRepository? logsRepo,
   })  : _client = client ?? supabase,
         _cache = cache ?? CacheStore(),
-        _permissions = permissions ?? SupabaseService.permissions,
+        _permissions = permissions ?? SupabasePermissionService(),
         _logs = logsRepo ?? SupabaseActionLogsRepository(client: client ?? supabase);
 
   /// Returns every player linked to a given group.

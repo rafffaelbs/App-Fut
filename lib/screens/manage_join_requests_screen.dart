@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/player_model.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class ManageJoinRequestsScreen extends StatefulWidget {
   final String groupId;
@@ -26,7 +26,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final data = await SupabaseService.instance.groupMembers.listPendingRequests(widget.groupId);
+      final data = await AppServices.instance.members.listPendingRequests(widget.groupId);
       if (mounted) setState(() => _requests = data);
     } catch (e) {
       debugPrint('Error loading join requests: $e');
@@ -44,7 +44,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
     if (_processingIds.contains(requestId)) return; // já está processando, ignora clique duplicado
     setState(() => _processingIds.add(requestId));
     try {
-      await SupabaseService.instance.groupMembers.approveRequest(
+      await AppServices.instance.members.approveRequest(
         requestId,
         existingPlayerId: existingPlayerId,
       );
@@ -77,7 +77,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
     if (_processingIds.contains(requestId)) return;
     setState(() => _processingIds.add(requestId));
     try {
-      await SupabaseService.instance.groupMembers.rejectRequest(requestId);
+      await AppServices.instance.members.rejectRequest(requestId);
       if (mounted) setState(() => _requests.removeWhere((r) => r['id'].toString() == requestId));
     } catch (e) {
       if (mounted) {
@@ -95,7 +95,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   Future<void> _openApproveOptions(Map<String, dynamic> request) async {
     List<PlayerModel> ghostPlayers = [];
     try {
-      final allPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+      final allPlayers = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
       ghostPlayers = allPlayers.where((p) => p.isGhost).toList();
     } catch (e) {
       debugPrint('Error loading players for linking: $e');

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/season_model.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class ManageSeasonsScreen extends StatefulWidget {
   final String groupId;
@@ -25,7 +25,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   Future<void> _loadSeasons() async {
     setState(() => _isLoading = true);
     try {
-      final fetched = await SupabaseService.instance.seasons.getSeasons(widget.groupId);
+      final fetched = await AppServices.instance.seasons.getSeasons(widget.groupId);
       setState(() => _seasons = fetched);
     } catch (e) {
       debugPrint('Error loading seasons: $e');
@@ -155,7 +155,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
 
                     try {
                       if (season == null) {
-                        await SupabaseService.instance.seasons.createSeason(
+                        await AppServices.instance.seasons.createSeason(
                           groupId: widget.groupId,
                           name: nameCtrl.text.trim(),
                           startDate: startDate,
@@ -169,7 +169,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                           endDate: endDate,
                           isActive: isActiveFlag,
                         );
-                        await SupabaseService.instance.seasons.updateSeason(updated);
+                        await AppServices.instance.seasons.updateSeason(updated);
                       }
                       await _loadSeasons();
                     } catch (e) {
@@ -224,7 +224,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.instance.seasons.deleteSeason(
+      await AppServices.instance.seasons.deleteSeason(
         groupId: widget.groupId,
         seasonId: season.id,
       );

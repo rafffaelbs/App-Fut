@@ -2,7 +2,7 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/models/player_model.dart';
 import 'package:app_do_fut/models/match_model.dart';
 import 'package:app_do_fut/models/season_model.dart';
-import 'package:app_do_fut/repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
 import 'package:app_do_fut/utils/rating_calculator.dart';
@@ -196,9 +196,9 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       // de sequencialmente (await, await, await) corta a espera de
       // "soma dos 3 tempos" pra "o tempo do mais lento dos 3".
       final results = await Future.wait([
-        SupabaseService.instance.matches.getMatchesByGroup(widget.groupId),
-        SupabaseService.instance.players.getPlayersByGroup(widget.groupId),
-        SupabaseService.instance.seasons.getSeasons(widget.groupId),
+        AppServices.instance.matches.getMatchesByGroup(widget.groupId),
+        AppServices.instance.players.getPlayersByGroup(widget.groupId),
+        AppServices.instance.seasons.getSeasons(widget.groupId),
       ]);
 
       final matchesList = results[0] as List<MatchModel>;

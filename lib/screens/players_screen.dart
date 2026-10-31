@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
 import '../widgets/shared/icon_picker_modal.dart';
@@ -58,7 +58,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   }
 
   Future<void> _checkAdmin() async {
-    final isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
+    final isAdmin = await AppServices.instance.permissions.isAdmin(widget.groupId);
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
@@ -70,7 +70,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     setState(() => isLoading = true);
 
     try {
-      final fetchedJogadores = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+      final fetchedJogadores = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
       
       final List<Map<String, dynamic>> mappedPlayers = fetchedJogadores.map((j) => {
         'id': j.id,
@@ -138,7 +138,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _addNewPlayer(String name, double rating, String? iconPath) async {
     setState(() => isLoading = true);
     try {
-      await SupabaseService.instance.players.createGhostPlayer(
+      await AppServices.instance.players.createGhostPlayer(
         groupId: widget.groupId,
         name: name,
         avatarUrl: iconPath,
@@ -187,7 +187,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
   Future<void> _removePlayer(Map<String, dynamic> player) async {
     setState(() => isLoading = true);
     try {
-      await SupabaseService.instance.players.removePlayerFromGroup(
+      await AppServices.instance.players.removePlayerFromGroup(
         groupId: widget.groupId,
         playerId: player['id'].toString(),
       );

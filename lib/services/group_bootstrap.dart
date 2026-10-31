@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../models/player_model.dart';
 import '../utils/stats_calculator.dart';
 import '../utils/rating_calculator.dart';
@@ -83,7 +83,7 @@ class GroupBootstrap {
   Future<bool> _run(String groupId) async {
     status.value = BootstrapStatus.loading;
     try {
-      final svc = SupabaseService.instance;
+      final svc = AppServices.instance;
       final players = await svc.players.getPlayersByGroup(groupId);
       if (players.isEmpty) {
         status.value = BootstrapStatus.offline;

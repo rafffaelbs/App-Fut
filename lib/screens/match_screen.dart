@@ -17,7 +17,7 @@ import '../services/sync_service.dart';
 import '../services/pending_match_queue.dart';
 import '../services/group_bootstrap.dart';
 import 'package:uuid/uuid.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../models/session_model.dart';
 import '../models/match_lineup_model.dart';
 import '../models/match_event_model.dart';
@@ -306,11 +306,11 @@ class _MatchScreenState extends State<MatchScreen>
         };
       }).toList();
 
-      await SupabaseService.instance.sessionArrivals
+      await AppServices.instance.sessionArrivals
           .replaceArrivals(widget.tournamentId, draft)
           .timeout(const Duration(seconds: 10));
 
-      await SupabaseService.instance.sessions.updateRuntimeState(
+      await AppServices.instance.sessions.updateRuntimeState(
         widget.tournamentId,
         isRunning: isMatchRunning,
         secondsPlayed: _secondsPlayedBeforePause,
@@ -377,7 +377,7 @@ class _MatchScreenState extends State<MatchScreen>
     // de cair pra listas vazias.
     if (!prefs.containsKey('present_players_$id') && widget.groupId.isNotEmpty) {
       try {
-        final arrivals = await SupabaseService.instance.sessionArrivals
+        final arrivals = await AppServices.instance.sessionArrivals
             .getArrivals(id);
         if (arrivals.isNotEmpty) {
           Map<String, dynamic> hydrate(Map<String, dynamic> arrival) {
@@ -410,7 +410,7 @@ class _MatchScreenState extends State<MatchScreen>
           // SessionModel, então busca direto pra não perder esse estado.
           try {
             final raw =
-                await SupabaseService.instance.sessions.getRuntimeState(id);
+                await AppServices.instance.sessions.getRuntimeState(id);
             if (raw != null) {
               await prefs.setInt(
                   'seconds_played_$id', (raw['seconds_played'] as num?)?.toInt() ?? 0);
@@ -442,7 +442,7 @@ class _MatchScreenState extends State<MatchScreen>
     if (!mounted) return; // usuário já saiu da tela enquanto isso carregava
     // Configurações da pelada (limite de vitórias, duração...) do cache local.
     final SessionModel? cachedSession =
-        await SupabaseService.instance.sessions.getCachedSession(widget.tournamentId);
+        await AppServices.instance.sessions.getCachedSession(widget.tournamentId);
     if (!mounted) return;
     setState(() {
       if (prefs.containsKey('present_players_$id'))
@@ -549,7 +549,7 @@ class _MatchScreenState extends State<MatchScreen>
   /// Carrega as partidas já encerradas desta sessão para cálculo do banco.
   Future<void> _loadSessionMatches() async {
     try {
-      final matches = await SupabaseService.instance.matches
+      final matches = await AppServices.instance.matches
           .getMatchesBySession(widget.tournamentId);
       if (matches.isNotEmpty) {
         if (!mounted) return;
@@ -588,7 +588,7 @@ class _MatchScreenState extends State<MatchScreen>
   Future<void> _refreshSessionSettings() async {
     try {
       final fresh =
-          await SupabaseService.instance.sessions.getSessionById(widget.tournamentId);
+          await AppServices.instance.sessions.getSessionById(widget.tournamentId);
       if (fresh == null || !mounted) return;
       setState(() => _applySessionSettings(fresh));
     } catch (e) {
@@ -2812,7 +2812,7 @@ class _MatchScreenState extends State<MatchScreen>
     }
     if (allSavedPlayers.isEmpty && widget.groupId.isNotEmpty) {
       try {
-        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        final fetched = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
         if (fetched.isNotEmpty) {
           setState(() {
             allSavedPlayers = fetched

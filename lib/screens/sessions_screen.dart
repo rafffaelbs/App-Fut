@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/session_model.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../utils/session_grouping.dart';
 import '../widgets/session/session_delete_dialog.dart';
 import '../widgets/session/session_form_sheet.dart';
@@ -32,14 +32,14 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   Future<void> _checkAdmin() async {
-    final isAdmin = await SupabaseService.permissions.isAdmin(widget.groupId);
+    final isAdmin = await AppServices.instance.permissions.isAdmin(widget.groupId);
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
 
   Future<void> _loadSessions() async {
     setState(() => isLoading = true);
     try {
-      final fetched = await SupabaseService.instance.sessions
+      final fetched = await AppServices.instance.sessions
           .getSessionsByGroup(widget.groupId);
       if (!mounted) return;
       setState(() {
@@ -56,11 +56,11 @@ class _SessionsScreenState extends State<SessionsScreen> {
   /// Avatares dos confirmados são decorativos: falha (offline) não bloqueia a lista.
   Future<void> _loadParticipants(List<SessionModel> fetched) async {
     try {
-      final idsBySession = await SupabaseService.instance.sessionArrivals
+      final idsBySession = await AppServices.instance.sessionArrivals
           .getPlayerIdsBySessions(fetched.map((s) => s.id).toList());
       if (idsBySession.isEmpty) return;
       final players =
-          await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+          await AppServices.instance.players.getPlayersByGroup(widget.groupId);
       final byId = {
         for (final p in players) p.id: {...p.toMap(), ...p.cosmeticsToMap()},
       };
@@ -85,7 +85,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
       existing: existing,
       onSubmit: (SessionModel session) async {
         // Gets the current season to link to the session
-        final currentSeason = await SupabaseService.instance.seasons
+        final currentSeason = await AppServices.instance.seasons
             .getCurrentSeason(widget.groupId);
 
         final model = SessionModel(
@@ -106,9 +106,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
         try {
           if (existing == null) {
-            await SupabaseService.instance.sessions.createSession(model);
+            await AppServices.instance.sessions.createSession(model);
           } else {
-            await SupabaseService.instance.sessions.updateSession(model.copyWith(id: existing.id));
+            await AppServices.instance.sessions.updateSession(model.copyWith(id: existing.id));
           }
           await _loadSessions();
         } catch (e) {
@@ -129,7 +129,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
     setState(() => isLoading = true);
     try {
-      await SupabaseService.instance.sessions.deleteSession(session.id);
+      await AppServices.instance.sessions.deleteSession(session.id);
       await _loadSessions();
     } catch (e) {
       debugPrint('Error deleting session: $e');

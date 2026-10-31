@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../constants/app_colors.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../constants/cosmetic_effects.dart';
 import '../models/cosmetic_effect.dart';
 import '../utils/constants.dart';
@@ -85,7 +85,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
 
     try {
-      final fetched = await SupabaseService.instance.players.getPlayersByGroup(
+      final fetched = await AppServices.instance.players.getPlayersByGroup(
         widget.groupId,
       );
       _allPlayers = fetched
@@ -111,7 +111,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     }
 
     try {
-      _isAdmin = await SupabaseService.permissions.isAdmin(
+      _isAdmin = await AppServices.instance.permissions.isAdmin(
         widget.groupId,
       );
     } catch (_) {
@@ -126,7 +126,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     if (!_isAdmin) return;
     setState(() => _uploadingPlayerId = playerId);
     try {
-      final updated = await SupabaseService.instance.players.setGoalSound(
+      final updated = await AppServices.instance.players.setGoalSound(
         playerId: playerId,
         audioFileName: audioFile,
         groupId: widget.groupId,
@@ -555,7 +555,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     if (!_isAdmin) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
-      final updated = await SupabaseService.instance.players.setNameEffect(
+      final updated = await AppServices.instance.players.setNameEffect(
         groupId: widget.groupId,
         playerId: playerId,
         effect: effect,
@@ -579,7 +579,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     if (!_isAdmin) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
-      final updated = await SupabaseService.instance.players.setAdvancedStat(
+      final updated = await AppServices.instance.players.setAdvancedStat(
         groupId: widget.groupId,
         playerId: playerId,
         patch: patch,
@@ -615,7 +615,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
     if (!_isAdmin) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
-      final updated = await SupabaseService.instance.players.setMonthlyHighlight(
+      final updated = await AppServices.instance.players.setMonthlyHighlight(
         groupId: widget.groupId,
         playerId: playerId,
         value: value,

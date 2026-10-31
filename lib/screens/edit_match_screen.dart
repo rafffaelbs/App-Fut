@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../utils/player_identity.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../models/match_event_model.dart';
 
 class EditMatchScreen extends StatefulWidget {
@@ -60,7 +60,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
     }
     if (groupPlayers.isEmpty && widget.groupId.isNotEmpty) {
       try {
-        final fetched = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        final fetched = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
         groupPlayers = fetched.map((p) => {'id': p.id, 'name': p.displayName}).toList();
       } catch (_) {}
     }
@@ -447,7 +447,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
 
       // Updates only the score + events. Lineup and rating history
       // NÃO são tocados aqui de propósito (ver MatchesRepository).
-      await SupabaseService.instance.matches.updatePartialMatch(
+      await AppServices.instance.matches.updatePartialMatch(
         matchId: matchIdVar,
         teamAScore: scoreRed,
         teamBScore: scoreWhite,

@@ -9,7 +9,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/season_model.dart';
 import '../models/player_badge_model.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../data/supabase/supabase_config.dart';
 import '../utils/constants.dart';
 import '../utils/player_identity.dart';
@@ -107,7 +107,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _checkAdminStatus() async {
-    final isAdmin = await SupabaseService.permissions
+    final isAdmin = await AppServices.instance.permissions
         .isAdmin(widget.groupId);
     if (mounted) setState(() => _isAdmin = isAdmin);
   }
@@ -128,7 +128,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Future<void> _loadPlayerDetails() async {
     List<Map<String, dynamic>> players = [];
     try {
-      final fetched = await SupabaseService.instance.players.getPlayersByGroup(
+      final fetched = await AppServices.instance.players.getPlayersByGroup(
         widget.groupId,
       );
       players = fetched
@@ -206,7 +206,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
     List<SeasonModel> seasons = [];
     try {
-      seasons = await SupabaseService.instance.seasons.getSeasons(
+      seasons = await AppServices.instance.seasons.getSeasons(
         widget.groupId,
       );
     } catch (_) {}
@@ -1003,7 +1003,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     setState(() => _isSavingIcon = true);
     try {
       // 1. Persistir no Supabase
-      await SupabaseService.instance.players.setPlayerIcon(
+      await AppServices.instance.players.setPlayerIcon(
         playerId: widget.playerId,
         iconPath: iconPath,
       );
@@ -1050,7 +1050,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Future<void> _saveGoalSound(String? audioFile) async {
     setState(() => _isSavingAudio = true);
     try {
-      final updated = await SupabaseService.instance.players.setGoalSound(
+      final updated = await AppServices.instance.players.setGoalSound(
         playerId: widget.playerId,
         audioFileName: audioFile,
         groupId: widget.groupId,
@@ -1399,7 +1399,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
     // Update in Supabase
     try {
-      final player = await SupabaseService.instance.players.getPlayerById(
+      final player = await AppServices.instance.players.getPlayerById(
         widget.playerId,
       );
       if (player != null) {
@@ -1407,7 +1407,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         final updatedBadges = List.of(player.manualBadges);
         updatedBadges.add(PlayerBadgeModel(id: id, icon: icon, title: title));
         final updatedPlayer = player.copyWith(manualBadges: updatedBadges);
-        await SupabaseService.instance.players.updatePlayer(updatedPlayer);
+        await AppServices.instance.players.updatePlayer(updatedPlayer);
       }
     } catch (e) {
       debugPrint("Error updating badge in Supabase: $e");
@@ -2013,7 +2013,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
               // 2. Persiste no Supabase — remove por ID se disponível
               try {
-                final player = await SupabaseService.instance.players
+                final player = await AppServices.instance.players
                     .getPlayerById(widget.playerId);
                 if (player != null) {
                   List<PlayerBadgeModel> updatedBadges;
@@ -2030,7 +2030,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   }
                   final updatedPlayer =
                       player.copyWith(manualBadges: updatedBadges);
-                  await SupabaseService.instance.players
+                  await AppServices.instance.players
                       .updatePlayer(updatedPlayer);
                 }
               } catch (e) {
@@ -3546,7 +3546,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                   }
                                   setModal(() => saving = true);
                                   try {
-                                    final updated = await SupabaseService
+                                    final updated = await AppServices
                                         .instance.players
                                         .setCommunityAttributes(
                                       groupId: widget.groupId,

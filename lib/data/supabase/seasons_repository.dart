@@ -1,9 +1,9 @@
+import 'supabase_permission_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
 import '../../models/season_model.dart';
 import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/seasons_repository.dart';
-import '../../repositories/supabase_service.dart';
 
 /// Repository for Seasons integrated with Supabase PostgreSQL.
 class SupabaseSeasonsRepository implements SeasonsRepository {
@@ -14,7 +14,7 @@ class SupabaseSeasonsRepository implements SeasonsRepository {
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,
-        _permissions = permissions ?? SupabaseService.permissions;
+        _permissions = permissions ?? SupabasePermissionService();
 
   /// Lists all seasons for a group.
   Future<List<SeasonModel>> getSeasons(String groupId) async {

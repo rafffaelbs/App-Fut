@@ -1,3 +1,4 @@
+import 'supabase_permission_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
 import '../../models/group_member_model.dart';
@@ -5,7 +6,6 @@ import '../../models/group_model.dart';
 
 import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/membership_repository.dart';
-import '../../repositories/supabase_service.dart';
 
 /// Repository responsible for the `group_members` table.
 class SupabaseGroupMembersRepository implements MembershipRepository {
@@ -16,7 +16,7 @@ class SupabaseGroupMembersRepository implements MembershipRepository {
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,
-        _permissions = permissions ?? SupabaseService.permissions;
+        _permissions = permissions ?? SupabasePermissionService();
 
   /// Returns all members of a group, including their Player data.
   Future<List<GroupMemberModel>> getMembers(String groupId) async {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 /// Shown right after login/signup when the authenticated user has no
 /// player profile yet (i.e. wasn't auto-linked to an existing "ghost"
@@ -91,7 +91,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () => SupabaseService.auth.signOut(),
+                onPressed: () => AppServices.instance.auth.signOut(),
                 child: const Text('Sair', style: TextStyle(color: Colors.white38)),
               ),
             ],

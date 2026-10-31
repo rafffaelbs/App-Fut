@@ -5,7 +5,7 @@ import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class HistoryScreen extends StatefulWidget {
   final String tournamentId;
@@ -99,7 +99,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
     try {
       if (widget.groupId.isNotEmpty) {
-        final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        final groupPlayers = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
         for (final p in groupPlayers) {
           _idToName[p.id] = p.displayName;
         }
@@ -108,12 +108,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       // Default duration: comes from the session itself (duration_minutes), no longer
       // de uma chave solta em SharedPreferences.
       String defaultDuration = '08:00';
-      final session = await SupabaseService.instance.sessions.getSessionById(widget.tournamentId);
+      final session = await AppServices.instance.sessions.getSessionById(widget.tournamentId);
       if (session?.durationMinutes != null) {
         defaultDuration = '${session!.durationMinutes.toString().padLeft(2, '0')}:00';
       }
 
-      final matchList = await SupabaseService.instance.matches
+      final matchList = await AppServices.instance.matches
           .getMatchesBySession(widget.tournamentId);
 
       final List<dynamic> mapped = matchList.map(_toLegacyMatch).toList();
@@ -171,7 +171,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       // the deletion to the associated events, lineups, and rating history.
       for (final match in history) {
         if (match['id'] != null) {
-          await SupabaseService.instance.matches.deleteMatch(match['id']);
+          await AppServices.instance.matches.deleteMatch(match['id']);
         }
       }
       await _loadHistory();

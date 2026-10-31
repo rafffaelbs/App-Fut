@@ -1,3 +1,4 @@
+import 'supabase_permission_service.dart';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -7,7 +8,6 @@ import '../../models/player_model.dart';
 import '../../models/group_member_model.dart';
 import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/groups_repository.dart';
-import '../../repositories/supabase_service.dart';
 
 /// Groups repository integrated with Supabase PostgreSQL.
 class SupabaseGroupsRepository implements GroupsRepository {
@@ -18,7 +18,7 @@ class SupabaseGroupsRepository implements GroupsRepository {
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,
-        _permissions = permissions ?? SupabaseService.permissions;
+        _permissions = permissions ?? SupabasePermissionService();
 
   /// Returns groups that the authenticated user is a part of or created.
   Future<List<GroupModel>> getMyGroups() async {

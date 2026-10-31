@@ -13,7 +13,7 @@ import '../utils/rating_calculator.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/ranking_player_bits.dart';
 import '../widgets/shared/stars_badge.dart';
-import '../repositories/supabase_service.dart';
+import 'package:app_do_fut/app/app_services.dart';
 
 class RankingScreen extends StatefulWidget {
   final String groupId;
@@ -84,7 +84,7 @@ class _RankingScreenState extends State<RankingScreen> {
     // 1. Load players from the group
     try {
       if (widget.groupId.isNotEmpty) {
-        final groupPlayers = await SupabaseService.instance.players.getPlayersByGroup(widget.groupId);
+        final groupPlayers = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
         for (final p in groupPlayers) {
           iconMap[p.id] = p.avatarUrl;
           playerMetaMap[p.id] = {
@@ -131,7 +131,7 @@ class _RankingScreenState extends State<RankingScreen> {
     // 2. Load matches for the session
     List<dynamic> history = [];
     try {
-      final matchList = await SupabaseService.instance.matches.getMatchesBySession(widget.tournamentId);
+      final matchList = await AppServices.instance.matches.getMatchesBySession(widget.tournamentId);
       if (matchList.isNotEmpty) {
         history = matchList.map((p) => {
           'id': p.id,
