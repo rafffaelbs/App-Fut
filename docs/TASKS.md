@@ -254,6 +254,14 @@ Branch: `refactor/supabase-data-layer` · Depende de T1 e T2
    repositórios o usam). Mantenha o prefixo de chaves "cache:".
 6) Atualize os imports. Não mude a lógica interna dos métodos (inclusive o uso de
    CacheStore como fallback e de PendingMatchQueue.readAll em _pendingMatches).
+7) As constantes estáticas (action* de ActionLogsRepository e validNameEffects de
+   PlayersRepository) agora existem nas interfaces de lib/domain/repositories. Apague as
+   cópias nas classes Supabase* e aponte TODAS as referências (inclusive nas telas) para as
+   constantes das interfaces. Os VALORES não mudam.
+8) A T2 criou SupabaseService.auth e SupabaseService.permissions (estáticos): mantenha-os
+   por enquanto (a T3b os substitui por AppServices). getMyPlayers (players_repository
+   ~linha 260) continua usando o cliente Supabase direto: é permitido dentro de
+   lib/data/supabase.
 Aceite: flutter analyze ok; flutter test ok; app compila.
 ```
 
