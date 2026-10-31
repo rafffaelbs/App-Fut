@@ -409,12 +409,8 @@ class _MatchScreenState extends State<MatchScreen>
           // As colunas de runtime (score/timer/streak) não fazem parte do
           // SessionModel, então busca direto pra não perder esse estado.
           try {
-            final raw = await SupabaseService.instance.client
-                .from('sessions')
-                .select(
-                    'seconds_played,is_running,score_red,score_white,red_streak,white_streak,is_overtime,started_at')
-                .eq('id', id)
-                .maybeSingle();
+            final raw =
+                await SupabaseService.instance.sessions.getRuntimeState(id);
             if (raw != null) {
               await prefs.setInt(
                   'seconds_played_$id', (raw['seconds_played'] as num?)?.toInt() ?? 0);

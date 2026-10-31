@@ -1,18 +1,18 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
+import '../data/supabase/supabase_config.dart';
 import '../domain/services/auth_service.dart';
 import '../domain/services/permission_service.dart';
 import '../data/supabase/supabase_auth_service.dart';
 import '../data/supabase/supabase_permission_service.dart';
-import 'groups_repository.dart';
-import 'players_repository.dart';
-import 'group_members_repository.dart';
-import 'matches_repository.dart';
-import 'ratings_repository.dart';
-import 'sessions_repository.dart';
-import 'seasons_repository.dart';
-import 'session_arrivals_repository.dart';
-import 'action_logs_repository.dart';
+import '../data/supabase/groups_repository.dart';
+import '../data/supabase/players_repository.dart';
+import '../data/supabase/group_members_repository.dart';
+import '../data/supabase/matches_repository.dart';
+import '../data/supabase/ratings_repository.dart';
+import '../data/supabase/sessions_repository.dart';
+import '../data/supabase/seasons_repository.dart';
+import '../data/supabase/session_arrivals_repository.dart';
+import '../data/supabase/action_logs_repository.dart';
 
 /// Central service for Supabase integration.
 class SupabaseService {
@@ -27,26 +27,26 @@ class SupabaseService {
     client = SupabaseConfig.client;
 
     // Initialize repositories
-    groupMembers = GroupMembersRepository(client: client, permissions: permissions);
-    actionLogs = ActionLogsRepository(client: client);
-    players = PlayersRepository(client: client, permissions: permissions, logsRepo: actionLogs);
-    groups = GroupsRepository(client: client, permissions: permissions);
-    seasons = SeasonsRepository(client: client, permissions: permissions);
-    sessions = SessionsRepository(client: client);
-    matches = MatchesRepository(client: client);
-    ratings = RatingsRepository(client: client);
-    sessionArrivals = SessionArrivalsRepository(client: client);
+    groupMembers = SupabaseGroupMembersRepository(client: client, permissions: permissions);
+    actionLogs = SupabaseActionLogsRepository(client: client);
+    players = SupabasePlayersRepository(client: client, permissions: permissions, logsRepo: actionLogs);
+    groups = SupabaseGroupsRepository(client: client, permissions: permissions);
+    seasons = SupabaseSeasonsRepository(client: client, permissions: permissions);
+    sessions = SupabaseSessionsRepository(client: client);
+    matches = SupabaseMatchesRepository(client: client);
+    ratings = SupabaseRatingsRepository(client: client);
+    sessionArrivals = SupabaseSessionArrivalsRepository(client: client);
   }
 
   late final SupabaseClient client;
 
-  late final GroupMembersRepository groupMembers;
-  late final GroupsRepository groups;
-  late final SeasonsRepository seasons;
-  late final PlayersRepository players;
-  late final SessionsRepository sessions;
-  late final MatchesRepository matches;
-  late final RatingsRepository ratings;
-  late final SessionArrivalsRepository sessionArrivals;
-  late final ActionLogsRepository actionLogs;
+  late final SupabaseGroupMembersRepository groupMembers;
+  late final SupabaseGroupsRepository groups;
+  late final SupabaseSeasonsRepository seasons;
+  late final SupabasePlayersRepository players;
+  late final SupabaseSessionsRepository sessions;
+  late final SupabaseMatchesRepository matches;
+  late final SupabaseRatingsRepository ratings;
+  late final SupabaseSessionArrivalsRepository sessionArrivals;
+  late final SupabaseActionLogsRepository actionLogs;
 }

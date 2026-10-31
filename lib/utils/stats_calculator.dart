@@ -6,20 +6,20 @@ import 'rating_calculator.dart';
 
 import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
-import '../repositories/matches_repository.dart';
-import '../repositories/players_repository.dart';
+import '../data/supabase/matches_repository.dart';
+import '../data/supabase/players_repository.dart';
 
 /// Utility to aggregate a group's entire match history.
 Future<List<dynamic>> getAllGroupMatches(String groupId) async {
   try {
-    final matchesRepo = MatchesRepository();
+    final matchesRepo = SupabaseMatchesRepository();
     // getMatchesByGroup não traz mais o objeto completo do jogador dentro de
     // cada escalação (isso duplicava um payload enorme). Por isso buscamos
     // os nomes aqui, à parte -- é uma consulta leve (1 linha por jogador do
     // grupo) e já é cacheada pelo PlayersRepository.
     final results = await Future.wait([
       matchesRepo.getMatchesByGroup(groupId),
-      PlayersRepository().getPlayersByGroup(groupId),
+      SupabasePlayersRepository().getPlayersByGroup(groupId),
     ]);
     final matches = results[0] as List<MatchModel>;
     final players = results[1] as List<dynamic>;
