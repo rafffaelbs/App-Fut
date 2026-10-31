@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
+import 'supabase_config.dart';
+import '../../domain/repositories/session_arrivals_repository.dart';
 
 /// Persists the "quem está jogando" state of a session that is still in
 /// progress (presença, times parciais e goleiros) incrementally to
@@ -10,10 +11,10 @@ import '../config/supabase_config.dart';
 /// only exist once a partida is finalizada. `session_arrivals` is the
 /// "rascunho" (draft) of quem chegou, times e goleiros enquanto a pelada
 /// ainda está rolando.
-class SessionArrivalsRepository {
+class SupabaseSessionArrivalsRepository implements SessionArrivalsRepository {
   final SupabaseClient _client;
 
-  SessionArrivalsRepository({SupabaseClient? client})
+  SupabaseSessionArrivalsRepository({SupabaseClient? client})
       : _client = client ?? supabase;
 
   /// Returns the current draft presence list for a session, ordered by

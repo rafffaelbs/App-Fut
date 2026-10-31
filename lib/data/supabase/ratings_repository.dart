@@ -1,11 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
-import '../models/rating_history_model.dart';
+import 'supabase_config.dart';
+import '../../models/rating_history_model.dart';
 
-class RatingsRepository {
+class SupabaseRatingsRepository {
   final SupabaseClient _client;
 
-  RatingsRepository({SupabaseClient? client})
+  SupabaseRatingsRepository({SupabaseClient? client})
       : _client = client ?? supabase;
 
   Future<List<RatingHistoryModel>> getPlayerHistoryBySeason({

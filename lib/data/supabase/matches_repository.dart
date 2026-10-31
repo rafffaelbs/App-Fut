@@ -1,19 +1,20 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../config/supabase_config.dart';
-import '../models/match_model.dart';
-import '../models/match_lineup_model.dart';
-import '../models/match_event_model.dart';
-import '../models/rating_history_model.dart';
-import '../services/cache_store.dart';
-import '../services/pending_match_queue.dart';
+import 'supabase_config.dart';
+import 'cache_store.dart';
+import '../../models/match_model.dart';
+import '../../models/match_lineup_model.dart';
+import '../../models/match_event_model.dart';
+import '../../models/rating_history_model.dart';
+import '../../services/pending_match_queue.dart';
+import '../../domain/repositories/matches_repository.dart';
 
-class MatchesRepository {
+class SupabaseMatchesRepository implements MatchesRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
   static const _uuid = Uuid();
 
-  MatchesRepository({SupabaseClient? client, CacheStore? cache})
+  SupabaseMatchesRepository({SupabaseClient? client, CacheStore? cache})
       : _client = client ?? supabase,
         _cache = cache ?? CacheStore();
 

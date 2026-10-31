@@ -1,15 +1,18 @@
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../config/supabase_config.dart';
-import '../models/cosmetic_effect.dart';
-import '../models/player_model.dart';
-import '../utils/overall_calculator.dart';
-import '../models/player_badge_model.dart';
-import '../services/cache_store.dart';
-import '../domain/services/permission_service.dart';
+import 'supabase_config.dart';
+import 'cache_store.dart';
 import 'action_logs_repository.dart';
-import 'supabase_service.dart';
+import '../../models/cosmetic_effect.dart';
+import '../../models/player_model.dart';
+import '../../models/player_badge_model.dart';
+import '../../utils/overall_calculator.dart';
+import '../../domain/services/permission_service.dart';
+import '../../domain/repositories/players_repository.dart';
+import '../../domain/repositories/player_account_repository.dart';
+import '../../domain/repositories/action_logs_repository.dart';
+import '../../repositories/supabase_service.dart';
 
 /// Nome do bucket público no Supabase Storage usado para os áudios
 /// customizados de comemoração de gol. Precisa existir e ser público
@@ -17,14 +20,14 @@ import 'supabase_service.dart';
 const String goalSoundsBucket = 'goal-sounds';
 
 /// Players repository integrated with Supabase PostgreSQL.
-class PlayersRepository {
+class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
   final PermissionService _permissions;
   final ActionLogsRepository _logs;
   static const _uuid = Uuid();
 
-  PlayersRepository({
+  SupabasePlayersRepository({
     SupabaseClient? client,
     CacheStore? cache,
     PermissionService? permissions,
@@ -32,7 +35,7 @@ class PlayersRepository {
   })  : _client = client ?? supabase,
         _cache = cache ?? CacheStore(),
         _permissions = permissions ?? SupabaseService.permissions,
-        _logs = logsRepo ?? ActionLogsRepository(client: client ?? supabase);
+        _logs = logsRepo ?? SupabaseActionLogsRepository(client: client ?? supabase);
 
   /// Returns every player linked to a given group.
   ///
@@ -356,9 +359,6 @@ class PlayersRepository {
     return updated;
   }
 
-  /// Valores aceitos para o efeito de nome (mutuamente exclusivos).
-  static const List<String> validNameEffects = ['gold', 'silver', 'bronze'];
-
   /// Define (ou remove, se [effect] for null) o efeito visual do nome de
   /// um jogador. Somente admins do grupo podem chamar isso -- a checagem
   /// aqui é só para a UI reagir rápido; a garantia real é a policy de
@@ -372,7 +372,7 @@ class PlayersRepository {
       groupId,
       'Acesso negado: somente administradores podem definir efeitos de nome.',
     );
-    if (effect != null && !validNameEffects.contains(effect)) {
+    if (effect != null && !PlayersRepository.validNameEffects.contains(effect)) {
       throw ArgumentError('Efeito de nome inválido: $effect');
     }
 

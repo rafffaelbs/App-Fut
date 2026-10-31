@@ -1,19 +1,20 @@
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../config/supabase_config.dart';
-import '../models/group_model.dart';
-import '../models/player_model.dart';
-import '../models/group_member_model.dart';
-import '../domain/services/permission_service.dart';
-import 'supabase_service.dart';
+import 'supabase_config.dart';
+import '../../models/group_model.dart';
+import '../../models/player_model.dart';
+import '../../models/group_member_model.dart';
+import '../../domain/services/permission_service.dart';
+import '../../domain/repositories/groups_repository.dart';
+import '../../repositories/supabase_service.dart';
 
 /// Groups repository integrated with Supabase PostgreSQL.
-class GroupsRepository {
+class SupabaseGroupsRepository implements GroupsRepository {
   final SupabaseClient _client;
   final PermissionService _permissions;
 
-  GroupsRepository({
+  SupabaseGroupsRepository({
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,

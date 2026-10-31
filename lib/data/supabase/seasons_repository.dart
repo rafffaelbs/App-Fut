@@ -1,15 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
-import '../models/season_model.dart';
-import '../domain/services/permission_service.dart';
-import 'supabase_service.dart';
+import 'supabase_config.dart';
+import '../../models/season_model.dart';
+import '../../domain/services/permission_service.dart';
+import '../../domain/repositories/seasons_repository.dart';
+import '../../repositories/supabase_service.dart';
 
 /// Repository for Seasons integrated with Supabase PostgreSQL.
-class SeasonsRepository {
+class SupabaseSeasonsRepository implements SeasonsRepository {
   final SupabaseClient _client;
   final PermissionService _permissions;
 
-  SeasonsRepository({
+  SupabaseSeasonsRepository({
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,

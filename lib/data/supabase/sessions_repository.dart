@@ -1,14 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
-import '../models/session_model.dart';
-import '../services/cache_store.dart';
+import 'supabase_config.dart';
+import 'cache_store.dart';
+import '../../models/session_model.dart';
+import '../../domain/repositories/sessions_repository.dart';
 
 /// Repository for sessions ("peladas") integrated with Supabase PostgreSQL.
-class SessionsRepository {
+class SupabaseSessionsRepository implements SessionsRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
 
-  SessionsRepository({SupabaseClient? client, CacheStore? cache})
+  SupabaseSessionsRepository({SupabaseClient? client, CacheStore? cache})
       : _client = client ?? supabase,
         _cache = cache ?? CacheStore();
 
@@ -171,5 +172,16 @@ class SessionsRepository {
   /// Deletes a session and its matches in cascade.
   Future<void> deleteSession(String sessionId) async {
     await _client.from('sessions').delete().eq('id', sessionId);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getRuntimeState(String sessionId) async {
+    final response = await _client
+        .from('sessions')
+        .select(
+            'seconds_played,is_running,score_red,score_white,red_streak,white_streak,is_overtime,started_at')
+        .eq('id', sessionId)
+        .maybeSingle();
+    return response != null ? Map<String, dynamic>.from(response) : null;
   }
 }

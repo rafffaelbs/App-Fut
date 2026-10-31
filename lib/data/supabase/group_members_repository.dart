@@ -1,17 +1,18 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
-import '../models/group_member_model.dart';
-import '../models/group_model.dart';
+import 'supabase_config.dart';
+import '../../models/group_member_model.dart';
+import '../../models/group_model.dart';
 
-import '../domain/services/permission_service.dart';
-import 'supabase_service.dart';
+import '../../domain/services/permission_service.dart';
+import '../../domain/repositories/membership_repository.dart';
+import '../../repositories/supabase_service.dart';
 
 /// Repository responsible for the `group_members` table.
-class GroupMembersRepository {
+class SupabaseGroupMembersRepository implements MembershipRepository {
   final SupabaseClient _client;
   final PermissionService _permissions;
 
-  GroupMembersRepository({
+  SupabaseGroupMembersRepository({
     SupabaseClient? client,
     PermissionService? permissions,
   })  : _client = client ?? supabase,
