@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'app/app_features.dart';
 import 'app/app_services.dart';
 import 'data/prefs/prefs_custom_badges_repository.dart';
 import 'data/prefs/prefs_match_history_store.dart';
@@ -49,6 +50,7 @@ Future<void> bootstrapPersonal() async {
   final customBadges = PrefsCustomBadgesRepository();
 
   AppServices.instance = AppServices(
+    features: const AppFeatures.personal(),
     groups: SupabaseGroupsRepository(client: client, permissions: permissions),
     members: members,
     seasons: SupabaseSeasonsRepository(

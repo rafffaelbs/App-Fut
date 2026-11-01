@@ -1,3 +1,4 @@
+import 'app_features.dart';
 import '../domain/repositories/action_logs_repository.dart';
 import '../domain/repositories/custom_badges_repository.dart';
 import '../domain/repositories/groups_repository.dart';
@@ -19,6 +20,7 @@ import '../domain/services/site_sync_service.dart';
 /// Definido uma vez na inicialização (bootstrap_*.dart).
 class AppServices {
   AppServices({
+    required this.features,
     required this.groups,
     required this.members,
     required this.seasons,
@@ -49,6 +51,7 @@ class AppServices {
 
   static set instance(AppServices value) => _instance = value;
 
+  final AppFeatures features;
   final GroupsRepository groups;
   final MembershipRepository members;
   final SeasonsRepository seasons;
