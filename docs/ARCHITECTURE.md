@@ -41,6 +41,7 @@ lib/
     services/          # AuthService, PermissionService, MatchOutbox, SiteSyncService, DiagnosticsService
   data/
     supabase/          # implementações Supabase* (e supabase_config.dart)
+    prefs/             # implementações em SharedPreferences (histórico local de partidas, insígnias personalizadas) — T3e
     local/             # drift/SQLite (Fase 3)
   app/
     app_services.dart  # guarda as implementações ativas (substitui SupabaseService.instance)
@@ -67,7 +68,7 @@ docs/
 | `SessionsRepository` | `sessions_repository.dart` | 7 métodos (`getCachedSession`, `getSessionById`, `getSessionsByGroup`, `createSession`, `updateSession`, `updateRuntimeState`, `deleteSession`) **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). Fora: `getSessionsBySeason`, `finalizeSession` (0 chamadores). |
 | `MatchesRepository` | `matches_repository.dart` | **Só estes (5):** `getMatchesBySession`, `getMatchesByGroup`, `savePendingMatch`, `updatePartialMatch`, `deleteMatch`. Fora: `saveFullMatch` e `updateFullMatch` (0 chamadores). `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
 | `RatingsRepository` | `ratings_repository.dart` | **Não terá interface:** os 4 métodos (`getPlayerHistoryBySeason`, `getFullPlayerHistory`, `getLatestRatingsBySeason`, `recordRatingsBatch`) têm 0 chamadores. **Hoje nada lê nem grava `rating_history`**: as notas são calculadas em memória a partir de partidas e eventos. |
-| `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)` e `saveCustomBadges(groupId, badges)`. Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: SharedPreferences (igual hoje). Public: tabela no SQLite. |
+| `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)` e `saveCustomBadges(groupId, badges)`. Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: `PrefsCustomBadgesRepository` em `lib/data/prefs/` (SharedPreferences, igual hoje). Public: tabela no SQLite. |
 | `MatchHistoryStore` (novo) | `match_screen`, ranking, `stats_calculator` | `readSession(sessionId)` e `appendToSession(sessionId, record)`. Hoje é `match_history_<sessão>` em `SharedPreferences`. Personal: igual hoje. Public: derivado das tabelas do SQLite. Quem usa é decidido na T3e. |
 | `SessionArrivalsRepository` | `session_arrivals_repository.dart` | `getArrivals`, `getPlayerIdsBySessions`, `replaceArrivals`. Fora: `clearArrivals` (0 chamadores). |
 | `PlayersRepository` | `players_repository.dart` | **Só estes (11):** `getPlayersByGroup`, `createGhostPlayer`, `updatePlayer`, `setPlayerIcon`, `setGoalSound`, `removePlayerFromGroup`, `getPlayerById`, `setNameEffect`, `setMonthlyHighlight`, `setCommunityAttributes`, `setAdvancedStat`. Fora: `setCosmetics` (0 chamadores). |
@@ -134,7 +135,7 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 ### 4.5 Métodos sem chamadores e telas inalcançáveis (de `docs/CODIGO_MORTO.md`)
 
 - **Métodos com 0 chamadores** (não entram em nenhuma interface e não serão implementados no SQLite; **permanecem** nas classes Supabase por enquanto, não apagar nesta fase): `ActionLogsRepository.getRecentLogs/exportAndCleanOldLogs`; `GroupMembersRepository.addMember/removeMember`; `MatchesRepository.saveFullMatch/updateFullMatch`; `PlayersRepository.createPlayerWithUser/linkEmailToPlayer/uploadGoalSound/clearGoalSound/setCosmetics`; `RatingsRepository` (os 4 métodos); `SessionArrivalsRepository.clearArrivals`; `SessionsRepository.getSessionsBySeason/finalizeSession`.
-- **Telas inalcançáveis** (nenhuma rota ou botão as abre): `expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`. Removidas na T0g (se o Enzo confirmar).
+- **Telas inalcançáveis** (nenhuma rota ou botão as abre): `expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`. Removidas na T0g (Enzo confirmou).
 - Se algum desses itens for planejado (ex.: tela de logs do admin, login por e-mail, gráfico de evolução usando `rating_history`), reavaliar antes de apagar o código.
 
 ## 5. Feature flags (`AppFeatures`)
@@ -168,8 +169,8 @@ Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e**
 
 Problemas no código atual (só afetam o build web; no celular funcionam):
 
-- `dart:io`/`File`/`path_provider` em `ranking_screen.dart`, `history_screen.dart`, `group_ranking_screen.dart` (screenshot/compartilhar) → usar import condicional ou `kIsWeb` e esconder/adaptar.
-- `sync_service.dart`, `data_migration_service.dart`, `fix_event_times_service.dart` usam `dart:io` → **não podem ser importados** pelo entrypoint web.
+- `dart:io`/`File`/`path_provider` em `ranking_screen.dart` e `history_screen.dart` (screenshot/compartilhar) → usar import condicional ou `kIsWeb` e esconder/adaptar. (`group_ranking_screen.dart` foi removida na T0g.)
+- Os scripts em `tool/legacy/` usam `dart:io` e ficam fora do app. `sync_service.dart` perdeu o `dart:io` na T0c; confirmar na Fase 2.
 - `file_picker` (usa `path`), `share_plus` e `audioplayers` têm limitações na web.
 
 Modelo de acesso (login por e-mail ou link público) **ainda em decisão**; a segurança real é por RLS de `SELECT`, não por esconder botão.
@@ -177,21 +178,21 @@ Modelo de acesso (login por e-mail ou link público) **ainda em decisão**; a se
 ## 8. Checklist manual de regressão (rodar no celular após cada merge na main)
 
 1. Abrir o app e entrar (login).
-2. Abrir o grupo e ver ranking e ranking expandido.
+2. Abrir o grupo e ver o ranking de uma pelada e as estatísticas da temporada.
 3. Criar uma pelada, adicionar presentes.
 4. Jogar uma partida: gol, cronômetro, finalizar. Conferir que salvou.
 5. Ver histórico e estatísticas da temporada.
 6. Abrir um jogador: carta e comparação.
 7. Com usuário **não admin**: engrenagem não aparece em Peladas/Elenco/Estatísticas.
 8. Com admin: gerenciar membros e temporadas abre normalmente.
-9. **Modo avião:** finalizar uma partida, ver o selo de pendente e o banner vermelho; desligar o modo avião, tocar "Reenviar agora" e conferir que a partida aparece no Supabase. (Obrigatório depois de qualquer tarefa que toque fila, cache ou `match_screen`.)
+9. **Modo avião:** finalizar uma partida e ver o selo de pendentes (e, no diálogo de pendências, o erro e o botão "Tentar agora"; não existe banner nem botão "Reenviar agora", esses nomes vinham do inventário). Fechar o app por completo e abrir de novo (ainda em modo avião): a partida pendente continua aparecendo no histórico e no ranking. Desligar o modo avião, abrir a tela de partida da pelada (ou tocar "Tentar agora") e conferir que a partida aparece no Supabase, **uma só vez** (sem duplicar). (Obrigatório depois de qualquer tarefa que toque fila, cache ou `match_screen`.)
 
 ## 9. Proteção contra queda de internet — como funciona hoje (NÃO MEXER)
 
 Fonte: `docs/INVENTARIO_OFFLINE.md`. São 4 camadas independentes; **nenhuma é o `sync_service`**:
 
 1. **Estado da partida em andamento** — `match_screen._saveMatchState()` grava a cada ação no `SharedPreferences` (placar, eventos, times, cronômetro, goleiros...). Se o app fecha, `_loadMatchState()` restaura e recalcula o cronômetro pela hora de início.
-2. **Fila de envio (outbox)** — `PendingMatchQueue`: ao finalizar, a partida é gravada em `pending_matches_v1` e enviada em segundo plano, com reenvio automático (5s, 10s, 20s, 40s, 60s), ao abrir a tela, ao iniciar partida, ao voltar do background e pelo botão "Reenviar agora". Telas de histórico/ranking mesclam as pendentes via `_pendingMatches()`.
+2. **Fila de envio (outbox)** — `SupabaseMatchOutbox` (antes `PendingMatchQueue`): ao finalizar, a partida é gravada em `pending_matches_v1` e enviada em segundo plano. **Gatilhos reais de envio** (confirmados no código, `DUVIDAS.md` item 14): 2 s depois de enfileirar; reenvio automático por timer (5s, 10s, 20s, 40s, 60s) enquanto o app está aberto; `initState` da `MatchScreen`; `_startMatch`; botão "Tentar agora" do diálogo de pendências. **Não existe** reenvio ao voltar do background nem ao abrir o app (`_onAppResumed` não existe; era um erro do `INVENTARIO_OFFLINE.md`). Consequência: se o app for fechado com partida pendente, ela só sobe quando a tela de partida for aberta de novo. Telas de histórico/ranking mesclam as pendentes via `_pendingMatches()`. Melhoria prevista no `BACKLOG.md`.
 3. **Cache de leitura** — `CacheStore` (chaves `cache:*`) usado pelos repositórios de partidas, sessões e jogadores como fallback quando a rede falha.
 4. **Snapshot do elenco** — `GroupBootstrap` (`players_<groupId>`, `ratings_snapshot_at_<groupId>`) permite sorteio/draft sem rede.
 
@@ -209,5 +210,5 @@ O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envi
 | Cache de leitura | `cache:*` | Só repositórios Supabase. | Fica em `lib/data/supabase/`; não existe no public. |
 | Estado da partida em andamento | `present_players_*`, `team_*`, `score_*`, `is_running_*`... | Temporário. | Continua em SharedPreferences nos dois apps; **não** vai para o `.db`. Avisar na tela que exportar/importar deve ser feito entre partidas. |
 | Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
-| Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Lidos por `GroupRankingScreen`, `stats_calculator` e `site_data_generator`; praticamente ninguém grava. | Se o T0e confirmar tela inalcançável, remover junto com ela. |
+| Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`; ninguém grava, mas o aparelho do Enzo pode ainda ter dados antigos nessas chaves. | **Não remover na T3e** (poderia mudar números no aparelho dele). Continuam como leitura legada; decidir depois da Fase 1. No app public ficam vazias e inofensivas. |
 | Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
