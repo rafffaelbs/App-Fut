@@ -1151,7 +1151,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _saveBadges() async {
-    if (!_canAdminister) return;
+    if (AppServices.instance.features.isReadOnly) return;
     await AppServices.instance.customBadges
         .saveCustomBadges(widget.groupId, _customBadges);
   }
@@ -1555,7 +1555,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onPressed: _canAdminister ? () => _showBadgeSheet() : null,
+                          onPressed: !AppServices.instance.features.isReadOnly ? () => _showBadgeSheet() : null,
                         ),
                       ],
                     ),
@@ -1664,7 +1664,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                   : FontStyle.normal,
                             ),
                           ),
-                          trailing: _canAdminister
+                          trailing: !AppServices.instance.features.isReadOnly
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -1734,7 +1734,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
             _buildAudiosTab(),
           ],
         ),
-        floatingActionButton: (_currentTabIndex == 0 && _customBadges.isNotEmpty && _canAdminister)
+        floatingActionButton: (_currentTabIndex == 0 && _customBadges.isNotEmpty && !AppServices.instance.features.isReadOnly)
             ? FloatingActionButton.extended(
                 backgroundColor: Colors.amber,
                 onPressed: () => _showBadgeSheet(),
