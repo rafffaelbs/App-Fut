@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'player_identity.dart';
-import 'rating_calculator.dart';
-import 'stats_calculator.dart';
+import '../../utils/player_identity.dart';
+import '../../utils/rating_calculator.dart';
+import '../../utils/stats_calculator.dart';
 
 class SiteDataGenerator {
   /// Generates the `site_data` data package containing pre-calculated statistics
@@ -99,7 +99,6 @@ class SiteDataGenerator {
       double sumRatings = 0;
       int ratingCount = 0;
       
-      Map<String, double> sessionPlayerRatings = {};
       Map<String, int> sessionPlayerGoals = {};
       Map<String, int> sessionPlayerAssists = {};
       
@@ -321,7 +320,6 @@ class SiteDataGenerator {
       String sessionDate = match['session_date'] ?? match['date'] ?? '';
       String tId = getSeasonInfo(sessionDate, returnParentId: true);
       String seasonType = getSeasonInfo(sessionDate, returnParentId: false); // 'main' or 'pre'
-      String rawSeasonId = getSeasonInfo(sessionDate, returnParentId: false); // We can just use tId and seasonType
       
       if (tId != currentTemporada) {
         currentTemporada = tId;

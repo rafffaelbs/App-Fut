@@ -1,26 +1,38 @@
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/player_identity.dart';
-import '../utils/site_data_generator.dart';
-import '../data/supabase/supabase_config.dart';
-import 'cache_sync_manager.dart';
+import '../../domain/services/diagnostics_service.dart';
+import '../../domain/services/site_sync_service.dart';
+import '../../utils/player_identity.dart';
+import 'site_data_generator.dart';
+import 'supabase_config.dart';
 
-class SyncService {
-  final SupabaseClient _supabase = SupabaseConfig.client;
-  final CacheSyncManager _cacheSyncManager = CacheSyncManager();
+class SupabaseSiteSyncService implements SiteSyncService {
+  final SupabaseClient? _customClient;
+  final DiagnosticsService? _diagnosticsService;
   static const Uuid _uuid = Uuid();
 
+  SupabaseSiteSyncService({
+    SupabaseClient? client,
+    DiagnosticsService? diagnosticsService,
+  })  : _customClient = client,
+        _diagnosticsService = diagnosticsService;
+
+  SupabaseClient get _supabase => _customClient ?? SupabaseConfig.client;
+
+  String? _cachedCode;
+
   /// Faz o backup de todos os dados locais (SharedPreferences) para o Supabase.
+  @override
   Future<void> exportDataToSupabase(String syncCode) async {
     final prefs = await SharedPreferences.getInstance();
     await _normalizeUuidData(prefs);
     await _normalizeSessionIds(prefs);
     final keys = prefs.getKeys();
-    
-    Map<String, dynamic> data = {};
-    for (String key in keys) {
+
+    final Map<String, dynamic> data = {};
+    for (final String key in keys) {
       data[key] = prefs.get(key);
     }
 
@@ -34,42 +46,24 @@ class SyncService {
       'last_updated': DateTime.now().toIso8601String(),
     });
 
-    await _cacheSyncManager.recordCloudSyncSuccess();
+    await _diagnosticsService?.recordCloudSyncSuccess();
   }
 
-
-  /// Gera um novo sync code
-  String? _cachedCode;
-
+  /// Gera ou recupera o sync code ativo
+  @override
   Future<String> getOrCreateSyncCode() async {
     if (_cachedCode != null) return _cachedCode!;
 
     final prefs = await SharedPreferences.getInstance();
-    String? existingCode = prefs.getString('my_sync_code');
+    final String? existingCode = prefs.getString('my_sync_code');
 
     if (existingCode != null && existingCode.isNotEmpty) {
       _cachedCode = existingCode;
       return existingCode;
     }
 
-    // Generates a random 6-character alphanumeric code
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    var rnd = DateTime.now().millisecondsSinceEpoch;
-    String newCode = '';
-    for (var i = 0; i < 6; i++) {
-      int index = (rnd % chars.length).toInt();
-      newCode += chars[index];
-      rnd = (rnd / 2).floor(); // naive simple random
-    }
-
-    // Se preferir um random mais forte:
-    // math.Random r = math.Random();
-    // newCode = List.generate(6, (i) => chars[r.nextInt(chars.length)]).join();
-    // Solved using basic math for now, without importing the math package.
-    
-    // Naive way was fine but lets just hardcode a simple unique logic using timestamp
-    String timeStr = DateTime.now().millisecondsSinceEpoch.toString();
-    newCode = "SNC${timeStr.substring(timeStr.length - 4)}"; // e.g. SNC1234
+    final String timeStr = DateTime.now().millisecondsSinceEpoch.toString();
+    final String newCode = "SNC${timeStr.substring(timeStr.length - 4)}"; // e.g. SNC1234
 
     await prefs.setString('my_sync_code', newCode);
     _cachedCode = newCode;
@@ -188,17 +182,17 @@ class SyncService {
 
       for (int i = 0; i < sessions.length; i++) {
         final session = sessions[i];
-        String oldId = session['id'].toString();
+        final String oldId = session['id'].toString();
 
         // Regex to detect the old format: session_ followed by many digits (timestamp)
         final oldFormat = RegExp(r'^session_\d{10,13}$');
         if (oldFormat.hasMatch(oldId)) {
-          String name = (session['title'] ?? 'pelada')
+          final String name = (session['title'] ?? 'pelada')
               .toString()
               .toLowerCase()
               .replaceAll(RegExp(r'[^a-z0-9]'), '_');
-          String random = const Uuid().v4().substring(0, 4);
-          String newId = 'session_${name}_$random';
+          final String random = const Uuid().v4().substring(0, 4);
+          final String newId = 'session_${name}_$random';
 
           // Renames the match history key if it exists
           final oldHistoryKey = 'match_history_$oldId';
@@ -223,4 +217,3 @@ class SyncService {
     }
   }
 }
-
