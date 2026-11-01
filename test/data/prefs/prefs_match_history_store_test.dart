@@ -8,12 +8,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('PrefsMatchHistoryStore tests', () {
-    test('chave ausente retorna lista vazia', () async {
-      SharedPreferences.setMockInitialValues({});
+    test('chave ausente x chave com lista vazia', () async {
+      SharedPreferences.setMockInitialValues({
+        'match_history_sess-empty': jsonEncode([]),
+      });
       final store = PrefsMatchHistoryStore();
 
-      final result = await store.readSession('session-absent');
-      expect(result, isEmpty);
+      // Chave ausente
+      expect(await store.hasSession('sess-absent'), isFalse);
+      final absentResult = await store.readSession('sess-absent');
+      expect(absentResult, isEmpty);
+
+      // Chave com lista vazia
+      expect(await store.hasSession('sess-empty'), isTrue);
+      final emptyResult = await store.readSession('sess-empty');
+      expect(emptyResult, isEmpty);
     });
 
     test('adicionar duas vezes e ler preserva a ordem exata', () async {
@@ -23,6 +32,7 @@ void main() {
       await store.appendToSession('sess-1', {'id': 'match-first', 'order': 1});
       await store.appendToSession('sess-1', {'id': 'match-second', 'order': 2});
 
+      expect(await store.hasSession('sess-1'), isTrue);
       final result = await store.readSession('sess-1');
       expect(result, hasLength(2));
       expect(result[0]['id'], equals('match-first'));
@@ -37,6 +47,7 @@ void main() {
       });
       final store = PrefsMatchHistoryStore();
 
+      expect(await store.hasSession('sess-corrupt'), isTrue);
       final result = await store.readSession('sess-corrupt');
       expect(result, isEmpty);
 
@@ -45,6 +56,28 @@ void main() {
       final recovered = await store.readSession('sess-corrupt');
       expect(recovered, hasLength(1));
       expect(recovered[0]['id'], equals('match-recovered'));
+    });
+
+    test('item que não é Map é descartado na leitura', () async {
+      SharedPreferences.setMockInitialValues({
+        'match_history_sess-mixed': jsonEncode([
+          'string_item',
+          42,
+          {'id': 'valid-match-1', 'scoreRed': 2, 'scoreWhite': 1},
+          null,
+          true,
+          {'id': 'valid-match-2', 'scoreRed': 0, 'scoreWhite': 0},
+        ]),
+      });
+      final store = PrefsMatchHistoryStore();
+
+      expect(await store.hasSession('sess-mixed'), isTrue);
+      final result = await store.readSession('sess-mixed');
+      expect(result, hasLength(2));
+      expect(result[0]['id'], equals('valid-match-1'));
+      expect(result[0]['scoreRed'], equals(2));
+      expect(result[1]['id'], equals('valid-match-2'));
+      expect(result[1]['scoreRed'], equals(0));
     });
 
     test('nome exato da chave no SharedPreferences segue match_history_<sessionId>', () async {

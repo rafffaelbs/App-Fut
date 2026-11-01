@@ -19,6 +19,16 @@ class PrefsCustomBadgesRepository implements CustomBadgesRepository {
   static String keyFor(String groupId) => '$keyPrefix$groupId';
 
   @override
+  Future<bool> hasCustomBadges(String groupId) async {
+    try {
+      final prefs = await _prefs;
+      return prefs.containsKey(keyFor(groupId));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> getCustomBadges(String groupId) async {
     try {
       final prefs = await _prefs;

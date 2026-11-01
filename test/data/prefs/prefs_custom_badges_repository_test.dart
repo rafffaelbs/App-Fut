@@ -8,12 +8,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('PrefsCustomBadgesRepository tests', () {
-    test('chave ausente retorna lista vazia', () async {
-      SharedPreferences.setMockInitialValues({});
+    test('chave ausente x chave com lista vazia', () async {
+      SharedPreferences.setMockInitialValues({
+        'custom_badges_group-empty': jsonEncode([]),
+      });
       final repo = PrefsCustomBadgesRepository();
 
-      final result = await repo.getCustomBadges('group-absent');
-      expect(result, isEmpty);
+      // Chave ausente
+      expect(await repo.hasCustomBadges('group-absent'), isFalse);
+      final absentResult = await repo.getCustomBadges('group-absent');
+      expect(absentResult, isEmpty);
+
+      // Chave com lista vazia
+      expect(await repo.hasCustomBadges('group-empty'), isTrue);
+      final emptyResult = await repo.getCustomBadges('group-empty');
+      expect(emptyResult, isEmpty);
     });
 
     test('salvar e ler preserva lista e propriedades das insígnias', () async {
@@ -26,8 +35,9 @@ void main() {
       ];
 
       await repo.saveCustomBadges('grp-1', badges);
-      final result = await repo.getCustomBadges('grp-1');
+      expect(await repo.hasCustomBadges('grp-1'), isTrue);
 
+      final result = await repo.getCustomBadges('grp-1');
       expect(result, hasLength(2));
       expect(result[0]['id'], equals('b-1'));
       expect(result[0]['title'], equals('Craque do Jogo'));
@@ -41,8 +51,31 @@ void main() {
       });
       final repo = PrefsCustomBadgesRepository();
 
+      expect(await repo.hasCustomBadges('grp-corrupt'), isTrue);
       final result = await repo.getCustomBadges('grp-corrupt');
       expect(result, isEmpty);
+    });
+
+    test('item que não é Map é descartado na leitura', () async {
+      SharedPreferences.setMockInitialValues({
+        'custom_badges_grp-mixed': jsonEncode([
+          'string_badge',
+          123,
+          {'id': 'b-valid-1', 'title': 'Goleador'},
+          null,
+          true,
+          {'id': 'b-valid-2', 'title': 'Melhor Zagueiro'},
+        ]),
+      });
+      final repo = PrefsCustomBadgesRepository();
+
+      expect(await repo.hasCustomBadges('grp-mixed'), isTrue);
+      final result = await repo.getCustomBadges('grp-mixed');
+      expect(result, hasLength(2));
+      expect(result[0]['id'], equals('b-valid-1'));
+      expect(result[0]['title'], equals('Goleador'));
+      expect(result[1]['id'], equals('b-valid-2'));
+      expect(result[1]['title'], equals('Melhor Zagueiro'));
     });
 
     test('nome exato da chave no SharedPreferences segue custom_badges_<groupId>', () async {

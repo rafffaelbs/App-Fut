@@ -171,10 +171,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
 
       // Update with latest templates if available
-      final List<Map<String, dynamic>> templates = await AppServices
-          .instance.customBadges
-          .getCustomBadges(widget.groupId);
-      if (templates.isNotEmpty) {
+      if (await AppServices.instance.customBadges
+          .hasCustomBadges(widget.groupId)) {
+        final List<Map<String, dynamic>> templates = await AppServices
+            .instance.customBadges
+            .getCustomBadges(widget.groupId);
         for (var i = 0; i < manualBadges.length; i++) {
           final badgeId = manualBadges[i]['id'];
           Map<String, dynamic>? tpl;
@@ -1807,9 +1808,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _showAddManualBadgeDialog() async {
-    final List<Map<String, dynamic>> availableCustomBadges = await AppServices
-        .instance.customBadges
-        .getCustomBadges(widget.groupId);
+    List<Map<String, dynamic>> availableCustomBadges = [];
+
+    if (await AppServices.instance.customBadges
+        .hasCustomBadges(widget.groupId)) {
+      availableCustomBadges = await AppServices.instance.customBadges
+          .getCustomBadges(widget.groupId);
+    }
 
     if (availableCustomBadges.isEmpty) {
       if (!mounted) return;

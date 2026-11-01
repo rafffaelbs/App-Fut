@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:app_do_fut/data/prefs/prefs_match_history_store.dart';
 import 'package:app_do_fut/domain/repositories/matches_repository.dart';
 import 'package:app_do_fut/domain/repositories/players_repository.dart';
 import 'package:app_do_fut/models/match_event_model.dart';
@@ -253,6 +254,7 @@ void main() {
         'group-alpha',
         matchesRepository: matchesRepo,
         playersRepository: playersRepo,
+        matchHistoryStore: PrefsMatchHistoryStore(),
       );
 
       expect(result, hasLength(1));
@@ -278,6 +280,7 @@ void main() {
         'group-empty',
         matchesRepository: matchesRepo,
         playersRepository: playersRepo,
+        matchHistoryStore: PrefsMatchHistoryStore(),
       );
 
       expect(result, isEmpty);
@@ -323,6 +326,7 @@ void main() {
         'group-legacy',
         matchesRepository: matchesRepo,
         playersRepository: playersRepo,
+        matchHistoryStore: PrefsMatchHistoryStore(),
       );
 
       // Apenas a partida de 2026 deve ser incluída no filtro de temporada atual

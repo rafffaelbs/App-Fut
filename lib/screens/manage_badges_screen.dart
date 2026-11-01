@@ -74,9 +74,10 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _loadBadges() async {
-    final customBadges = await AppServices.instance.customBadges
-        .getCustomBadges(widget.groupId);
-    if (customBadges.isNotEmpty) {
+    if (await AppServices.instance.customBadges
+        .hasCustomBadges(widget.groupId)) {
+      final customBadges = await AppServices.instance.customBadges
+          .getCustomBadges(widget.groupId);
       setState(() {
         _customBadges = customBadges;
       });

@@ -19,6 +19,16 @@ class PrefsMatchHistoryStore implements MatchHistoryStore {
   static String keyFor(String sessionId) => '$keyPrefix$sessionId';
 
   @override
+  Future<bool> hasSession(String sessionId) async {
+    try {
+      final prefs = await _prefs;
+      return prefs.containsKey(keyFor(sessionId));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> readSession(String sessionId) async {
     try {
       final prefs = await _prefs;

@@ -563,9 +563,10 @@ class _MatchScreenState extends State<MatchScreen>
 
     // Fallback MatchHistoryStore
     try {
-      final local = await AppServices.instance.matchHistory
-          .readSession(widget.tournamentId);
-      if (local.isNotEmpty) {
+      if (await AppServices.instance.matchHistory
+          .hasSession(widget.tournamentId)) {
+        final local = await AppServices.instance.matchHistory
+            .readSession(widget.tournamentId);
         if (!mounted) return;
         setState(() {
           _finishedMatches =

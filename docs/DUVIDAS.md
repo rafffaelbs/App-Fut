@@ -160,7 +160,11 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - `custom_badges_<groupId>`:
     - Em `manage_badges_screen.dart` (linha 82) e `player_detail.dart` (linhas 179 e 1818), `jsonDecode` era executado sem `try/catch`, assumindo JSON válido.
 - **Impacto:** Diferentes telas lidavam de formas distintas com a robustez na deserialização dos dados locais persistidos no `SharedPreferences`.
-- **Ação:** As implementações de `MatchHistoryStore` (`PrefsMatchHistoryStore`) e `CustomBadgesRepository` (`PrefsCustomBadgesRepository`) passam a devolver os dados já decodificados como `List<Map<String, dynamic>>`, retornando `[]` com segurança caso a chave não exista ou contenha JSON inválido, deixando o pós-processamento e filtragens específicas a cargo de cada chamador.
+- **Ação / Decisão do Dono do Projeto:**
+  - Foi aceito que JSON corrompido em `match_history_*` e `custom_badges_*` retorne lista vazia `[]` e que itens que não sejam `Map` sejam descartados em todas as telas (evitando que dados corrompidos quebrem a UI).
+  - Foi rejeitado alterar a semântica de decisão nas telas para `isNotEmpty`. Na `main`, a decisão dependia de a chave existir (`containsKey`), inclusive quando o valor salvo fosse uma lista vazia `[]` (ex.: `match_screen.dart` atualiza `_finishedMatches`, `manage_badges_screen.dart` atualiza `_customBadges`, `player_detail.dart` atualiza templates).
+  - Para preservar estritamente esse comportamento, foram adicionados os métodos `Future<bool> hasCustomBadges(String groupId)` na interface `CustomBadgesRepository` e `Future<bool> hasSession(String sessionId)` na interface `MatchHistoryStore`, implementados em `PrefsCustomBadgesRepository` e `PrefsMatchHistoryStore` via `containsKey`. No futuro app público (SQLite), o significado corresponderá a "já foi salvo alguma vez".
+  - Em `stats_calculator.dart`, o fallback foi simplificado para `matchHistoryStore ?? AppServices.instance.matchHistory`, com injeção explícita do store nos testes de unidade correspondentes.
 
 ---
 
