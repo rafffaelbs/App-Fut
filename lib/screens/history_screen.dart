@@ -165,6 +165,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _clearHistory() async {
+    if (AppServices.instance.features.isReadOnly) return;
     setState(() => isLoading = true);
     try {
       // Deletes each match individually to ensure the repository cascades
@@ -187,6 +188,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
+    if (AppServices.instance.features.isReadOnly) return;
     final TextEditingController passController = TextEditingController();
 
     showDialog(
@@ -258,22 +260,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
             onPressed: _exportHistory,
             tooltip: "Exportar",
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (c) => AlertDialog(
-                  backgroundColor: AppColors.headerBlue,
-                  title: const Text("Limpar Tudo?", style: TextStyle(color: AppColors.textWhite)),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancelar", style: TextStyle(color: Colors.white54))),
-                    TextButton(onPressed: () { Navigator.pop(c); _clearHistory(); }, child: const Text("Limpar", style: TextStyle(color: Colors.red))),
-                  ],
-                ),
-              );
-            },
-          ),
+          if (!AppServices.instance.features.isReadOnly)
+            IconButton(
+              icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    backgroundColor: AppColors.headerBlue,
+                    title: const Text("Limpar Tudo?", style: TextStyle(color: AppColors.textWhite)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancelar", style: TextStyle(color: Colors.white54))),
+                      TextButton(onPressed: () { Navigator.pop(c); _clearHistory(); }, child: const Text("Limpar", style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: isLoading
@@ -321,10 +324,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: AppColors.accentBlue, size: 20),
-                          onPressed: () => _promptPasswordForEdit(index, match),
-                        ),
+                        if (!AppServices.instance.features.isReadOnly)
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: AppColors.accentBlue, size: 20),
+                            onPressed: () => _promptPasswordForEdit(index, match),
+                          ),
                         const Icon(Icons.expand_more, color: Colors.white54),
                       ],
                     ),

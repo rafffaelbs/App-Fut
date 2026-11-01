@@ -173,6 +173,44 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** O arquivo `supabase_site_sync_service.dart` manipula chaves `match_history_` em nível de migração/backup de dados, de forma similar ao `lib/data/supabase/site_data_generator.dart`.
 - **Ação:** Seguindo a instrução da Tarefa T3e de não alterar comportamentos de sync de dados ou serviços legados além do escopo das telas/calculators, o código em `supabase_site_sync_service.dart` foi preservado sem alterações e registrado aqui.
 
+---
+
+### 19. Levantamento de ações de escrita nas telas e condicionamento a `!isReadOnly` — Tarefa T4 (Etapa 3)
+- **O que viu:** Foi realizado o levantamento de todas as ações de escrita (salvar, editar, apagar, reordenar, promover etc.) existentes nas telas do app, classificando quais atualmente exigem privilégio de admin e quais são abertas a qualquer membro ou usuário.
+- **Ações de escrita que NÃO exigem admin (condicionadas a `!isReadOnly` sem impor admin):**
+  1. `lib/screens/history_screen.dart:168` (`_clearHistory`): Limpar todas as partidas do histórico da sessão. Não exige admin (comportamento legado com confirmação em diálogo). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  2. `lib/screens/history_screen.dart:188` (`_promptPasswordForEdit`): Solicitar senha local ("0101") para editar partida do histórico. Não exige admin Supabase. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  3. `lib/screens/history_screen.dart:261` (Botão de lixeira no `AppBar`): Condicionado a `!isReadOnly`.
+  4. `lib/screens/history_screen.dart:327` (Botão de edição no card de partida): Condicionado a `!isReadOnly`.
+  5. `lib/screens/edit_match_screen.dart:405` (`_saveChanges`): Salva alterações de placar e eventos de uma partida já jogada no Supabase via `MatchesRepository`. Não exige admin (acessado via senha local). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  6. `lib/screens/edit_match_screen.dart:498` (Botão `SALVAR` no `AppBar`): Condicionado a `!isReadOnly`.
+  7. `lib/screens/match_screen.dart:1045` (Botão "Encerrar Partida" no diálogo de confirmação): Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
+  8. `lib/screens/match_screen.dart:3361` (`_finishMatch`): Grava o encerramento da partida na fila outbox e no histórico local. Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
+  9. `lib/main_personal.dart:186` (`_showGroupDialog`): Criar novo grupo ou editar nome do grupo. Ação do dono da conta pessoal (sem papel admin por grupo). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  10. `lib/main_personal.dart:312` (`_deleteGroup`): Excluir grupo da conta. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  11. `lib/main_personal.dart:644` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`.
+  12. `lib/main_personal.dart:675` (FAB de criar grupo): Condicionado a `!isReadOnly`.
+  13. `lib/screens/player_detail.dart:204` (`_pickAndUploadAvatar`): Upload de foto de perfil. Permitido ao dono do perfil (`_isOwner`) ou ao admin. Condicionado a `!isReadOnly`.
+  14. `lib/screens/player_detail.dart:3804` (`_showAudioPickerModal`): Escolha de som de gol. Permitido ao dono do perfil (`_isOwner`) ou ao admin. Condicionado a `!isReadOnly` e `hasGoalSounds`.
+
+- **Ações de escrita que EXIGEM admin (condicionadas a `canAdminister` e suas respectivas flags):**
+  1. `lib/screens/sessions_screen.dart:163` (`onEdit`): Editar sessão — exige admin (`canAdminister`).
+  2. `lib/screens/sessions_screen.dart:164` (`onDelete`): Excluir sessão — exige admin (`canAdminister`).
+  3. `lib/screens/sessions_screen.dart:211` (FAB de criar sessão) — exige admin (`canAdminister`).
+  4. `lib/screens/players_screen.dart:436, 460, 495` (Menu e exclusão de jogador do elenco) — exige admin (`canAdminister`).
+  5. `lib/screens/players_screen.dart:796` (FAB de adicionar jogador ao elenco) — exige admin (`canAdminister`).
+  6. `lib/screens/settings_screen.dart:224` (`_showEditGroupDialog`): Editar dados do grupo — exige admin (`canAdminister`).
+  7. `lib/screens/manage_members_screen.dart:54, 153` (`_toggleAdmin` / Switch): Promover ou rebaixar membros — exige admin (`canAdminister`).
+  8. `lib/screens/manage_seasons_screen.dart:37, 200, 313, 335` (Criar, editar e excluir temporadas) — exige admin (`canAdminister`).
+  9. `lib/screens/manage_join_requests_screen.dart:42, 77, 238` (Aprovar e rejeitar solicitações de entrada) — exige admin (`canAdminister`).
+  10. `lib/screens/manage_badges_screen.dart:251` (Salvar e excluir insígnias e troféus) — exige admin (`canAdminister`).
+  11. `lib/screens/manage_badges_screen.dart:377, 439` (Definir áudio de gol de jogadores) — exige admin (`canAdminister` e `hasGoalSounds`).
+  12. `lib/screens/manage_badges_screen.dart:338, 351, 364` (Definir cosméticos de jogadores) — exige admin (`canAdminister` e `hasCosmetics`).
+  13. `lib/screens/player_detail.dart:2622, 2762` (Adicionar e remover insígnias manuais) — exige admin (`canAdminister`).
+  14. `lib/screens/player_detail.dart:3350, 3740` (Editar atributos comunitários) — exige admin (`canAdminister`).
+  15. `lib/screens/admin_debug_screen.dart:46` (Limpar cache, recalcular overall, forçar sync) — tela exclusiva de admin (`canAdminister` e `hasAdminDebug`).
+
+
 
 
 

@@ -184,6 +184,7 @@ class _HomePageState extends State<HomePage> {
 
   // --- UNIFIED DIALOG: CREATE OR EDIT ---
   void _showGroupDialog({int? index}) {
+    if (AppServices.instance.features.isReadOnly) return;
     final bool isEditing = index != null;
     final group = isEditing ? groups[index] : null;
 
@@ -309,6 +310,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _deleteGroup(int index) {
+    if (AppServices.instance.features.isReadOnly) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -639,30 +641,32 @@ class _HomePageState extends State<HomePage> {
                           "Toque para ver elenco e jogos",
                           style: TextStyle(color: Colors.grey, fontSize: 13),
                         ),
-                        trailing: PopupMenuButton(
-                          icon: const Icon(
-                            Icons.more_vert,
-                            color: Colors.white54,
-                          ),
-                          color: AppColors.headerBlue,
-                          onSelected: (value) {
-                            if (value == 'edit') _showGroupDialog(index: index);
-                            if (value == 'delete') _deleteGroup(index);
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Editar'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text(
-                                'Excluir',
-                                style: TextStyle(color: Colors.redAccent),
+                        trailing: AppServices.instance.features.isReadOnly
+                            ? null
+                            : PopupMenuButton(
+                                icon: const Icon(
+                                  Icons.more_vert,
+                                  color: Colors.white54,
+                                ),
+                                color: AppColors.headerBlue,
+                                onSelected: (value) {
+                                  if (value == 'edit') _showGroupDialog(index: index);
+                                  if (value == 'delete') _deleteGroup(index);
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Editar'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text(
+                                      'Excluir',
+                                      style: TextStyle(color: Colors.redAccent),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),
@@ -670,13 +674,15 @@ class _HomePageState extends State<HomePage> {
               },
             ),
 
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accentBlue,
-        elevation: 10,
-        shape: const CircleBorder(),
-        onPressed: () => _showGroupDialog(),
-        child: const Icon(Icons.add, color: Colors.white, size: 30),
-      ),
+      floatingActionButton: AppServices.instance.features.isReadOnly
+          ? null
+          : FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              elevation: 10,
+              shape: const CircleBorder(),
+              onPressed: () => _showGroupDialog(),
+              child: const Icon(Icons.add, color: Colors.white, size: 30),
+            ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
       bottomNavigationBar: BottomAppBar(

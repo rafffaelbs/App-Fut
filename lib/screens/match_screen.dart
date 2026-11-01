@@ -1046,10 +1046,12 @@ class _MatchScreenState extends State<MatchScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                   ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _finishMatch();
-                  },
+                  onPressed: AppServices.instance.features.isReadOnly
+                      ? null
+                      : () {
+                          Navigator.pop(ctx);
+                          _finishMatch();
+                        },
                   child: const Text(
                     "Encerrar Partida",
                     style: TextStyle(
@@ -3359,6 +3361,7 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _finishMatch() async {
+    if (AppServices.instance.features.isReadOnly) return;
     _matchTimer?.cancel();
     // Snapshot ANTES de zerar goleiros/estado: o código antigo montava as
     // escalações do Supabase depois do setState que limpa firstGkRed/White,

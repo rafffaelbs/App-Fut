@@ -403,6 +403,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
   }
 
   Future<void> _saveChanges() async {
+    if (AppServices.instance.features.isReadOnly) return;
     final matchIdVar = widget.matchData['id']?.toString();
 
     if (matchIdVar == null || matchIdVar.isEmpty) {
@@ -496,7 +497,7 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           TextButton(
-            onPressed: _saveChanges,
+            onPressed: AppServices.instance.features.isReadOnly ? null : _saveChanges,
             child: const Text(
               "SALVAR",
               style: TextStyle(
