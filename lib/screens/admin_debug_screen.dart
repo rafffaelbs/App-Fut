@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../constants/app_colors.dart';
-import '../services/cache_sync_manager.dart';
-import '../services/sync_service.dart';
+import '../app/app_services.dart';
+import '../domain/services/diagnostics_service.dart';
 
 class AdminDebugScreen extends StatefulWidget {
   final String groupId;
@@ -17,8 +17,6 @@ class AdminDebugScreen extends StatefulWidget {
 }
 
 class _AdminDebugScreenState extends State<AdminDebugScreen> {
-  final CacheSyncManager _cacheSyncManager = CacheSyncManager();
-  final SyncService _syncService = SyncService();
 
   bool _isLoading = true;
   bool _isActionRunning = false;
@@ -34,9 +32,12 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final status = await _cacheSyncManager.getStatus();
-    final dump = await _cacheSyncManager.getDebugStorageDump();
-    final code = await _syncService.getOrCreateSyncCode();
+    final diagnostics = AppServices.instance.diagnostics;
+    final siteSync = AppServices.instance.siteSync;
+
+    final status = diagnostics != null ? await diagnostics.getStatus() : null;
+    final dump = diagnostics != null ? await diagnostics.getDebugStorageDump() : <String, String>{};
+    final code = siteSync != null ? await siteSync.getOrCreateSyncCode() : '';
 
     if (mounted) {
       setState(() {
@@ -56,6 +57,7 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final diagnosticsActive = AppServices.instance.diagnostics != null;
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       appBar: AppBar(
@@ -67,25 +69,38 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            tooltip: 'Atualizar Status',
-            onPressed: _isLoading || _isActionRunning ? null : _loadData,
-          ),
+          if (diagnosticsActive)
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              tooltip: 'Atualizar Status',
+              onPressed: _isLoading || _isActionRunning ? null : _loadData,
+            ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.highlightGreen))
           : RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: diagnosticsActive ? _loadData : () async {},
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildSupabaseConnectionCard(),
-                  const SizedBox(height: 16),
-                  _buildCacheStatusCard(),
-                  const SizedBox(height: 16),
-                  _buildStorageInspectorCard(),
+                  if (diagnosticsActive) ...[
+                    _buildSupabaseConnectionCard(),
+                    const SizedBox(height: 16),
+                    _buildCacheStatusCard(),
+                    const SizedBox(height: 16),
+                    _buildStorageInspectorCard(),
+                  ] else ...[
+                    const Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Center(
+                        child: Text(
+                          'Recurso de diagnóstico desativado.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -139,11 +154,13 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Sync Code Ativo: $_syncCode',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
+            if (_syncCode.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Sync Code Ativo: $_syncCode',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
             if (ping != null) ...[
               const SizedBox(height: 4),
               Text(

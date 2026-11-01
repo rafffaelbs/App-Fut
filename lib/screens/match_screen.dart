@@ -13,7 +13,6 @@ import '../utils/team_balancer.dart';
 
 import '../utils/roster_utils.dart';
 import '../utils/stats_calculator.dart';
-import '../services/sync_service.dart';
 import '../services/group_bootstrap.dart';
 import 'package:uuid/uuid.dart';
 import 'package:app_do_fut/app/app_services.dart';
@@ -3670,6 +3669,7 @@ class _MatchScreenState extends State<MatchScreen>
   /// rodar a cada partida finalizada. Espera a fila de upload esvaziar e não
   /// dispara enquanto uma partida está rolando.
   void _scheduleSiteSync() {
+    if (AppServices.instance.siteSync == null) return;
     _siteSyncTimer?.cancel();
     _siteSyncTimer = Timer(const Duration(seconds: 90), () {
       if (!mounted) return;
@@ -4011,10 +4011,11 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _triggerBackgroundSync() async {
     // Fire and forget
+    final siteSync = AppServices.instance.siteSync;
+    if (siteSync == null) return;
     try {
-      final syncService = SyncService();
-      final String code = await syncService.getOrCreateSyncCode();
-      syncService.exportDataToSupabase(code).then((_) async {
+      final String code = await siteSync.getOrCreateSyncCode();
+      siteSync.exportDataToSupabase(code).then((_) async {
         _recordSyncHistory(true);
       }).catchError((e) {
         _recordSyncHistory(false, e.toString());
