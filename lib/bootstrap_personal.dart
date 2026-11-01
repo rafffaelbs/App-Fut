@@ -11,6 +11,7 @@ import 'data/supabase/session_arrivals_repository.dart';
 import 'data/supabase/sessions_repository.dart';
 import 'data/supabase/supabase_auth_service.dart';
 import 'data/supabase/supabase_config.dart';
+import 'data/supabase/supabase_match_outbox.dart';
 import 'data/supabase/supabase_permission_service.dart';
 
 /// Inicializa o Supabase e monta o [AppServices] com as implementações Supabase*.
@@ -32,6 +33,8 @@ Future<void> bootstrapPersonal() async {
     permissions: permissions,
     logsRepo: actionLogs,
   );
+  final matches = SupabaseMatchesRepository(client: client);
+  final outbox = SupabaseMatchOutbox(matchesRepository: matches);
 
   AppServices.instance = AppServices(
     groups: SupabaseGroupsRepository(client: client, permissions: permissions),
@@ -43,10 +46,11 @@ Future<void> bootstrapPersonal() async {
     players: players,
     playerAccounts: players,
     sessions: SupabaseSessionsRepository(client: client),
-    matches: SupabaseMatchesRepository(client: client),
+    matches: matches,
     sessionArrivals: SupabaseSessionArrivalsRepository(client: client),
     actionLogs: actionLogs,
     auth: auth,
     permissions: permissions,
+    outbox: outbox,
   );
 }

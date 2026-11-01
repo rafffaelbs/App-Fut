@@ -8,6 +8,7 @@ import '../domain/repositories/seasons_repository.dart';
 import '../domain/repositories/session_arrivals_repository.dart';
 import '../domain/repositories/sessions_repository.dart';
 import '../domain/services/auth_service.dart';
+import '../domain/services/match_outbox.dart';
 import '../domain/services/permission_service.dart';
 
 /// Guarda as implementações ativas (interfaces) do app.
@@ -25,7 +26,7 @@ class AppServices {
     required this.actionLogs,
     required this.auth,
     required this.permissions,
-    this.outbox,
+    required this.outbox,
     this.siteSync,
     this.diagnostics,
   });
@@ -54,9 +55,10 @@ class AppServices {
   final AuthService auth;
   final PermissionService permissions;
 
-  // Previstos; serão tipados e preenchidos nas tarefas T3c e T3d
-  // (MatchOutbox, SiteSyncService, DiagnosticsService).
-  final Object? outbox;
+  final MatchOutbox outbox;
+
+  // Previstos; serão tipados e preenchidos na tarefa T3c
+  // (SiteSyncService, DiagnosticsService).
   final Object? siteSync;
   final Object? diagnostics;
 }
