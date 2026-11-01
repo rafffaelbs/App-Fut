@@ -118,3 +118,21 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   4. A tela `BlankScreen` referenciava dois assets inexistentes no disco (`assets/images/imagem_teste.jpeg` e `assets/audio/whatsapp.mp3`). Não há referências a eles no restante do código.
 - **Impacto:** Nenhum impacto no comportamento visível do app. Redução de 34 avisos/lints legados no `flutter analyze`.
 - **Ação:** Arquivos de tela removidos e apontamentos registrados aqui.
+
+---
+
+### 14. Pontos de enfileiramento e reenvio de partidas / `_onAppResumed` — Tarefa T3d
+- **O que viu:**
+  1. O documento `docs/INVENTARIO_OFFLINE.md` (linha 235) afirma: *"Ao Voltar do Background: O método _onAppResumed() em match_screen.dart aciona o reenvio quando o app volta a ter foco no sistema operacional."* Contudo, na inspeção minuciosa do código de `match_screen.dart` e de todo o `lib/`, verificou-se que não existe nenhum método `_onAppResumed()`, nem implementação de `WidgetsBindingObserver` ou escuta de ciclo de vida (`AppLifecycleState`) no `match_screen.dart`.
+  2. Foi realizado um levantamento completo de todos os pontos que enfileiram ou disparam reenvio de partidas no aplicativo:
+     - **Enfileiramento (`enqueue`)**: chamado exclusivamente em `lib/screens/match_screen.dart:3434` (`_finishMatch`), ao encerrar uma partida.
+     - **Reenvio / Flush (`flush`)**:
+       - `lib/screens/match_screen.dart:129` no `initState()` ao abrir a tela da partida;
+       - `lib/screens/match_screen.dart:602` em `_startMatch()` quando a partida é iniciada;
+       - `lib/screens/match_screen.dart:3706` no botão "Tentar agora" do diálogo `_showPendingSyncDialog`;
+       - Timer interno em `SupabaseMatchOutbox.enqueue` (disparo automático 2 segundos após enfileirar);
+       - Timer interno de backoff em `SupabaseMatchOutbox._scheduleRetry` (5s, 10s, 20s, 40s, 60s) em caso de erro.
+     - **Mesclagem em memória sem rede (`readAll`)**: chamado em `lib/data/supabase/matches_repository.dart:27` em `_pendingMatches()` para exibir partidas ainda não sincronizadas no Histórico, Ranking e Estatísticas.
+- **Impacto:** Não houve alteração de comportamento. A documentação `INVENTARIO_OFFLINE.md` continha menção a um método inexistente (`_onAppResumed`). Todos os gatilhos reais existentes no código foram 100% preservados na abstração `SupabaseMatchOutbox`.
+- **Ação:** Registrado aqui conforme instrução 5 da tarefa T3d.
+
