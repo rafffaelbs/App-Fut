@@ -174,10 +174,8 @@ class _RankingScreenState extends State<RankingScreen> {
     } catch (_) {}
 
     if (history.isEmpty) {
-      final String historyKey = 'match_history_${widget.tournamentId}';
-      if (prefs.containsKey(historyKey)) {
-        history = jsonDecode(prefs.getString(historyKey)!);
-      }
+      history = await AppServices.instance.matchHistory
+          .readSession(widget.tournamentId);
     }
 
     if (history.isEmpty) {

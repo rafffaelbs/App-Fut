@@ -171,13 +171,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       manualBadges = List<Map<String, dynamic>>.from(player!['manual_badges']);
 
       // Update with latest templates if available
-      final prefs = await SharedPreferences.getInstance();
-      final String cbKey = 'custom_badges_${widget.groupId}';
-      if (prefs.containsKey(cbKey)) {
-        final List<Map<String, dynamic>> templates =
-            List<Map<String, dynamic>>.from(
-              jsonDecode(prefs.getString(cbKey)!),
-            );
+      final List<Map<String, dynamic>> templates = await AppServices
+          .instance.customBadges
+          .getCustomBadges(widget.groupId);
+      if (templates.isNotEmpty) {
         for (var i = 0; i < manualBadges.length; i++) {
           final badgeId = manualBadges[i]['id'];
           Map<String, dynamic>? tpl;
@@ -1810,15 +1807,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _showAddManualBadgeDialog() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'custom_badges_${widget.groupId}';
-    List<Map<String, dynamic>> availableCustomBadges = [];
-
-    if (prefs.containsKey(key)) {
-      availableCustomBadges = List<Map<String, dynamic>>.from(
-        jsonDecode(prefs.getString(key)!),
-      );
-    }
+    final List<Map<String, dynamic>> availableCustomBadges = await AppServices
+        .instance.customBadges
+        .getCustomBadges(widget.groupId);
 
     if (availableCustomBadges.isEmpty) {
       if (!mounted) return;

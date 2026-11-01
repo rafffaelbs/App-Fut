@@ -561,19 +561,15 @@ class _MatchScreenState extends State<MatchScreen>
       debugPrint('Error loading remote/cached matches for queue: $e');
     }
 
-    // Fallback SharedPreferences
+    // Fallback MatchHistoryStore
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String historyKey = 'match_history_${widget.tournamentId}';
-      if (prefs.containsKey(historyKey)) {
-        final List<dynamic> local = jsonDecode(prefs.getString(historyKey)!);
+      final local = await AppServices.instance.matchHistory
+          .readSession(widget.tournamentId);
+      if (local.isNotEmpty) {
         if (!mounted) return;
         setState(() {
-          _finishedMatches = local
-              .whereType<Map>()
-              .map((m) =>
-                  FinishedMatchInfo.fromMap(Map<String, dynamic>.from(m)))
-              .toList();
+          _finishedMatches =
+              local.map((m) => FinishedMatchInfo.fromMap(m)).toList();
         });
       }
     } catch (e) {
@@ -3647,22 +3643,8 @@ class _MatchScreenState extends State<MatchScreen>
 
 
   Future<void> _appendLocalHistory(Map<String, dynamic> matchRecord) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String historyKey = 'match_history_${widget.tournamentId}';
-      List<dynamic> history = [];
-      try {
-        if (prefs.containsKey(historyKey)) {
-          history = jsonDecode(prefs.getString(historyKey)!);
-        }
-      } catch (_) {
-        history = [];
-      }
-      history.add(matchRecord);
-      await prefs.setString(historyKey, jsonEncode(history));
-    } catch (e) {
-      debugPrint('Error saving local match history: $e');
-    }
+    await AppServices.instance.matchHistory
+        .appendToSession(widget.tournamentId, matchRecord);
   }
 
   /// Agenda o export pesado (site_data/backup) pra DEPOIS do jogo, em vez de

@@ -162,6 +162,14 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Diferentes telas lidavam de formas distintas com a robustez na deserialização dos dados locais persistidos no `SharedPreferences`.
 - **Ação:** As implementações de `MatchHistoryStore` (`PrefsMatchHistoryStore`) e `CustomBadgesRepository` (`PrefsCustomBadgesRepository`) passam a devolver os dados já decodificados como `List<Map<String, dynamic>>`, retornando `[]` com segurança caso a chave não exista ou contenha JSON inválido, deixando o pós-processamento e filtragens específicas a cargo de cada chamador.
 
+---
+
+### 18. Chave `match_history_` em `lib/data/supabase/supabase_site_sync_service.dart` (linhas 132, 198, 199) — Tarefa T3e (Etapa 4)
+- **O que viu:** No serviço `SupabaseSiteSyncService` (movido de `lib/services/sync_service.dart` para `lib/data/supabase/` na Tarefa T3c), há rotinas de normalização de IDs de jogadores em lote e renomeação de IDs de sessão que varrem todas as chaves do `SharedPreferences` que começam com `match_history_` e reescrevem o JSON normalizado ou movem de `match_history_$oldId` para `match_history_$newId`.
+- **Impacto:** O arquivo `supabase_site_sync_service.dart` manipula chaves `match_history_` em nível de migração/backup de dados, de forma similar ao `lib/data/supabase/site_data_generator.dart`.
+- **Ação:** Seguindo a instrução da Tarefa T3e de não alterar comportamentos de sync de dados ou serviços legados além do escopo das telas/calculators, o código em `supabase_site_sync_service.dart` foi preservado sem alterações e registrado aqui.
+
+
 
 
 

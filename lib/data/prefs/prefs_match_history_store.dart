@@ -15,7 +15,8 @@ class PrefsMatchHistoryStore implements MatchHistoryStore {
   Future<SharedPreferences> get _prefs async =>
       _prefsInstance ?? await SharedPreferences.getInstance();
 
-  static String keyFor(String sessionId) => 'match_history_$sessionId';
+  static const String keyPrefix = 'match_history_';
+  static String keyFor(String sessionId) => '$keyPrefix$sessionId';
 
   @override
   Future<List<Map<String, dynamic>>> readSession(String sessionId) async {

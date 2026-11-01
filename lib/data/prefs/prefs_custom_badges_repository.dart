@@ -15,7 +15,8 @@ class PrefsCustomBadgesRepository implements CustomBadgesRepository {
   Future<SharedPreferences> get _prefs async =>
       _prefsInstance ?? await SharedPreferences.getInstance();
 
-  static String keyFor(String groupId) => 'custom_badges_$groupId';
+  static const String keyPrefix = 'custom_badges_';
+  static String keyFor(String groupId) => '$keyPrefix$groupId';
 
   @override
   Future<List<Map<String, dynamic>>> getCustomBadges(String groupId) async {

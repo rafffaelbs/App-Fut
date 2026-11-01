@@ -74,13 +74,11 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _loadBadges() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'custom_badges_${widget.groupId}';
-    if (prefs.containsKey(key)) {
+    final customBadges = await AppServices.instance.customBadges
+        .getCustomBadges(widget.groupId);
+    if (customBadges.isNotEmpty) {
       setState(() {
-        _customBadges = List<Map<String, dynamic>>.from(
-          jsonDecode(prefs.getString(key)!),
-        );
+        _customBadges = customBadges;
       });
     }
 
@@ -102,6 +100,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
           )
           .toList();
     } catch (_) {
+      final prefs = await SharedPreferences.getInstance();
       final String playersKey = 'players_${widget.groupId}';
       if (prefs.containsKey(playersKey)) {
         _allPlayers = List<Map<String, dynamic>>.from(
@@ -1145,9 +1144,8 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _saveBadges() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'custom_badges_${widget.groupId}';
-    await prefs.setString(key, jsonEncode(_customBadges));
+    await AppServices.instance.customBadges
+        .saveCustomBadges(widget.groupId, _customBadges);
   }
 
   void _addBadge(String title, String desc, String iconPath) {

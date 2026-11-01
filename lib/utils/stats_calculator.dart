@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'player_identity.dart';
 import 'rating_calculator.dart';
 
+import '../app/app_services.dart';
+import '../data/prefs/prefs_match_history_store.dart';
+import '../domain/repositories/match_history_store.dart';
 import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
 import '../domain/repositories/matches_repository.dart';
@@ -16,6 +19,7 @@ Future<List<dynamic>> getAllGroupMatches(
   String groupId, {
   MatchesRepository? matchesRepository,
   PlayersRepository? playersRepository,
+  MatchHistoryStore? matchHistoryStore,
 }) async {
   try {
     final matchesRepo = matchesRepository ?? SupabaseMatchesRepository();
@@ -98,7 +102,17 @@ Future<List<dynamic>> getAllGroupMatches(
     print('getAllGroupMatches($groupId) failed, falling back to local cache: $e');
   }
 
-  // Fallback para SharedPreferences caso esteja offline ou local
+  // Fallback caso esteja offline ou local
+  MatchHistoryStore resolveHistoryStore() {
+    if (matchHistoryStore != null) return matchHistoryStore;
+    try {
+      return AppServices.instance.matchHistory;
+    } catch (_) {
+      return PrefsMatchHistoryStore();
+    }
+  }
+
+  final historyStore = resolveHistoryStore();
   final prefs = await SharedPreferences.getInstance();
   final String sessionsKey = 'sessions_$groupId';
   final List<dynamic> allHistory = [];
@@ -110,15 +124,12 @@ Future<List<dynamic>> getAllGroupMatches(
       final String? sessionTimestamp = session['timestamp'];
       if (tId == null) continue;
 
-      final String historyKey = 'match_history_$tId';
-      if (!prefs.containsKey(historyKey)) continue;
+      final history = await historyStore.readSession(tId);
+      if (history.isEmpty) continue;
 
-      final List<dynamic> history = jsonDecode(prefs.getString(historyKey)!);
       if (sessionTimestamp != null) {
         for (final match in history) {
-          if (match is Map) {
-            match['session_date'] = sessionTimestamp;
-          }
+          match['session_date'] = sessionTimestamp;
         }
       }
       allHistory.addAll(history);
