@@ -18,6 +18,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
   bool _isLoading = false;
 
   Future<void> _submit() async {
+    if (AppServices.instance.features.isReadOnly) return;
     final code = _codeController.text.trim();
     final name = _nameController.text.trim();
     if (code.isEmpty || name.isEmpty) {
@@ -102,7 +103,9 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
+                onPressed: (_isLoading || AppServices.instance.features.isReadOnly)
+                    ? null
+                    : _submit,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentBlue,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

@@ -190,9 +190,12 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   10. `lib/main_personal.dart:312` (`_deleteGroup`): Excluir grupo da conta. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
   11. `lib/main_personal.dart:644` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`.
   12. `lib/main_personal.dart:675` (FAB de criar grupo): Condicionado a `!isReadOnly`.
-  13. `lib/screens/player_detail.dart:204` (`_pickAndUploadAvatar`): Upload de foto de perfil. Permitido ao dono do perfil (`_isOwner`) ou ao admin. Condicionado a `!isReadOnly`.
-  14. `lib/screens/player_detail.dart:3804` (`_showAudioPickerModal`): Escolha de som de gol. Permitido ao dono do perfil (`_isOwner`) ou ao admin. Condicionado a `!isReadOnly` e `hasGoalSounds`.
+  13. `lib/screens/player_detail.dart:1004, 3101` (`_savePlayerIcon` / `_openIconPicker`): Atualização de foto/ícone de perfil. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly`.
+  14. `lib/screens/player_detail.dart:1052, 1105, 3752` (`_saveGoalSound` / `_showAudioPickerModal`): Escolha de som de gol. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly` e `hasGoalSounds`.
   15. `lib/screens/manage_badges_screen.dart:1153, 1558, 1667, 1737` (`_saveBadges`, botões e FAB de troféus): Salvar e excluir insígnias e troféus personalizados. Não exigia admin na main. No modo read-only não deve existir. Condicionado a `!isReadOnly`.
+  16. `lib/screens/player_detail.dart:985, 1632, 3720` (`_savePlayerName`, `_showEditNameDialog`, botão "Editar nome"): Editar apelido local do jogador no cache. Não exigia admin na main. Condicionado a `!isReadOnly`.
+  17. `lib/screens/join_group_screen.dart:20, 106` (`_submit`, botão "SOLICITAR ENTRADA"): Solicitar entrada em grupo com código de convite via `AppServices.instance.members.requestToJoin`. Aberto a qualquer usuário autenticado (não exige admin). Condicionado a `!isReadOnly`.
+  18. `lib/screens/match_screen.dart:228-257, 309, 313, 2824, 4030` (`_saveMatchState`, `_syncToCloud`, cache de jogadores e log de sync): Gravações de estado transiente e rascunho de pelada em andamento no `SharedPreferences` e Supabase. Não exigiam admin na main; `_syncToCloud` é condicionado a `hasCloudDraftSync`; a persistência definitiva do encerramento é tratada em `_finishMatch` (item 8). **Decidir na Fase 2 se `match_screen` existirá no web**.
 
 - **Ações de escrita que EXIGEM admin (condicionadas a `canAdminister` e suas respectivas flags):**
   1. `lib/screens/sessions_screen.dart:163` (`onEdit`): Editar sessão — exige admin (`canAdminister`).
@@ -200,14 +203,14 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   3. `lib/screens/sessions_screen.dart:211` (FAB de criar sessão) — exige admin (`canAdminister`).
   4. `lib/screens/players_screen.dart:436, 460, 495` (Menu e exclusão de jogador do elenco) — exige admin (`canAdminister`).
   5. `lib/screens/players_screen.dart:796` (FAB de adicionar jogador ao elenco) — exige admin (`canAdminister`).
-  6. `lib/screens/settings_screen.dart:224` (`_showEditGroupDialog`): Editar dados do grupo — exige admin (`canAdminister`).
+  6. `lib/screens/settings_screen.dart:170-250`: Acesso aos blocos de gestão e customizações de grupo (`ManageMembersScreen`, `ManageSeasonsScreen`, `ManageJoinRequestsScreen`, `AdminDebugScreen`). Não altera dados diretamente nessa tela, mas restringe navegação às telas de gestão. Exige admin (`canAdminister`).
   7. `lib/screens/manage_members_screen.dart:54, 153` (`_toggleAdmin` / Switch): Promover ou rebaixar membros — exige admin (`canAdminister`).
   8. `lib/screens/manage_seasons_screen.dart:37, 200, 313, 335` (Criar, editar e excluir temporadas) — exige admin (`canAdminister`).
   9. `lib/screens/manage_join_requests_screen.dart:42, 77, 238` (Aprovar e rejeitar solicitações de entrada) — exige admin (`canAdminister`).
   10. `lib/screens/manage_badges_screen.dart:377, 439` (Definir áudio de gol de jogadores) — exige admin (`canAdminister` e `hasGoalSounds`).
   11. `lib/screens/manage_badges_screen.dart:338, 351, 364` (Definir cosméticos de jogadores) — exige admin (`canAdminister` e `hasCosmetics`).
-  12. `lib/screens/player_detail.dart:2622, 2762` (Adicionar e remover insígnias manuais) — exige admin (`canAdminister`).
-  13. `lib/screens/player_detail.dart:3350, 3740` (Editar atributos comunitários) — exige admin (`canAdminister`).
+  12. `lib/screens/player_detail.dart:1373, 1984, 2622, 2762` (`_saveManualBadge`, `_showRemoveManualBadgeDialog`, botão "Atribuir Prêmio" e remoção por long press) — exige admin (`canAdminister`).
+  13. `lib/screens/player_detail.dart:3350, 3551, 3740` (`_showEditCommunityDialog`, `setCommunityAttributes`, botão "Atributos") — exige admin (`canAdminister`).
   14. `lib/screens/admin_debug_screen.dart:46` (Limpar cache, recalcular overall, forçar sync) — tela exclusiva de admin (`canAdminister` e `hasAdminDebug`).
 
 

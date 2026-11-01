@@ -983,6 +983,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _savePlayerName(String newName) async {
+    if (AppServices.instance.features.isReadOnly) return;
     final prefs = await SharedPreferences.getInstance();
     final String key = 'players_${widget.groupId}';
     if (!prefs.containsKey(key)) return;
@@ -1002,6 +1003,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _savePlayerIcon(String iconPath) async {
+    if (!_canEditProfile) return;
     setState(() => _isSavingIcon = true);
     try {
       // 1. Persistir no Supabase
@@ -1050,6 +1052,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _saveGoalSound(String? audioFile) async {
+    if (!AppServices.instance.features.hasGoalSounds || !_canEditProfile) return;
     setState(() => _isSavingAudio = true);
     try {
       final updated = await AppServices.instance.players.setGoalSound(
@@ -1371,6 +1374,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
 
   Future<void> _saveManualBadge(String? id, String icon, String title) async {
+    if (!_canAdminister) return;
     final prefs = await SharedPreferences.getInstance();
     final String playersKey = 'players_${widget.groupId}';
 
@@ -1630,6 +1634,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _showEditNameDialog() async {
+    if (AppServices.instance.features.isReadOnly) return;
     final controller = TextEditingController(text: playerName);
     await showDialog(
       context: context,
@@ -1982,6 +1987,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _showRemoveManualBadgeDialog(int index, String? badgeId) async {
+    if (!_canAdminister) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -3716,15 +3722,16 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                   side: const BorderSide(color: Colors.white24),
                                 ),
                               ),
-                            OutlinedButton.icon(
-                              onPressed: _showEditNameDialog,
-                              icon: const Icon(Icons.edit, size: 16),
-                              label: const Text('Editar nome'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white70,
-                                side: const BorderSide(color: Colors.white24),
+                            if (!AppServices.instance.features.isReadOnly)
+                              OutlinedButton.icon(
+                                onPressed: _showEditNameDialog,
+                                icon: const Icon(Icons.edit, size: 16),
+                                label: const Text('Editar nome'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                  side: const BorderSide(color: Colors.white24),
+                                ),
                               ),
-                            ),
                             OutlinedButton.icon(
                               onPressed: _showCompareModal,
                               icon: const Icon(Icons.compare_arrows, size: 16),
