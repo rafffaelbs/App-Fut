@@ -492,15 +492,16 @@ class _HomePageState extends State<HomePage> {
                     subtitle: 'Versão 1.2.0',
                     onTap: () {},
                   ),
-                  _buildDrawerTile(
-                    icon: Icons.group_add_rounded,
-                    title: 'Entrar em um grupo',
-                    subtitle: 'Solicitar entrada com um código de convite',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openJoinGroupScreen();
-                    },
-                  ),
+                  if (AppServices.instance.features.hasMembershipManagement)
+                    _buildDrawerTile(
+                      icon: Icons.group_add_rounded,
+                      title: 'Entrar em um grupo',
+                      subtitle: 'Solicitar entrada com um código de convite',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _openJoinGroupScreen();
+                      },
+                    ),
                   _buildDrawerTile(
                     icon: Icons.logout_rounded,
                     title: 'Sair',
@@ -568,18 +569,19 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(color: Colors.white54),
                   ),
                   const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _openJoinGroupScreen,
-                    icon: const Icon(
-                      Icons.group_add_rounded,
-                      color: Colors.white,
+                  if (AppServices.instance.features.hasMembershipManagement)
+                    ElevatedButton.icon(
+                      onPressed: _openJoinGroupScreen,
+                      icon: const Icon(
+                        Icons.group_add_rounded,
+                        color: Colors.white,
+                      ),
+                      label: const Text('Entrar com código de convite'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.headerBlue,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                    label: const Text('Entrar com código de convite'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.headerBlue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
                   const SizedBox(height: 8),
                   Text(
                     "ou toque no + para criar seu próprio grupo",

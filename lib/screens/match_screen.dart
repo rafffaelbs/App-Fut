@@ -133,7 +133,8 @@ class _MatchScreenState extends State<MatchScreen>
     _matchTimer?.cancel();
     _cloudSyncDebounce?.cancel();
     // Se ainda havia um sync do site agendado, dispara agora ao sair da tela.
-    if (_siteSyncTimer?.isActive == true) {
+    if (AppServices.instance.features.hasSiteSync &&
+        _siteSyncTimer?.isActive == true) {
       _siteSyncTimer!.cancel();
       _triggerBackgroundSync();
     }
@@ -265,6 +266,7 @@ class _MatchScreenState extends State<MatchScreen>
   /// timer, gol) resultam em um único request depois que as mudanças
   /// pararem por um instante, em vez de martelar a rede a cada setState.
   void _scheduleCloudSync() {
+    if (!AppServices.instance.features.hasCloudDraftSync) return;
     if (widget.groupId.isEmpty) return;
     _cloudSyncDebounce?.cancel();
     _cloudSyncDebounce = Timer(const Duration(seconds: 5), _syncToCloud);
@@ -373,7 +375,9 @@ class _MatchScreenState extends State<MatchScreen>
     // pelada aberta em outro aparelho), tenta recuperar o "rascunho" salvo
     // no Supabase (session_arrivals + colunas de runtime da session) antes
     // de cair pra listas vazias.
-    if (!prefs.containsKey('present_players_$id') && widget.groupId.isNotEmpty) {
+    if (AppServices.instance.features.hasCloudDraftSync &&
+        !prefs.containsKey('present_players_$id') &&
+        widget.groupId.isNotEmpty) {
       try {
         final arrivals = await AppServices.instance.sessionArrivals
             .getArrivals(id);
@@ -3652,6 +3656,7 @@ class _MatchScreenState extends State<MatchScreen>
   /// rodar a cada partida finalizada. Espera a fila de upload esvaziar e não
   /// dispara enquanto uma partida está rolando.
   void _scheduleSiteSync() {
+    if (!AppServices.instance.features.hasSiteSync) return;
     if (AppServices.instance.siteSync == null) return;
     _siteSyncTimer?.cancel();
     _siteSyncTimer = Timer(const Duration(seconds: 90), () {
@@ -3993,6 +3998,7 @@ class _MatchScreenState extends State<MatchScreen>
   }
 
   void _triggerBackgroundSync() async {
+    if (!AppServices.instance.features.hasSiteSync) return;
     // Fire and forget
     final siteSync = AppServices.instance.siteSync;
     if (siteSync == null) return;

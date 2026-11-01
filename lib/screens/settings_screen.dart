@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../utils/constants.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import 'manage_badges_screen.dart';
 import 'admin_debug_screen.dart';
 import 'manage_members_screen.dart';
@@ -146,6 +147,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final features = AppServices.instance.features;
+    final canAdmin = features.canAdminister(widget.isAdmin);
+
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
       appBar: AppBar(
@@ -163,7 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : ListView(
               padding: const EdgeInsets.only(bottom: 32),
               children: [
-                if (widget.isAdmin) ...[
+                if (canAdmin) ...[
                   _buildSectionHeader('Customizações & Gestão'),
                   _buildNavigationTile(
                     icon: Icons.workspace_premium,
@@ -180,36 +184,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-                  _buildNavigationTile(
-                    icon: Icons.terminal,
-                    iconColor: AppColors.highlightGreen,
-                    title: 'Admin & Debug Cache',
-                    subtitle: 'Diagnóstico, inspeção de cache e testes',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              AdminDebugScreen(groupId: widget.groupId),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildNavigationTile(
-                    icon: Icons.admin_panel_settings,
-                    iconColor: AppColors.highlightGreen,
-                    title: 'Gerenciar Membros',
-                    subtitle: 'Administradores, membros ativos e permissões',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              ManageMembersScreen(groupId: widget.groupId),
-                        ),
-                      );
-                    },
-                  ),
+                  if (features.hasAdminDebug)
+                    _buildNavigationTile(
+                      icon: Icons.terminal,
+                      iconColor: AppColors.highlightGreen,
+                      title: 'Admin & Debug Cache',
+                      subtitle: 'Diagnóstico, inspeção de cache e testes',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                AdminDebugScreen(groupId: widget.groupId),
+                          ),
+                        );
+                      },
+                    ),
+                  if (features.hasMembershipManagement)
+                    _buildNavigationTile(
+                      icon: Icons.admin_panel_settings,
+                      iconColor: AppColors.highlightGreen,
+                      title: 'Gerenciar Membros',
+                      subtitle: 'Administradores, membros ativos e permissões',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                ManageMembersScreen(groupId: widget.groupId),
+                          ),
+                        );
+                      },
+                    ),
                   _buildNavigationTile(
                     icon: Icons.calendar_month,
                     iconColor: AppColors.accentBlue,
@@ -225,21 +231,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-                  _buildNavigationTile(
-                    icon: Icons.how_to_reg,
-                    iconColor: AppColors.highlightGreen,
-                    title: 'Solicitações de Entrada',
-                    subtitle: 'Aprovar ou recusar novos jogadores',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ManageJoinRequestsScreen(
-                              groupId: widget.groupId),
-                        ),
-                      );
-                    },
-                  ),
+                  if (features.hasMembershipManagement)
+                    _buildNavigationTile(
+                      icon: Icons.how_to_reg,
+                      iconColor: AppColors.highlightGreen,
+                      title: 'Solicitações de Entrada',
+                      subtitle: 'Aprovar ou recusar novos jogadores',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ManageJoinRequestsScreen(
+                                groupId: widget.groupId),
+                          ),
+                        );
+                      },
+                    ),
                 ],
 
                 _buildSectionHeader('Preferências do Aplicativo'),

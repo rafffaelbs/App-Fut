@@ -116,8 +116,8 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
             tooltip: 'Meu Perfil',
             onPressed: _openMyProfile,
           ),
-          // Engrenagem (Peladas / Elenco / Estatísticas): só admin vê.
-          if (!_checkingAdmin && _isAdmin)
+          // Engrenagem (Peladas / Elenco / Estatísticas): só admin vê (se features permitir).
+          if (!_checkingAdmin && AppServices.instance.features.canAdminister(_isAdmin))
             IconButton(
               icon: const Icon(Icons.settings, color: Colors.white),
               tooltip: 'Configurações',

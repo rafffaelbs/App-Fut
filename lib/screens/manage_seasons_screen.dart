@@ -15,6 +15,8 @@ class ManageSeasonsScreen extends StatefulWidget {
 class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   List<SeasonModel> _seasons = [];
   bool _isLoading = true;
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(true);
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   }
 
   void _showSeasonDialog({SeasonModel? season}) {
+    if (!_canAdminister) return;
     final TextEditingController nameCtrl = TextEditingController(text: season?.name);
     DateTime? startDate = season?.startDate;
     DateTime? endDate = season?.endDate;
@@ -195,6 +198,7 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
   }
 
   Future<void> _deleteSeason(SeasonModel season) async {
+    if (!_canAdminister) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -307,30 +311,34 @@ class _ManageSeasonsScreenState extends State<ManageSeasonsScreen> {
                               )
                             : const Text('Sem datas definidas',
                                 style: TextStyle(color: Colors.white38)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit,
-                                  color: AppColors.accentBlue),
-                              onPressed: () => _showSeasonDialog(season: s),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.redAccent),
-                              onPressed: () => _deleteSeason(s),
-                            ),
-                          ],
-                        ),
+                        trailing: _canAdminister
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: AppColors.accentBlue),
+                                    onPressed: () => _showSeasonDialog(season: s),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.redAccent),
+                                    onPressed: () => _deleteSeason(s),
+                                  ),
+                                ],
+                              )
+                            : null,
                       ),
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accentBlue,
-        onPressed: () => _showSeasonDialog(),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: _canAdminister
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accentBlue,
+              onPressed: () => _showSeasonDialog(),
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
     );
   }
 }

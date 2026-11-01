@@ -52,8 +52,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   String? _goalSoundUrl;
   bool _isSavingAudio = false;
 
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(_isAdmin);
+
   bool get _canEditProfile {
-    if (_isAdmin) return true;
+    if (_canAdminister) return true;
+    if (AppServices.instance.features.isReadOnly) return false;
     final currentUserId = SupabaseConfig.currentUserId;
     return currentUserId != null && _creatorId != null && currentUserId == _creatorId;
   }
@@ -1098,7 +1102,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   void _showAudioPickerModal() {
-    if (!_canEditProfile) return;
+    if (!AppServices.instance.features.hasGoalSounds || !_canEditProfile) return;
     String? playingFile;
     final localPlayer = AudioPlayer();
     StreamSubscription? completeSub;
@@ -2618,7 +2622,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                         ),
                       ),
                     ),
-                  if (_isAdmin)
+                  if (_canAdminister)
                     IconButton(
                       icon: const Icon(
                         Icons.add_circle_outline,
@@ -2755,7 +2759,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         : (badge['color'] as Color? ?? Colors.blueAccent);
     return GestureDetector(
       onLongPress: () {
-        if (isManual && index != null && _isAdmin) {
+        if (isManual && index != null && _canAdminister) {
           _showRemoveManualBadgeDialog(index, badge['id']?.toString());
         }
       },
@@ -3343,7 +3347,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ADMIN: EDITAR ATRIBUTOS DA COMUNIDADE
   // ─────────────────────────────────────────────────────────────
   Future<void> _showEditCommunityDialog() async {
-    if (!_isAdmin) return;
+    if (!_canAdminister) return;
 
     final Map<String, TextEditingController> ctrls = {
       for (final k in kAttributeKeys)
@@ -3733,7 +3737,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                               ),
                             ),
                             // Só admins veem o botão de editar os atributos.
-                            if (_isAdmin)
+                            if (_canAdminister)
                               OutlinedButton.icon(
                                 onPressed: _showEditCommunityDialog,
                                 icon: const Icon(Icons.tune, size: 16),
@@ -3745,7 +3749,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                               ),
                           ],
                         ),
-                        if (_canEditProfile) ...[
+                        if (AppServices.instance.features.hasGoalSounds && _canEditProfile) ...[
                           const SizedBox(height: 14),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

@@ -52,6 +52,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
   }
 
   Future<void> _toggleAdmin(GroupMemberModel member) async {
+    if (!AppServices.instance.features.canAdminister(true)) return;
     setState(() => _updating.add(member.playerId));
     try {
       if (member.isAdmin) {
@@ -150,7 +151,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                             Switch(
                               value: member.isAdmin,
                               activeColor: AppColors.highlightGreen,
-                              onChanged: isSelf ? null : (_) => _toggleAdmin(member),
+                              onChanged: (isSelf || !AppServices.instance.features.canAdminister(true))
+                                  ? null
+                                  : (_) => _toggleAdmin(member),
                             ),
                         ],
                       ),

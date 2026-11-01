@@ -45,6 +45,8 @@ class _PlayersScreenState extends State<PlayersScreen> {
   bool isLoading = true;
   String _groupBy = 'A-Z';
   bool _isAdmin = false;
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(_isAdmin);
   String _query = '';
   _RosterFilter _filter = _RosterFilter.all;
   _RosterSort _sort = _RosterSort.ovr;
@@ -433,7 +435,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
       frame: resolvePlayerFrame(player),
       onTap: () => _openPlayer(player),
     );
-    if (!_isAdmin) return card;
+    if (!_canAdminister) return card;
     return GestureDetector(
       onLongPress: () => _confirmRemove(player),
       child: Stack(
@@ -457,7 +459,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
     final rating = ((player['rating'] ?? kRatingBase) as num).toDouble();
     return InkWell(
       onTap: () => _openPlayer(player),
-      onLongPress: _isAdmin ? () => _confirmRemove(player) : null,
+      onLongPress: _canAdminister ? () => _confirmRemove(player) : null,
       child: Container(
         height: 64,
         margin: const EdgeInsets.only(bottom: 8),
@@ -492,7 +494,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                 color: overallColor(overall),
               ),
             ),
-            if (_isAdmin) _removeMenu(player),
+            if (_canAdminister) _removeMenu(player),
           ],
         ),
       ),
@@ -793,7 +795,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
                     ),
                   ],
                 ),
-      floatingActionButton: _isAdmin
+      floatingActionButton: _canAdminister
           ? FloatingActionButton(
               backgroundColor: AppColors.accentBlue,
               onPressed:       _showAddPlayerDialog,

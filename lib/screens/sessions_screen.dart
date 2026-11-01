@@ -21,6 +21,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
   List<SessionModel> sessions = [];
   bool isLoading = true;
   bool _isAdmin = false;
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(_isAdmin);
   // sessionId -> confirmados (mapas de jogador, na ordem de chegada)
   Map<String, List<Map<String, dynamic>>> _participants = {};
 
@@ -160,8 +162,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
           ),
         );
       },
-      onEdit: _isAdmin ? () => _openSessionForm(existing: item) : _denyPermission,
-      onDelete: _isAdmin ? () => _confirmDeleteSession(item) : _denyPermission,
+      onEdit: _canAdminister ? () => _openSessionForm(existing: item) : _denyPermission,
+      onDelete: _canAdminister ? () => _confirmDeleteSession(item) : _denyPermission,
     );
   }
 
@@ -208,7 +210,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                       ],
                     ),
             ),
-      floatingActionButton: _isAdmin
+      floatingActionButton: _canAdminister
           ? FloatingActionButton(
               backgroundColor: AppColors.accentBlue,
               onPressed: () => _openSessionForm(),

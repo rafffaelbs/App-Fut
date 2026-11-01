@@ -16,6 +16,8 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   List<Map<String, dynamic>> _requests = [];
   bool _isLoading = true;
   final Set<String> _processingIds = {};
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(true);
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   /// "fantasma" cadastrado manualmente antes de ele ter login) em vez de
   /// criar um jogador novo do zero.
   Future<void> _approve(Map<String, dynamic> request, {String? existingPlayerId}) async {
+    if (!_canAdminister) return;
     final requestId = request['id'].toString();
     if (_processingIds.contains(requestId)) return; // já está processando, ignora clique duplicado
     setState(() => _processingIds.add(requestId));
@@ -73,6 +76,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   }
 
   Future<void> _reject(Map<String, dynamic> request) async {
+    if (!_canAdminister) return;
     final requestId = request['id'].toString();
     if (_processingIds.contains(requestId)) return;
     setState(() => _processingIds.add(requestId));
@@ -93,6 +97,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
   /// Pergunta ao admin se quer criar um perfil novo pro solicitante ou
   /// vincular a solicitação a um jogador já existente no grupo (sem login).
   Future<void> _openApproveOptions(Map<String, dynamic> request) async {
+    if (!_canAdminister) return;
     List<PlayerModel> ghostPlayers = [];
     try {
       final allPlayers = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
@@ -231,7 +236,7 @@ class _ManageJoinRequestsScreenState extends State<ManageJoinRequestsScreen> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue),
                               ),
                             )
-                          else ...[
+                          else if (_canAdminister) ...[
                             IconButton(
                               icon: const Icon(Icons.check_circle, color: AppColors.highlightGreen),
                               tooltip: 'Aprovar',

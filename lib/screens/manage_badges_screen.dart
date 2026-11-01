@@ -28,6 +28,12 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   List<Map<String, dynamic>> _allPlayers = [];
   bool _isLoading = true;
   bool _isAdmin = false;
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(_isAdmin);
+  bool get _canEditCosmetics =>
+      AppServices.instance.features.hasCosmetics && _canAdminister;
+  bool get _canEditGoalSounds =>
+      AppServices.instance.features.hasGoalSounds && _canAdminister;
   static const Uuid _uuid = Uuid();
   late final TabController _tabController;
   int _currentTabIndex = 0;
@@ -123,7 +129,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
 
   /// Define o áudio customizado de gol para um jogador a partir dos assets locais.
   Future<void> _setGoalAudioForPlayer(String playerId, String? audioFile) async {
-    if (!_isAdmin) return;
+    if (!_canEditGoalSounds) return;
     setState(() => _uploadingPlayerId = playerId);
     try {
       final updated = await AppServices.instance.players.setGoalSound(
@@ -175,7 +181,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
 
   /// Abre modal para escolher qual áudio da pasta assets/audio atribuir ao jogador.
   void _showAudioPickerModal(String playerId, String playerName) {
-    if (!_isAdmin) return;
+    if (!_canEditGoalSounds) return;
     final currentPlayer = _allPlayers.firstWhere(
       (p) => p['id'] == playerId,
       orElse: () => {},
@@ -448,7 +454,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
 
   /// Abre o card de busca para escolher UM jogador que ainda não tem áudio customizado.
   void _showPickPlayerForAudioDialog() {
-    if (!_isAdmin) return;
+    if (!_canEditGoalSounds) return;
     final candidates = _allPlayers
         .where((p) => (p['goal_sound_url'] as String?)?.isNotEmpty != true)
         .toList()
@@ -547,12 +553,12 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _removeGoalSound(String playerId) async {
-    if (!_isAdmin) return;
+    if (!_canEditGoalSounds) return;
     await _setGoalAudioForPlayer(playerId, null);
   }
 
   Future<void> _setNameEffect(String playerId, String? effect) async {
-    if (!_isAdmin) return;
+    if (!_canEditCosmetics) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
       final updated = await AppServices.instance.players.setNameEffect(
@@ -576,7 +582,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _setAdvancedStat(String playerId, Map<String, dynamic> patch) async {
-    if (!_isAdmin) return;
+    if (!_canEditCosmetics) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
       final updated = await AppServices.instance.players.setAdvancedStat(
@@ -612,7 +618,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _setMonthlyHighlight(String playerId, bool value) async {
-    if (!_isAdmin) return;
+    if (!_canEditCosmetics) return;
     setState(() => _savingEffectPlayerId = playerId);
     try {
       final updated = await AppServices.instance.players.setMonthlyHighlight(
@@ -1006,7 +1012,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _isAdmin
+                      _canEditCosmetics
                           ? "Nome dourado/prata/bronze aparece em toda tela (partida, ranking, elenco, etc). O selo de craque do mês só aparece no pódio do ranking."
                           : "Somente administradores podem alterar efeitos de jogadores.",
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -1100,7 +1106,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                 : IconButton(
                                     icon: const Icon(Icons.edit_outlined, color: Colors.white70),
                                     tooltip: "Editar efeito",
-                                    onPressed: _isAdmin ? () => _showEffectConfigDialog(player) : null,
+                                    onPressed: _canEditCosmetics ? () => _showEffectConfigDialog(player) : null,
                                   ),
                           ),
                         );
@@ -1109,7 +1115,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
             ),
           ],
         ),
-        if (_isAdmin)
+        if (_canEditCosmetics)
           Positioned(
             right: 16,
             bottom: 16,
@@ -1145,6 +1151,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
   }
 
   Future<void> _saveBadges() async {
+    if (!_canAdminister) return;
     await AppServices.instance.customBadges
         .saveCustomBadges(widget.groupId, _customBadges);
   }
@@ -1366,7 +1373,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _isAdmin
+                      _canEditGoalSounds
                           ? "Jogadores com áudio de comemoração configurado (assets/audio). Quem não estiver aqui usa o som padrão do gol."
                           : "Somente administradores podem alterar os áudios de gol por esta tela.",
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -1382,7 +1389,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.music_off, color: Colors.white24, size: 64),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           const Text(
                             "Nenhum jogador com áudio customizado ainda.",
                             style: TextStyle(color: Colors.white54),
@@ -1444,7 +1451,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                         ),
                                         onPressed: () => _togglePreview(playerId, soundUrl),
                                       ),
-                                      if (_isAdmin)
+                                      if (_canEditGoalSounds)
                                         IconButton(
                                           icon: const Icon(Icons.swap_horiz, color: Colors.white70),
                                           tooltip: "Trocar áudio",
@@ -1453,7 +1460,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                             player['name']?.toString() ?? 'Jogador',
                                           ),
                                         ),
-                                      if (_isAdmin)
+                                      if (_canEditGoalSounds)
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                           tooltip: "Remover áudio",
@@ -1468,7 +1475,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
             ),
           ],
         ),
-        if (_isAdmin)
+        if (_canEditGoalSounds)
           Positioned(
             right: 16,
             bottom: 16,
@@ -1548,7 +1555,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onPressed: () => _showBadgeSheet(),
+                          onPressed: _canAdminister ? () => _showBadgeSheet() : null,
                         ),
                       ],
                     ),
@@ -1657,62 +1664,64 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                                   : FontStyle.normal,
                             ),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit_outlined,
-                                  color: Colors.amber,
-                                ),
-                                onPressed: () => _showBadgeSheet(
-                                  badgeToEdit: badge,
-                                  editIndex: i,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                ),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      backgroundColor: AppColors.headerBlue,
-                                      title: const Text(
-                                        "Remover Troféu?",
-                                        style: TextStyle(color: Colors.white),
+                          trailing: _canAdminister
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit_outlined,
+                                        color: Colors.amber,
                                       ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(c),
-                                          child: const Text(
-                                            "Cancelar",
-                                            style: TextStyle(
-                                              color: Colors.white54,
-                                            ),
-                                          ),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            _removeBadge(i);
-                                            Navigator.pop(c);
-                                          },
-                                          child: const Text(
-                                            "Remover",
-                                            style: TextStyle(
-                                              color: Colors.redAccent,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      onPressed: () => _showBadgeSheet(
+                                        badgeToEdit: badge,
+                                        editIndex: i,
+                                      ),
                                     ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                      ),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (c) => AlertDialog(
+                                            backgroundColor: AppColors.headerBlue,
+                                            title: const Text(
+                                              "Remover Troféu?",
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(c),
+                                                child: const Text(
+                                                  "Cancelar",
+                                                  style: TextStyle(
+                                                    color: Colors.white54,
+                                                  ),
+                                                ),
+                                              ),
+                                              TextButton(
+                                                onPressed: () {
+                                                  _removeBadge(i);
+                                                  Navigator.pop(c);
+                                                },
+                                                child: const Text(
+                                                  "Remover",
+                                                  style: TextStyle(
+                                                    color: Colors.redAccent,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -1725,7 +1734,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
             _buildAudiosTab(),
           ],
         ),
-        floatingActionButton: (_currentTabIndex == 0 && _customBadges.isNotEmpty)
+        floatingActionButton: (_currentTabIndex == 0 && _customBadges.isNotEmpty && _canAdminister)
             ? FloatingActionButton.extended(
                 backgroundColor: Colors.amber,
                 onPressed: () => _showBadgeSheet(),
