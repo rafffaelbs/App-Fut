@@ -1389,7 +1389,7 @@ class _ManageBadgesScreenState extends State<ManageBadgesScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.music_off, color: Colors.white24, size: 64),
-                          SizedBox(height: 12),
+                          const SizedBox(height: 12),
                           const Text(
                             "Nenhum jogador com áudio customizado ainda.",
                             style: TextStyle(color: Colors.white54),
