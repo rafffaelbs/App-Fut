@@ -143,4 +143,12 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Nenhum impacto no comportamento visível do app. Conforme a regra de ouro de não alterar o comportamento visível da UI, a interface existente com `RefreshIndicator` e botão de refresh na AppBar foi preservada, agora consumindo `AppServices.instance.diagnostics` e `AppServices.instance.siteSync`.
 - **Ação:** Registrado aqui conforme a regra geral do projeto.
 
+---
+
+### 16. `lib/utils/stats_calculator.dart` (`getAllGroupMatches`, linhas 13–130) — Tarefa T3e (Etapa 1)
+- **O que viu:** A função `getAllGroupMatches(String groupId)` busca inicialmente todas as partidas e o elenco do grupo via repositórios (`MatchesRepository.getMatchesByGroup` e `PlayersRepository.getPlayersByGroup`), mapeando escalações, eventos e goleiros em memória. Caso ocorra qualquer exceção (ex.: falha de rede/offline), cai no fallback para `SharedPreferences`, onde lê `sessions_$groupId` (lista de sessões do grupo) e, para cada sessão encontrada, busca seu histórico local na chave `match_history_$tId`. Em seguida, se existir a chave de configuração `seasons_$groupId`, filtra as partidas pela temporada ativa baseando-se nas datas `startDate` e `endDate`.
+- **Impacto:** O fluxo combinava instanciação direta de repositórios Supabase com leitura direta de chaves locais/legadas em `SharedPreferences`.
+- **Ação:** Parâmetros opcionais nomeados `matchesRepository` e `playersRepository` foram adicionados à assinatura para possibilitar testes de unidade e injeção de dependências, mantendo as implementações originais como padrão.
+
+
 
