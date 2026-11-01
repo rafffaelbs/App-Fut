@@ -136,3 +136,11 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** Não houve alteração de comportamento. A documentação `INVENTARIO_OFFLINE.md` continha menção a um método inexistente (`_onAppResumed`). Todos os gatilhos reais existentes no código foram 100% preservados na abstração `SupabaseMatchOutbox`.
 - **Ação:** Registrado aqui conforme instrução 5 da tarefa T3d.
 
+---
+
+### 15. Referência a "TESTAR CONEXÃO AGORA" em `admin_debug_screen.dart` — Tarefa T3c
+- **O que viu:** O documento `docs/INVENTARIO_OFFLINE.md` (linhas 101 e 317) e o enunciado da tarefa T3c citam: *"abrir o painel de debug do admin e tocar 'TESTAR CONEXÃO AGORA'"*. Contudo, na inspeção minuciosa de `lib/screens/admin_debug_screen.dart` e em todo o histórico do git (`git log -S "TESTAR CONEXÃO"`), verificou-se que nunca existiu um botão físico com o texto "TESTAR CONEXÃO AGORA". O teste de latência e conectividade com o Supabase (`testSupabaseConnection()`) é disparado automaticamente durante o carregamento inicial da tela e pelo botão de recarregar da AppBar (`IconButton` com `Icons.refresh` e tooltip "Atualizar Status"), bem como pelo gesto de pull-to-refresh (`RefreshIndicator`), ambos chamando `_loadData()` que executa `getStatus()`.
+- **Impacto:** Nenhum impacto no comportamento visível do app. Conforme a regra de ouro de não alterar o comportamento visível da UI, a interface existente com `RefreshIndicator` e botão de refresh na AppBar foi preservada, agora consumindo `AppServices.instance.diagnostics` e `AppServices.instance.siteSync`.
+- **Ação:** Registrado aqui conforme a regra geral do projeto.
+
+
