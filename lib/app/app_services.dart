@@ -8,8 +8,10 @@ import '../domain/repositories/seasons_repository.dart';
 import '../domain/repositories/session_arrivals_repository.dart';
 import '../domain/repositories/sessions_repository.dart';
 import '../domain/services/auth_service.dart';
+import '../domain/services/diagnostics_service.dart';
 import '../domain/services/match_outbox.dart';
 import '../domain/services/permission_service.dart';
+import '../domain/services/site_sync_service.dart';
 
 /// Guarda as implementações ativas (interfaces) do app.
 /// Definido uma vez na inicialização (bootstrap_*.dart).
@@ -57,8 +59,6 @@ class AppServices {
 
   final MatchOutbox outbox;
 
-  // Previstos; serão tipados e preenchidos na tarefa T3c
-  // (SiteSyncService, DiagnosticsService).
-  final Object? siteSync;
-  final Object? diagnostics;
+  final SiteSyncService? siteSync;
+  final DiagnosticsService? diagnostics;
 }
