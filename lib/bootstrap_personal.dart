@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 import 'app/app_services.dart';
+import 'data/prefs/prefs_custom_badges_repository.dart';
+import 'data/prefs/prefs_match_history_store.dart';
 import 'data/supabase/action_logs_repository.dart';
 import 'data/supabase/group_members_repository.dart';
 import 'data/supabase/groups_repository.dart';
@@ -43,6 +45,9 @@ Future<void> bootstrapPersonal() async {
     diagnosticsService: diagnostics,
   );
 
+  final matchHistory = PrefsMatchHistoryStore();
+  final customBadges = PrefsCustomBadgesRepository();
+
   AppServices.instance = AppServices(
     groups: SupabaseGroupsRepository(client: client, permissions: permissions),
     members: members,
@@ -59,6 +64,8 @@ Future<void> bootstrapPersonal() async {
     auth: auth,
     permissions: permissions,
     outbox: outbox,
+    matchHistory: matchHistory,
+    customBadges: customBadges,
     siteSync: siteSync,
     diagnostics: diagnostics,
   );

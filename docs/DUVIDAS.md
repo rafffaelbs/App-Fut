@@ -150,5 +150,18 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Impacto:** O fluxo combinava instanciação direta de repositórios Supabase com leitura direta de chaves locais/legadas em `SharedPreferences`.
 - **Ação:** Parâmetros opcionais nomeados `matchesRepository` e `playersRepository` foram adicionados à assinatura para possibilitar testes de unidade e injeção de dependências, mantendo as implementações originais como padrão.
 
+---
+
+### 17. Tratamento de erro de JSON e ausência de chaves em `match_history_` e `custom_badges_` — Tarefa T3e (Etapa 3)
+- **O que viu:**
+  - `match_history_<sessionId>`:
+    - Em `match_screen.dart` (linha 565 em `_loadSessionMatches` e linha 3654 em `_appendLocalHistory`), as leituras usam `try/catch` tratando exceções (incluindo JSON corrompido) e revertem para lista vazia `[]`.
+    - Em `ranking_screen.dart` (linha 178) e `stats_calculator.dart` (linha 109), `jsonDecode` era executado diretamente sem `try/catch`, arriscando `FormatException` caso a string em disco estivesse corrompida.
+  - `custom_badges_<groupId>`:
+    - Em `manage_badges_screen.dart` (linha 82) e `player_detail.dart` (linhas 179 e 1818), `jsonDecode` era executado sem `try/catch`, assumindo JSON válido.
+- **Impacto:** Diferentes telas lidavam de formas distintas com a robustez na deserialização dos dados locais persistidos no `SharedPreferences`.
+- **Ação:** As implementações de `MatchHistoryStore` (`PrefsMatchHistoryStore`) e `CustomBadgesRepository` (`PrefsCustomBadgesRepository`) passam a devolver os dados já decodificados como `List<Map<String, dynamic>>`, retornando `[]` com segurança caso a chave não exista ou contenha JSON inválido, deixando o pós-processamento e filtragens específicas a cargo de cada chamador.
+
+
 
 

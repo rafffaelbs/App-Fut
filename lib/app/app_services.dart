@@ -1,5 +1,7 @@
 import '../domain/repositories/action_logs_repository.dart';
+import '../domain/repositories/custom_badges_repository.dart';
 import '../domain/repositories/groups_repository.dart';
+import '../domain/repositories/match_history_store.dart';
 import '../domain/repositories/matches_repository.dart';
 import '../domain/repositories/membership_repository.dart';
 import '../domain/repositories/player_account_repository.dart';
@@ -29,6 +31,8 @@ class AppServices {
     required this.auth,
     required this.permissions,
     required this.outbox,
+    required this.matchHistory,
+    required this.customBadges,
     this.siteSync,
     this.diagnostics,
   });
@@ -58,6 +62,8 @@ class AppServices {
   final PermissionService permissions;
 
   final MatchOutbox outbox;
+  final MatchHistoryStore matchHistory;
+  final CustomBadgesRepository customBadges;
 
   final SiteSyncService? siteSync;
   final DiagnosticsService? diagnostics;
