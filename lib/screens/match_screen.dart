@@ -14,7 +14,6 @@ import '../utils/team_balancer.dart';
 import '../utils/roster_utils.dart';
 import '../utils/stats_calculator.dart';
 import '../services/sync_service.dart';
-import '../services/pending_match_queue.dart';
 import '../services/group_bootstrap.dart';
 import 'package:uuid/uuid.dart';
 import 'package:app_do_fut/app/app_services.dart';
@@ -127,7 +126,7 @@ class _MatchScreenState extends State<MatchScreen>
     });
     _loadMatchState().then((_) => _refreshSessionSettings());
     // Reenvia partidas que ficaram pendentes (ex.: sem internet na última vez).
-    PendingMatchQueue.instance.flush();
+    AppServices.instance.outbox.flush();
   }
 
   @override
@@ -600,7 +599,7 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _startMatch() async {
     // Bola rolando = bom momento pra subir súmulas pendentes em segundo plano.
-    PendingMatchQueue.instance.flush();
+    AppServices.instance.outbox.flush();
     if (isMatchRunning) return;
     if (_requireGk && (activeGkRed == null || activeGkWhite == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1718,7 +1717,7 @@ class _MatchScreenState extends State<MatchScreen>
         elevation: 0,
         actions: [
           ValueListenableBuilder<int>(
-            valueListenable: PendingMatchQueue.instance.pending,
+            valueListenable: AppServices.instance.outbox.pending,
             builder: (context, count, _) {
               if (count == 0) return const SizedBox.shrink();
               return IconButton(
@@ -3432,7 +3431,7 @@ class _MatchScreenState extends State<MatchScreen>
     }).toList();
 
     // 1 escrita local rápida e o envio vai pra fila (retry automático).
-    await PendingMatchQueue.instance.enqueue({
+    await AppServices.instance.outbox.enqueue({
       'match_id': matchId,
       'match': {
         'id': matchId,
@@ -3674,7 +3673,7 @@ class _MatchScreenState extends State<MatchScreen>
     _siteSyncTimer?.cancel();
     _siteSyncTimer = Timer(const Duration(seconds: 90), () {
       if (!mounted) return;
-      if (isMatchRunning || PendingMatchQueue.instance.pending.value > 0) {
+      if (isMatchRunning || AppServices.instance.outbox.pending.value > 0) {
         _scheduleSiteSync();
         return;
       }
@@ -3690,9 +3689,9 @@ class _MatchScreenState extends State<MatchScreen>
         title: const Text("Sincronização",
             style: TextStyle(color: AppColors.textWhite)),
         content: ValueListenableBuilder<int>(
-          valueListenable: PendingMatchQueue.instance.pending,
+          valueListenable: AppServices.instance.outbox.pending,
           builder: (_, count, __) => ValueListenableBuilder<String?>(
-            valueListenable: PendingMatchQueue.instance.lastError,
+            valueListenable: AppServices.instance.outbox.lastError,
             builder: (_, err, __) => Text(
               count == 0
                   ? "Tudo sincronizado."
@@ -3704,7 +3703,7 @@ class _MatchScreenState extends State<MatchScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => PendingMatchQueue.instance.flush(),
+            onPressed: () => AppServices.instance.outbox.flush(),
             child: const Text("Tentar agora"),
           ),
           TextButton(
