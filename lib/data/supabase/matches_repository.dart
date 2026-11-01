@@ -6,7 +6,7 @@ import '../../models/match_model.dart';
 import '../../models/match_lineup_model.dart';
 import '../../models/match_event_model.dart';
 import '../../models/rating_history_model.dart';
-import '../../services/pending_match_queue.dart';
+import 'supabase_match_outbox.dart';
 import '../../domain/repositories/matches_repository.dart';
 
 class SupabaseMatchesRepository implements MatchesRepository {
@@ -24,7 +24,7 @@ class SupabaseMatchesRepository implements MatchesRepository {
   /// Assim Histórico/Ranking/Estatísticas mostram a partida na hora, mesmo
   /// offline ou antes do upload terminar.
   Future<List<MatchModel>> _pendingMatches({String? sessionId, String? groupId}) async {
-    final jobs = await PendingMatchQueue.readAll();
+    final jobs = await SupabaseMatchOutbox.readAll();
     final out = <MatchModel>[];
     for (final job in jobs) {
       final match = Map<String, dynamic>.from(job['match'] as Map);
