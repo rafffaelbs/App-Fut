@@ -12,6 +12,7 @@ import '../../domain/repositories/groups_repository.dart';
 /// Monta o payload para inserção da temporada padrão ao criar um novo grupo.
 Map<String, dynamic> buildDefaultSeasonPayload(String groupId) {
   return {
+    'id': const Uuid().v4(),
     'group_id': groupId,
     'name': 'Temporada 1',
     'is_active': true,
