@@ -1,8 +1,9 @@
 # Plano de Ação - App-Fut
 
 ## 1. Correção de Bugs
-- [ ] Estatisticas Avançadas: Na tela de detalhes do jogador, a parte de estatisticas avançadas está bugada. Muitos numeros nao fazem sentido, como um jogador ter 10 derrotas e o jogador com quem ele mais perdeu esteve presente em 3 derrotas mas fala que isso representa cerca de 70% das derrotas dele, onde deveria ser 30%.
-- [ ] Sugestão de entrada mostrando quem vai sair ao inves de quem vai entrar: Quando finaliza uma partida ele coloca os proximos que vao entrar em um texto com "Entra: " verde, no entanto, a lista de quem aparece que vai entrar é de quem vai sair (os jogadores que perderam por exemplo). 
+- [x] Estatisticas Avançadas: Na tela de detalhes do jogador, a parte de estatisticas avançadas foi corrigida e aprimorada com Top 3, barra de distribuição em cores e opção "Ver mais".
+- [ ] Sugestão de entrada mostrando quem vai sair ao inves de quem vai entrar: Quando finaliza uma partida ele coloca os proximos que vao entrar em um texto com "Entra: " verde, no entanto, a lista de quem aparece que vai entrar é de quem vai sair (os jogadores que perderam por exemplo).
+- [ ] Diferença de rating na tela de elenco e na tela de detalhes
 
 
 ## 2. Segurança e Permissões (Apenas Admin)

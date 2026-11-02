@@ -16,8 +16,10 @@ import '../utils/player_identity.dart';
 import '../utils/overall_calculator.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
+import '../models/player_stat_distribution.dart';
 import '../widgets/player/fifa_card.dart';
 import '../widgets/shared/icon_picker_modal.dart';
+import '../widgets/stats/player_stat_distribution_card.dart';
 import 'player_comparison_screen.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
@@ -341,7 +343,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final int index = leaderboard.indexWhere(
       (p) => (p['id'] as String) == widget.playerId,
     );
-    final Map<String, dynamic> advStats = _calculateAdvancedStats(filtered);
+    final Map<String, dynamic>? pStats = index >= 0
+        ? leaderboard[index]
+        : globalStats[widget.playerId];
+    final Map<String, dynamic> advStats = _calculateAdvancedStats(
+      filtered,
+      currentStats: pStats,
+    );
 
     setState(() {
       _allHistory = filtered;
@@ -715,7 +723,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ESTATÍSTICAS AVANÇADAS
   // ─────────────────────────────────────────────────────────────
 
-  Map<String, dynamic> _calculateAdvancedStats(List<dynamic> allHistory) {
+  Map<String, dynamic> _calculateAdvancedStats(
+    List<dynamic> allHistory, {
+    Map<String, dynamic>? currentStats,
+  }) {
     final Map<String, int> assistsGiven = {};
     final Map<String, int> assistsReceived = {};
     final Map<String, int> gamesWith = {};
@@ -738,6 +749,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     int biggestLossMargin = 0;
     String biggestLossScore = "-";
     int totalTeamGoalsWhenPlaying = 0;
+
+    int myCalculatedMatches = 0;
+    int myCalculatedWins = 0;
+    int myCalculatedLosses = 0;
+    int myCalculatedGoals = 0;
+    int myCalculatedAssists = 0;
 
     final Map<String, String> playerNamesMap = {};
     final String myId = widget.playerId;
@@ -780,6 +797,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       );
       if (!inRed && !inWhite) continue;
 
+      myCalculatedMatches++;
       final String myTeam = inRed ? 'red' : 'white';
       final int scoreRed = match['scoreRed'] ?? 0;
       final int scoreWhite = match['scoreWhite'] ?? 0;
@@ -790,10 +808,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
       totalTeamGoalsWhenPlaying += myTeamGoals;
 
-      if (myTeamGoals > opponentGoals)
+      if (myTeamGoals > opponentGoals) {
         myTeamResult = 1;
-      else if (myTeamGoals < opponentGoals)
+        myCalculatedWins++;
+      } else if (myTeamGoals < opponentGoals) {
         myTeamResult = -1;
+        myCalculatedLosses++;
+      }
 
       if (opponentGoals == 0) cleanSheets++;
 
@@ -885,17 +906,217 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           final String assistId = eventPlayerId(ev, 'assist');
           if (scorerId == myId) {
             goalsInThisMatch++;
+            myCalculatedGoals++;
             if (assistId.isNotEmpty && assistId != myId) {
               assistsReceived[assistId] = (assistsReceived[assistId] ?? 0) + 1;
             }
           }
           if (assistId == myId && scorerId != myId && scorerId.isNotEmpty) {
+            myCalculatedAssists++;
             assistsGiven[scorerId] = (assistsGiven[scorerId] ?? 0) + 1;
           }
         }
       }
       if (goalsInThisMatch >= 3) hatTricks++;
     }
+
+    final int myTotalGoals =
+        (currentStats?['goals'] as int?) ?? myCalculatedGoals;
+    final int myTotalAssists =
+        (currentStats?['assists'] as int?) ?? myCalculatedAssists;
+    final int myTotalMatches =
+        (currentStats?['games'] as int?) ?? myCalculatedMatches;
+    final int myTotalWins =
+        (currentStats?['wins'] as int?) ?? myCalculatedWins;
+    final int myTotalLosses =
+        (currentStats?['losses'] as int?) ?? myCalculatedLosses;
+
+    List<PlayerStatDistributionItem> buildDistributionList(
+      Map<String, int> countsMap, {
+      required int totalReference,
+    }) {
+      final entries = countsMap.entries.where((e) => e.value > 0).toList();
+      entries.sort((a, b) {
+        final cmp = b.value.compareTo(a.value);
+        if (cmp != 0) return cmp;
+        final nameA = playerNamesMap[a.key] ?? '';
+        final nameB = playerNamesMap[b.key] ?? '';
+        return nameA.compareTo(nameB);
+      });
+
+      return entries.map((e) {
+        final double pct =
+            totalReference > 0 ? (e.value / totalReference) * 100 : 0.0;
+        return PlayerStatDistributionItem(
+          playerId: e.key,
+          name: playerNamesMap[e.key] ?? 'Desconhecido',
+          count: e.value,
+          percentage: pct,
+        );
+      }).toList();
+    }
+
+    final int totalAssistsReceived = assistsReceived.values.fold<int>(
+      0,
+      (a, b) => a + b,
+    );
+    final int unassistedGoals = (myTotalGoals - totalAssistsReceived).clamp(
+      0,
+      myTotalGoals,
+    );
+
+    final categoryGarcom = PlayerStatCategoryData(
+      id: 'topAssister',
+      title: 'Garçom Favorito',
+      subtitle: 'Quem mais deu passes para seus gols',
+      calculationExplanation:
+          'Calculado sobre os seus $myTotalGoals ${myTotalGoals == 1 ? "gol marcado" : "gols marcados"}. Mostra a porcentagem dos seus gols que vieram de passes de cada jogador.',
+      icon: Icons.handshake,
+      iconColor: Colors.amber,
+      unitLabel: 'passes',
+      unitLabelSingular: 'passe',
+      totalReference: myTotalGoals,
+      totalReferenceLabel:
+          '$myTotalGoals ${myTotalGoals == 1 ? "gol no total" : "gols no total"}',
+      items: buildDistributionList(
+        assistsReceived,
+        totalReference: myTotalGoals,
+      ),
+      unassignedCount: unassistedGoals,
+      unassignedLabel: 'Gols individuais (sem assistência)',
+    );
+
+    final categoryMaisAssistiu = PlayerStatCategoryData(
+      id: 'topAssisted',
+      title: 'Mais Assistiu',
+      subtitle: 'Para quem você mais deu assistências',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalAssists ${myTotalAssists == 1 ? "assistência distribuída" : "assistências distribuídas"}. Mostra a porcentagem dos seus passes que viraram gol para cada parceiro.',
+      icon: Icons.sports_soccer,
+      iconColor: Colors.greenAccent,
+      unitLabel: 'gols',
+      unitLabelSingular: 'gol',
+      totalReference: myTotalAssists,
+      totalReferenceLabel:
+          '$myTotalAssists ${myTotalAssists == 1 ? "assistência no total" : "assistências no total"}',
+      items: buildDistributionList(
+        assistsGiven,
+        totalReference: myTotalAssists,
+      ),
+    );
+
+    final categoryVenceuJunto = PlayerStatCategoryData(
+      id: 'mostWinsWith',
+      title: 'Mais Venceu Junto',
+      subtitle: 'Companheiro presente em mais vitórias suas',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalWins ${myTotalWins == 1 ? "vitória conquistada" : "vitórias conquistadas"}. Mostra a porcentagem das suas vitórias em que o jogador esteve no seu time.',
+      icon: Icons.thumb_up,
+      iconColor: Colors.green,
+      unitLabel: 'vitórias',
+      unitLabelSingular: 'vitória',
+      totalReference: myTotalWins,
+      totalReferenceLabel:
+          '$myTotalWins ${myTotalWins == 1 ? "vitória no total" : "vitórias no total"}',
+      items: buildDistributionList(winsWith, totalReference: myTotalWins),
+    );
+
+    final categoryPerdeuJunto = PlayerStatCategoryData(
+      id: 'mostLossesWith',
+      title: 'Mais Perdeu Junto',
+      subtitle: 'Companheiro presente em mais derrotas suas',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalLosses ${myTotalLosses == 1 ? "derrota sofrida" : "derrotas sofridas"}. Mostra a porcentagem das suas derrotas em que o jogador esteve no mesmo time que você.',
+      icon: Icons.thumb_down,
+      iconColor: Colors.redAccent,
+      unitLabel: 'derrotas',
+      unitLabelSingular: 'derrota',
+      totalReference: myTotalLosses,
+      totalReferenceLabel:
+          '$myTotalLosses ${myTotalLosses == 1 ? "derrota no total" : "derrotas no total"}',
+      items: buildDistributionList(lossesWith, totalReference: myTotalLosses),
+    );
+
+    final categoryCarrasco = PlayerStatCategoryData(
+      id: 'mostLossesAgainst',
+      title: 'Carrasco',
+      subtitle: 'Adversário que mais te venceu em campo',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalLosses ${myTotalLosses == 1 ? "derrota sofrida" : "derrotas sofridas"}. Mostra a porcentagem das suas derrotas em que o jogador estava no time adversário.',
+      icon: Icons.mood_bad,
+      iconColor: Colors.red,
+      unitLabel: 'derrotas',
+      unitLabelSingular: 'derrota',
+      totalReference: myTotalLosses,
+      totalReferenceLabel:
+          '$myTotalLosses ${myTotalLosses == 1 ? "derrota no total" : "derrotas no total"}',
+      items: buildDistributionList(
+        lossesAgainst,
+        totalReference: myTotalLosses,
+      ),
+    );
+
+    final categoryFregues = PlayerStatCategoryData(
+      id: 'mostWinsAgainst',
+      title: 'Maior Freguês',
+      subtitle: 'Adversário que você mais venceu em campo',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalWins ${myTotalWins == 1 ? "vitória conquistada" : "vitórias conquistadas"}. Mostra a porcentagem das suas vitórias em que o jogador estava no time adversário.',
+      icon: Icons.mood,
+      iconColor: Colors.blueAccent,
+      unitLabel: 'vitórias',
+      unitLabelSingular: 'vitória',
+      totalReference: myTotalWins,
+      totalReferenceLabel:
+          '$myTotalWins ${myTotalWins == 1 ? "vitória no total" : "vitórias no total"}',
+      items: buildDistributionList(winsAgainst, totalReference: myTotalWins),
+    );
+
+    final categoryJogouJunto = PlayerStatCategoryData(
+      id: 'mostPlayedWith',
+      title: 'Mais Jogou Junto',
+      subtitle: 'Companheiro mais frequente no mesmo time',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalMatches ${myTotalMatches == 1 ? "partida disputada" : "partidas disputadas"}. Mostra a porcentagem dos seus jogos em que você atuou no mesmo time deste jogador.',
+      icon: Icons.people,
+      iconColor: Colors.white,
+      unitLabel: 'jogos',
+      unitLabelSingular: 'jogo',
+      totalReference: myTotalMatches,
+      totalReferenceLabel:
+          '$myTotalMatches ${myTotalMatches == 1 ? "jogo no total" : "jogos no total"}',
+      items: buildDistributionList(gamesWith, totalReference: myTotalMatches),
+    );
+
+    final categoryRival = PlayerStatCategoryData(
+      id: 'mostPlayedAgainst',
+      title: 'Maior Rival',
+      subtitle: 'Adversário mais frequente do outro lado',
+      calculationExplanation:
+          'Calculado sobre as suas $myTotalMatches ${myTotalMatches == 1 ? "partida disputada" : "partidas disputadas"}. Mostra a porcentagem dos seus jogos em que enfrentou este adversário.',
+      icon: Icons.local_fire_department,
+      iconColor: Colors.orange,
+      unitLabel: 'jogos contra',
+      unitLabelSingular: 'jogo contra',
+      totalReference: myTotalMatches,
+      totalReferenceLabel:
+          '$myTotalMatches ${myTotalMatches == 1 ? "jogo no total" : "jogos no total"}',
+      items: buildDistributionList(
+        gamesAgainst,
+        totalReference: myTotalMatches,
+      ),
+    );
+
+    final categories = [
+      categoryGarcom,
+      categoryMaisAssistiu,
+      categoryVenceuJunto,
+      categoryPerdeuJunto,
+      categoryCarrasco,
+      categoryFregues,
+      categoryJogouJunto,
+      categoryRival,
+    ];
 
     Map<String, dynamic> findMax(
       Map<String, int> map, {
@@ -918,7 +1139,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           if (ratioB != ratioA) return ratioB.compareTo(ratioA);
           return ratioBaseMap[b.key]!.compareTo(
             ratioBaseMap[a.key]!,
-          ); // Desempate: mais jogos
+          );
         }
         return b.value.compareTo(a.value);
       });
@@ -932,6 +1153,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     }
 
     return {
+      'categories': categories,
       'topAssisted': findMax(assistsGiven),
       'topAssister': findMax(assistsReceived),
       'mostPlayedWith': findMax(gamesWith),
@@ -1619,15 +1841,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     return Colors.red;
   }
 
-  String _formatAdvStat(dynamic stat, String suffix, {int total = 0}) {
-    if (stat == null || stat['count'] == 0) return '-';
-    int count = stat['count'];
-    if (total > 0) {
-      double pct = (count / total) * 100;
-      return '${stat['name']}\n($count $suffix - ${pct.toStringAsFixed(1)}%)';
-    }
-    return '${stat['name']}\n($count $suffix)';
-  }
+
 
   // ─────────────────────────────────────────────────────────────
   // DIÁLOGOS
@@ -2911,47 +3125,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     );
   }
 
-  Widget _buildGridCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: AppColors.deepBlue,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildRadarChart() {
     final int games = playerStats['games'] ?? 0;
@@ -3614,9 +3788,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         : (widget.initialPlayerName ?? 'Jogador');
     final int overall = calculateOverall(appRating10: nota, community: _community);
 
-    final int goals = playerStats['goals'] ?? 0;
-    final int assists = playerStats['assists'] ?? 0;
-
     double aproveitamento = 0;
     if (totalResults > 0) {
       aproveitamento = ((wins * 3 + draws * 1) / (totalResults * 3)) * 100;
@@ -4038,102 +4209,86 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          childAspectRatio: 1.15,
-                          children: [
-                            _buildGridCard(
-                              'Garçom Favorito',
-                              _formatAdvStat(
-                                advancedStats['topAssister'],
-                                'gols seus',
-                                total: goals,
-                              ),
-                              Icons.handshake,
-                              Colors.amber,
-                            ),
-                            _buildGridCard(
-                              'Mais Assistiu',
-                              _formatAdvStat(
-                                advancedStats['topAssisted'],
-                                'suas assist.',
-                                total: assists,
-                              ),
-                              Icons.sports_soccer,
-                              Colors.greenAccent,
-                            ),
-                            _buildGridCard(
-                              'Mais Jogou Junto',
-                              _formatAdvStat(
-                                advancedStats['mostPlayedWith'],
-                                'jogos',
-                                total: totalResults,
-                              ),
-                              Icons.people,
-                              Colors.white,
-                            ),
-                            _buildGridCard(
-                              'Mais Venceu Junto',
-                              _formatAdvStat(
-                                advancedStats['mostWinsWith'],
-                                'vitórias',
-                                total:
-                                    advancedStats['mostWinsWith']['base'] ?? 0,
-                              ),
-                              Icons.thumb_up,
-                              Colors.green,
-                            ),
-                            _buildGridCard(
-                              'Mais Perdeu Junto',
-                              _formatAdvStat(
-                                advancedStats['mostLossesWith'],
-                                'derrotas',
-                                total:
-                                    advancedStats['mostLossesWith']['base'] ??
-                                    0,
-                              ),
-                              Icons.thumb_down,
-                              Colors.redAccent,
-                            ),
-                            _buildGridCard(
-                              'Maior Rival',
-                              _formatAdvStat(
-                                advancedStats['mostPlayedAgainst'],
-                                'jogos contra',
-                                total: totalResults,
-                              ),
-                              Icons.local_fire_department,
-                              Colors.orange,
-                            ),
-                            _buildGridCard(
-                              'Maior Freguês',
-                              _formatAdvStat(
-                                advancedStats['mostWinsAgainst'],
-                                'vitórias',
-                                total:
-                                    advancedStats['mostWinsAgainst']['base'] ??
-                                    0,
-                              ),
-                              Icons.mood,
-                              Colors.blueAccent,
-                            ),
-                            _buildGridCard(
-                              'Carrasco',
-                              _formatAdvStat(
-                                advancedStats['mostLossesAgainst'],
-                                'derrotas',
-                                total:
-                                    advancedStats['mostLossesAgainst']['base'] ??
-                                    0,
-                              ),
-                              Icons.mood_bad,
-                              Colors.red,
-                            ),
-                          ],
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final categories =
+                                (advancedStats['categories']
+                                        as List<PlayerStatCategoryData>?) ??
+                                    [];
+                            if (categories.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            void navigateToPlayer(
+                              String targetId,
+                              String targetName,
+                            ) {
+                              if (targetId.isEmpty ||
+                                  targetId == widget.playerId) {
+                                return;
+                              }
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PlayerDetailScreen(
+                                    groupId: widget.groupId,
+                                    playerId: targetId,
+                                    initialPlayerName: targetName,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            if (constraints.maxWidth >= 600) {
+                              return Column(
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < categories.length;
+                                    i += 2
+                                  ) ...[
+                                    IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            child: PlayerStatDistributionCard(
+                                              data: categories[i],
+                                              onTapPlayer: navigateToPlayer,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: i + 1 < categories.length
+                                                ? PlayerStatDistributionCard(
+                                                    data: categories[i + 1],
+                                                    onTapPlayer:
+                                                        navigateToPlayer,
+                                                  )
+                                                : const SizedBox.shrink(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
+                                ],
+                              );
+                            }
+
+                            return Column(
+                              children: [
+                                for (final cat in categories) ...[
+                                  PlayerStatDistributionCard(
+                                    data: cat,
+                                    onTapPlayer: navigateToPlayer,
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
