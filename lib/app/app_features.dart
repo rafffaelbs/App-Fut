@@ -64,6 +64,6 @@ class _PersonalAppFeatures extends AppFeatures {
           hasCloudDraftSync: true,
           hasAdminDebug: true,
           hasDbExportImport: false,
-          isReadOnly: true,
+          isReadOnly: false,
         );
 }
