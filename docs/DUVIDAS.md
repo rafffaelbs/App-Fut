@@ -213,6 +213,37 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   13. `lib/screens/player_detail.dart:3350, 3551, 3740` (`_showEditCommunityDialog`, `setCommunityAttributes`, botão "Atributos") — exige admin (`canAdminister`).
   14. `lib/screens/admin_debug_screen.dart:46` (Limpar cache, recalcular overall, forçar sync) — tela exclusiva de admin (`canAdminister` e `hasAdminDebug`).
 
+---
+
+### 20. Denominador e conceito de percentual em "Mais Perdeu Junto" (`player_detail.dart`) — Bug B4
+- **O que viu:**
+  - Na tela `PlayerDetailScreen` (`lib/screens/player_detail.dart:1024-1038`), a categoria "Mais Perdeu Junto" (`id: 'mostLossesWith'`) usa `totalReference: myTotalLosses` (total de derrotas do jogador) para o cálculo percentual dos companheiros em `buildDistributionList` (`lib/screens/player_detail.dart:948-949`).
+  - Como no futebol cada derrota envolve múltiplos companheiros em campo ao mesmo tempo (ex.: 5 companheiros em cada jogo), cada companheiro presente acumula +1 na sua contagem de derrotas conjuntas. Dessa forma, a soma dos percentuais na barra de distribuição excede 100% (ex.: 5 derrotas sofridas em equipe resultam em somatório de até 500% entre os parceiros).
+  - Em contraste, a função de ranqueamento Top 1 `findMax` (`lib/screens/player_detail.dart:1161-1165`) e o grid anterior à introdução de `PlayerStatDistributionCard` (commit `ea08813`) utilizavam `ratioBaseMap: gamesWith` (jogos atuando juntos com aquele parceiro), calculando a taxa de derrota conjunta (`lossesWith / gamesWith`).
+- **Dúvida / Impacto:** Qual deve ser o critério e o denominador padrão para o card "Mais Perdeu Junto":
+  1. Taxa de derrotas quando atuam juntos (`lossesWith / gamesWith`, ex.: "perdeu 4 de 5 partidas jogadas com fulano = 80% de taxa de derrota")?
+  2. Proporção das derrotas do jogador em que aquele parceiro esteve presente (`lossesWith / myTotalLosses`), ajustando a visualização da barra para não pressupor partição estrita de 100%?
+- **Ação:** Registrado aqui para alinhamento antes de modificar o cálculo.
+
+---
+
+### 21. `id` nulo na criação da temporada padrão em `createGroup` — Bug B1
+- **O que viu:**
+  - Em `lib/data/supabase/groups_repository.dart:134-138`, o método `createGroup` insere uma temporada padrão ('Temporada 1') sem fornecer o campo `'id'`. No banco Supabase PostgreSQL, a coluna `id` da tabela `seasons` possui restrição `NOT NULL` e não possui gerador de chave default (`gen_random_uuid()`), resultando no erro `PostgrestException: null value in column "id" of relation "seasons" violates not-null constraint (23502)`.
+  - Como as chamadas REST em `createGroup` são sequenciais e não utilizam transação, o grupo é criado em `groups` e o criador é adicionado em `group_members`, mas a falha em `seasons` aborta o fluxo, gerando grupos órfãos sem temporada.
+  - O mesmo código existia na tag `pre-refactor` (introduzido no commit `4f287b5` em 13/09/2026 por Enzo).
+- **Dúvida / Impacto:** Devemos gerar o `id` da temporada no código Dart via `const Uuid().v4()` (padronizando com a criação de jogadores em `players_repository.dart:100` e temporadas em `data_migration_service.dart:327`), ou deve ser adicionado um `DEFAULT gen_random_uuid()` no schema da tabela `seasons` do PostgreSQL? E como tratar os grupos órfãos já existentes no Supabase (criar temporada padrão via script/migration)?
+- **Ação:** Registrado aqui para direcionar a correção na tarefa correspondente ao Bug B1.
+
+---
+
+### 22. Desconexão entre cache local (`players_<groupId>`) e Supabase na edição e criação de jogadores — Bugs B2 e B3
+- **O que viu:**
+  - Em `lib/screens/player_detail.dart:1207-1225`, o método `_savePlayerName` altera somente a chave local `'players_${widget.groupId}'` no `SharedPreferences`, sem chamar `AppServices.instance.players.updatePlayer` no Supabase e sem invalidar o cache `players:group:$groupId` do `CacheStore`. Assim que `GroupBootstrap.prefetch` roda ou outra tela consulta o Supabase, o nome antigo sobrescreve o cache local.
+  - Em `lib/screens/players_screen.dart:140-159`, `_addNewPlayer` cria o jogador no Supabase via `createGhostPlayer`, mas não atualiza a chave `'players_${widget.groupId}'` nem invalida o cache. Em seguida, a tela de partida (`match_screen.dart:2806-2827`) lê o elenco de `'players_${widget.groupId}'` e só consulta o Supabase se a chave local estiver completamente vazia. Por isso, jogadores recém-criados só aparecem em peladas criadas posteriormente (após um novo `prefetch`).
+- **Dúvida / Impacto:** O repositório `PlayersRepository` deve se responsabilizar por invalidar o `CacheStore` e/ou atualizar o snapshot local do `GroupBootstrap` após inserções (`createGhostPlayer`) e alterações de nome (`updatePlayer`), garantindo que todas as telas enxerguem os dados sincronizados imediatamente?
+- **Ação:** Registrado aqui para direcionar a resolução conjunta dos bugs B2 e B3.
+
 
 
 
