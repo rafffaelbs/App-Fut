@@ -265,7 +265,16 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   6. `lib/data/supabase/group_members_repository.dart:149` (`group_join_requests`): insere `group_id`, `user_id`, `requested_name` sem `id`.
   7. `lib/data/supabase/action_logs_repository.dart:26` (`group_action_logs`): insere `group_id`, `actor_id`, `action`, `target_player_id`, `details` sem `id`.
   8. `lib/data/supabase/session_arrivals_repository.dart:93` (`session_arrivals`): insere `session_id`, `player_id`, `arrival_order`, `desistiu`, `team`, `is_goalkeeper` sem `id`.
-- **Ação:** Nenhuma dessas tabelas além de `seasons` em `createGroup` foi alterada nesta tarefa, conforme a regra de listar sem modificar.
+- **Ação / Confirmação das tabelas (Bug B1b):**
+  1. `seasons` (`lib/data/supabase/seasons_repository.dart:81`): **Corrigido no Bug B1b.** Extraída a função pura `buildCreateSeasonPayload` gerando `id` com `const Uuid().v4()`, sanando o erro 23502.
+  2. `match_lineups` (`lib/data/supabase/matches_repository.dart`): Chave primária numérica auto-incrementada (`int? id` em `MatchLineupModel`, gerada pelo PostgreSQL via IDENTITY/serial). Não requer nem deve receber `id` do cliente.
+  3. `match_events` (`lib/data/supabase/matches_repository.dart`): Chave primária numérica auto-incrementada (`int? id` em `MatchEventModel`, gerada pelo PostgreSQL via IDENTITY/serial). Não requer nem deve receber `id` do cliente.
+  4. `rating_history` (`matches_repository.dart` e `ratings_repository.dart`): Tabela legada sem chamadores ativos no fluxo do app (ver `ARCHITECTURE.md` 4.1 e `CODIGO_MORTO.md`); no schema do Supabase possui default (`gen_random_uuid()` ou identity).
+  5. `group_members` (`lib/data/supabase/group_members_repository.dart:93`): Chave primária natural composta `(group_id, player_id)`. Não possui coluna `id`.
+  6. `group_join_requests` (`lib/data/supabase/group_members_repository.dart:149`): Tabela possui `DEFAULT gen_random_uuid()` na coluna `id` no Supabase.
+  7. `group_action_logs` (`lib/data/supabase/action_logs_repository.dart:26`): Tabela de auditoria com `DEFAULT gen_random_uuid()` (ou serial) na coluna `id`.
+  8. `session_arrivals` (`lib/data/supabase/session_arrivals_repository.dart:93`): Tabela de rascunho com chave composta `(session_id, player_id)` ou default gerado pelo banco.
+  - Conclusão: com `groups_repository` (B1) e `seasons_repository` (B1b) corrigidos, **não há outros inserts em tabelas que sofram do erro de `id NOT NULL` sem default**.
 
 ---
 
@@ -273,7 +282,19 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **O que viu:**
   - No commit `fc7d0d68dcdd49a8db5b126d6a864fc0cb13c32c` ("docs: atualização de docs"), o arquivo `lib/app/app_features.dart` foi commitado com `isReadOnly: true` na classe `_PersonalAppFeatures` (provavelmente resquício de teste manual das flags da T4).
   - Isso faz com que o teste unitário existente `test/app/app_features_test.dart` (linha 18: `expect(features.isReadOnly, isFalse)`) falhe na `main`.
-- **Impacto / Ação:** Conforme as regras do projeto de não alterar arquivos fora do escopo estrito da tarefa para manter o `git diff main --stat` limpo e focado, o arquivo não foi alterado na branch `fix/create-group-season-id`. Registrado aqui para que o valor seja revertido para `isReadOnly: false` na `main`.
+- **Impacto / Ação:** Conforme as regras do projeto de não alterar arquivos fora do escopo estrito da tarefa para manter o `git diff main --stat` limpo e focado, o arquivo não foi alterado na branch `fix/create-group-season-id`. Registrado aqui para que o valor seja revertido para `isReadOnly: false` na `main`. (Resolvido no commit `1f146ef` na `main`).
+
+---
+
+### 26. Sequência de passos sem transação em `createSeason` — Bug B1b
+- **O que viu:**
+  - Em `lib/data/supabase/seasons_repository.dart:83-105`, o método `createSeason` executa dois passos sequenciais via REST sem bloco transacional:
+    1. Se `isActive == true`, desativa previamente todas as temporadas existentes do grupo (`update({'is_active': false}).eq('group_id', groupId)`).
+    2. Em seguida, monta o payload e executa o `insert` da nova temporada em `seasons`.
+  - Antes da correção do Bug B1b, a falha imediata no `insert` (devido a `id` nulo com restrição `NOT NULL`) deixava o grupo em um estado inconsistente: as temporadas ativas anteriores já haviam sido desativadas no passo 1 e nenhuma nova temporada ativa era criada.
+  - Com a inclusão do `'id': const Uuid().v4()` em `buildCreateSeasonPayload`, o `insert` passa a ser bem-sucedido.
+  - A ordem e a lógica dos passos foram estritamente preservadas conforme a regra da tarefa. Caso no futuro ocorram falhas de rede entre o passo 1 e o passo 2, a migração para uma RPC (função PostgreSQL atômica) ou rollback explícito pode ser considerada.
+
 
 
 
