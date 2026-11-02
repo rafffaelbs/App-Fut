@@ -295,6 +295,19 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - Com a inclusão do `'id': const Uuid().v4()` em `buildCreateSeasonPayload`, o `insert` passa a ser bem-sucedido.
   - A ordem e a lógica dos passos foram estritamente preservadas conforme a regra da tarefa. Caso no futuro ocorram falhas de rede entre o passo 1 e o passo 2, a migração para uma RPC (função PostgreSQL atômica) ou rollback explícito pode ser considerada.
 
+---
+
+### 27. Respostas do Passo 0 — Bugs B2 e B3 (Snapshot e CacheStore)
+- **(a) Como o snapshot `players_<groupId>` é montado hoje:**
+  Em `lib/services/group_bootstrap.dart:83-122` (`GroupBootstrap._run`), o fluxo busca o elenco remoto via `AppServices.instance.players.getPlayersByGroup(groupId)`. Em paralelo, busca o histórico de partidas do grupo (`getAllGroupMatches(groupId)`) e computa as notas dos jogadores em background via `compute(_computeRatings, history)`. Para cada jogador `p`, monta o mapa por meio de `GroupBootstrap.playerSnapshotMap(p, nota)` (calculando o `overall` a partir da nota e dos atributos comunitários) e grava a lista serializada em JSON no `SharedPreferences` sob a chave `players_<groupId>` (junto a `ratings_snapshot_at_<groupId>`).
+- **(b) Se `SupabasePlayersRepository` já invalida o cache `players:group:<groupId>` do `CacheStore` ao criar/editar/remover jogador:**
+  **NÃO invalida.** Os métodos `createGhostPlayer`, `updatePlayer` e `removePlayerFromGroup` realizavam as mutações apenas nas tabelas remotas `players` e `group_members`, sem nenhuma chamada a `_cache.invalidate('players:group:$groupId')`.
+- **Ajustes e Regras adotadas:**
+  1. `SupabasePlayersRepository` passa a chamar `await _cache.invalidate('players:group:$groupId')` após o sucesso de `createGhostPlayer`, `updatePlayer` e `removePlayerFromGroup`. Em `updatePlayer`, o parâmetro nomeado opcional `groupId` é aceito; se não fornecido, o repositório consulta as associações em `group_members` do atleta para invalidar o cache dos respectivos grupos.
+  2. Criado o método `GroupBootstrap.refreshLocalSnapshot(groupId)`, que recria a chave `players_<groupId>` no mesmo formato a partir de `getPlayersByGroup(groupId)` preservando as notas já calculadas no snapshot existente (ou `p.rating ?? kRatingBase`), sem estourar erro para a UI caso falhe. Chamado em `_addNewPlayer`, remoção de jogador e após renomear.
+  3. `updatePlayer` no repositório Supabase: anteriormente não realizava nenhuma checagem de permissão no código Dart. Passa a validar (quando `groupId` for informado) que o solicitante é administrador do grupo (`_permissions.isAdmin(groupId)`) OU é o próprio dono do perfil (`player.creatorId == currentUserId` ou verificação via `getPlayerById`). Outros membros recebem exceção de permissão (`Acesso negado: somente administradores ou o próprio jogador podem alterar o perfil.`). Na UI, o botão "Editar nome" é condicionado a `_canEditProfile` (igual ao de foto).
+
+
 
 
 
