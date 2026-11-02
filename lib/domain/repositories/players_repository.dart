@@ -14,7 +14,7 @@ abstract class PlayersRepository {
     List<PlayerBadgeModel> badges = const [],
   });
 
-  Future<PlayerModel> updatePlayer(PlayerModel player);
+  Future<PlayerModel> updatePlayer(PlayerModel player, {String? groupId});
 
   Future<PlayerModel> setPlayerIcon({
     required String playerId,

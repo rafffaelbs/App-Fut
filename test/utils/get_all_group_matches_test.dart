@@ -138,7 +138,7 @@ class FakePlayersRepository implements PlayersRepository {
       throw UnimplementedError();
 
   @override
-  Future<PlayerModel> updatePlayer(PlayerModel player) async =>
+  Future<PlayerModel> updatePlayer(PlayerModel player, {String? groupId}) async =>
       throw UnimplementedError();
 }
 

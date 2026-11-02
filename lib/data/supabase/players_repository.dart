@@ -116,6 +116,8 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
       'role': 'member',
     });
 
+    await _cache.invalidate('players:group:$groupId');
+
     return player;
   }
 
@@ -152,7 +154,7 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
   }
 
   /// Updates a player's data.
-  Future<PlayerModel> updatePlayer(PlayerModel player) async {
+  Future<PlayerModel> updatePlayer(PlayerModel player, {String? groupId}) async {
     final updatePayload = <String, dynamic>{
       'name': player.name.trim(),
       'icon': player.icon,
@@ -165,6 +167,22 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
         .eq('id', player.id)
         .select()
         .single();
+
+    if (groupId != null && groupId.isNotEmpty) {
+      await _cache.invalidate('players:group:$groupId');
+    } else {
+      try {
+        final memberships = await _client
+            .from('group_members')
+            .select('group_id')
+            .eq('player_id', player.id);
+        for (final m in (memberships as List)) {
+          if (m is Map && m['group_id'] != null) {
+            await _cache.invalidate('players:group:${m['group_id']}');
+          }
+        }
+      } catch (_) {}
+    }
 
     return PlayerModel.fromMap(Map<String, dynamic>.from(response));
   }
@@ -230,6 +248,8 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
         .delete()
         .eq('group_id', groupId)
         .eq('player_id', playerId);
+
+    await _cache.invalidate('players:group:$groupId');
   }
 
   /// Sets/updates the linking email of a "ghost" player (no login yet).

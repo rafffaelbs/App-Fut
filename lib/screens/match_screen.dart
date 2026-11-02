@@ -2805,25 +2805,52 @@ class _MatchScreenState extends State<MatchScreen>
 
   void _showMultiSelectDialog() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? dbData = prefs.getString('players_${widget.groupId}');
-    if (dbData != null) {
-      setState(() {
-        allSavedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
-      });
-    }
-    if (allSavedPlayers.isEmpty && widget.groupId.isNotEmpty) {
+    List<Map<String, dynamic>> loadedPlayers = [];
+    bool fetchedFromRepo = false;
+
+    if (widget.groupId.isNotEmpty) {
       try {
-        final fetched = await AppServices.instance.players.getPlayersByGroup(widget.groupId);
+        final fetched =
+            await AppServices.instance.players.getPlayersByGroup(widget.groupId);
         if (fetched.isNotEmpty) {
-          setState(() {
-            allSavedPlayers = fetched
-                .map((p) => GroupBootstrap.playerSnapshotMap(
-                    p, p.rating ?? kRatingBase))
-                .toList();
-          });
-          await prefs.setString('players_${widget.groupId}', jsonEncode(allSavedPlayers));
+          final String? dbData = prefs.getString('players_${widget.groupId}');
+          Map<String, double> existingRatings = {};
+          if (dbData != null) {
+            try {
+              final list = jsonDecode(dbData) as List;
+              for (final item in list) {
+                if (item is Map && item['id'] != null && item['rating'] is num) {
+                  existingRatings[item['id'].toString()] =
+                      (item['rating'] as num).toDouble();
+                }
+              }
+            } catch (_) {}
+          }
+
+          loadedPlayers = fetched
+              .map((p) => GroupBootstrap.playerSnapshotMap(
+                  p, existingRatings[p.id] ?? p.rating ?? kRatingBase))
+              .toList();
+          await prefs.setString(
+              'players_${widget.groupId}', jsonEncode(loadedPlayers));
+          fetchedFromRepo = true;
         }
       } catch (_) {}
+    }
+
+    if (!fetchedFromRepo) {
+      final String? dbData = prefs.getString('players_${widget.groupId}');
+      if (dbData != null) {
+        try {
+          loadedPlayers = List<Map<String, dynamic>>.from(jsonDecode(dbData));
+        } catch (_) {}
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        allSavedPlayers = loadedPlayers;
+      });
     }
     if (allSavedPlayers.isEmpty) {
       if (!mounted) return;

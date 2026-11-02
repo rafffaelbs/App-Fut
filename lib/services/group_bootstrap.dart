@@ -67,6 +67,47 @@ class GroupBootstrap {
     }
   }
 
+  /// Refaz o snapshot `players_$groupId` a partir de
+  /// `AppServices.instance.players.getPlayersByGroup`, preservando as notas já
+  /// calculadas no snapshot existente (ou `p.rating ?? kRatingBase`).
+  ///
+  /// Retorna `true` se regravou o snapshot com sucesso, `false` se falhar
+  /// (sem estourar exceção para o chamador).
+  static Future<bool> refreshLocalSnapshot(String groupId) async {
+    if (groupId.isEmpty) return false;
+    try {
+      final players =
+          await AppServices.instance.players.getPlayersByGroup(groupId);
+      if (players.isEmpty) return false;
+
+      final prefs = await SharedPreferences.getInstance();
+      final existingRaw = prefs.getString('players_$groupId');
+      final Map<String, double> existingRatings = {};
+      if (existingRaw != null) {
+        try {
+          final list = jsonDecode(existingRaw) as List;
+          for (final item in list) {
+            if (item is Map && item['id'] != null && item['rating'] is num) {
+              existingRatings[item['id'].toString()] =
+                  (item['rating'] as num).toDouble();
+            }
+          }
+        } catch (_) {}
+      }
+
+      final list = players.map<Map<String, dynamic>>((p) {
+        final nota = existingRatings[p.id] ?? p.rating ?? kRatingBase;
+        return playerSnapshotMap(p, nota);
+      }).toList();
+
+      await prefs.setString('players_$groupId', jsonEncode(list));
+      return true;
+    } catch (e) {
+      debugPrint('GroupBootstrap.refreshLocalSnapshot($groupId) falhou: $e');
+      return false;
+    }
+  }
+
   /// Retorna true se atualizou com dados da rede, false se ficou no local.
   /// [force] ignora o intervalo mínimo de 5 minutos entre cargas.
   Future<bool> prefetch(String groupId, {bool force = false}) {

@@ -9,6 +9,7 @@ import '../widgets/player/fifa_card.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared/player_avatar_frame.dart';
 import '../widgets/shared/ranking_player_bits.dart';
+import '../services/group_bootstrap.dart';
 import 'player_detail.dart';
 
 enum _RosterFilter { all, legendary, platinum, gold, effects }
@@ -145,6 +146,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
         name: name,
         avatarUrl: iconPath,
       );
+      await GroupBootstrap.refreshLocalSnapshot(widget.groupId);
       await _loadPlayers();
     } catch(e) {
       debugPrint("Error adding player: $e");
@@ -193,6 +195,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
         groupId: widget.groupId,
         playerId: player['id'].toString(),
       );
+      await GroupBootstrap.refreshLocalSnapshot(widget.groupId);
       await _loadPlayers();
     } catch(e) {
       debugPrint("Error removing player: $e");
