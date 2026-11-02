@@ -2,6 +2,8 @@
 
 > Documento de referência para quem executa as tarefas (Antigravity / Claude Code).
 > Base: `docs/INVENTARIO_SUPABASE.md`. Em caso de conflito entre este documento e o código, **pare e registre em `docs/DUVIDAS.md`** em vez de decidir sozinho.
+>
+> **Status (02/11/2026): Fase 1 concluída.** T0 a T4 estão integradas na `main` (interfaces, `AppServices`, `AppFeatures`, camada `lib/data/`). A foto factual do código nessa data está em `docs/ESTADO_ATUAL.md` (162 testes passando, 0 erros no analyze, isolamento do Supabase verificado). A tag `pre-refactor` marca o app antes da Fase 1. Bugs conhecidos: seção 11 e `docs/BACKLOG.md` seção 0.
 
 ## 1. Objetivo
 
@@ -23,7 +25,7 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
    grep -rl "supabase_flutter" lib | grep -v "^lib/data/supabase/" | grep -v "^lib/bootstrap_personal.dart"
    ```
 3. Telas, widgets, serviços e utils dependem de **interfaces** (`lib/domain/`) e de `AppServices` / `AppFeatures`. Nunca de classes `Supabase*`.
-4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.** **Exceção conhecida:** `stats_calculator.dart` (~linhas 100-124) e `site_data_generator.dart` leem `SharedPreferences` direto (`match_history_*`, `sessions_*`, `seasons_*`). Não mexer agora; tratar na T3e.
+4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.** **Exceção conhecida (após a T3e):** `getAllGroupMatches` em `stats_calculator.dart` agora recebe `matchesRepository`, `playersRepository` e `matchHistoryStore` por injeção, mas o fallback ainda lê as chaves legadas `sessions_*` e `seasons_*` direto do `SharedPreferences` (~linhas 106-120), e `site_data_generator.dart` (~35-43) também. Ninguém grava essas chaves; ficam como leitura legada até decidirmos limpá-las.
 5. **Não alterar:** nomes de tabelas/colunas do Supabase, policies RLS, RPCs, fórmulas dos calculators.
 6. Uma tarefa = uma branch = commits pequenos. Antes de terminar: `flutter analyze` e `flutter test`.
 7. **Não adicionar pacotes** sem estar listado na tarefa. Pacotes previstos mais à frente: `drift`, `drift_flutter` (ou `sqlite3_flutter_libs`), `path`.
@@ -50,7 +52,7 @@ lib/
   bootstrap_public.dart      # Fase 3
   main_personal.dart
   main_public.dart           # Fase 3
-  (config, constants, models, screens, utils, widgets: como estão)
+  (constants, models, screens, services/group_bootstrap.dart, theme, utils, widgets: como estão; a pasta lib/config/ deixou de existir, o supabase_config.dart está em lib/data/supabase/)
 tool/legacy/           # scripts de migração antigos (fora dos apps)
 docs/
 ```
@@ -68,8 +70,8 @@ docs/
 | `SessionsRepository` | `sessions_repository.dart` | 7 métodos (`getCachedSession`, `getSessionById`, `getSessionsByGroup`, `createSession`, `updateSession`, `updateRuntimeState`, `deleteSession`) **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). Fora: `getSessionsBySeason`, `finalizeSession` (0 chamadores). |
 | `MatchesRepository` | `matches_repository.dart` | **Só estes (5):** `getMatchesBySession`, `getMatchesByGroup`, `savePendingMatch`, `updatePartialMatch`, `deleteMatch`. Fora: `saveFullMatch` e `updateFullMatch` (0 chamadores). `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
 | `RatingsRepository` | `ratings_repository.dart` | **Não terá interface:** os 4 métodos (`getPlayerHistoryBySeason`, `getFullPlayerHistory`, `getLatestRatingsBySeason`, `recordRatingsBatch`) têm 0 chamadores. **Hoje nada lê nem grava `rating_history`**: as notas são calculadas em memória a partir de partidas e eventos. |
-| `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)` e `saveCustomBadges(groupId, badges)`. Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: `PrefsCustomBadgesRepository` em `lib/data/prefs/` (SharedPreferences, igual hoje). Public: tabela no SQLite. |
-| `MatchHistoryStore` (novo) | `match_screen`, ranking, `stats_calculator` | `readSession(sessionId)` e `appendToSession(sessionId, record)`. Hoje é `match_history_<sessão>` em `SharedPreferences`. Personal: igual hoje. Public: derivado das tabelas do SQLite. Quem usa é decidido na T3e. |
+| `CustomBadgesRepository` (novo) | `manage_badges_screen`, `player_detail` | `getCustomBadges(groupId)`, `saveCustomBadges(groupId, badges)` e `hasCustomBadges(groupId)` (a chave já foi gravada alguma vez, mesmo com lista vazia; preserva o `containsKey` original). Hoje vive só em `SharedPreferences` (`custom_badges_<grupo>`); não existe no Supabase. Personal: `PrefsCustomBadgesRepository` em `lib/data/prefs/` (SharedPreferences, igual hoje). Public: tabela no SQLite. |
+| `MatchHistoryStore` (novo) | `match_screen`, ranking, `stats_calculator` | `readSession(sessionId)`, `appendToSession(sessionId, record)` e `hasSession(sessionId)` (a chave já foi gravada alguma vez; preserva o `containsKey` original; no SQLite significará "já salvou alguma vez"). JSON corrompido vira lista vazia e itens que não são `Map` são descartados. Hoje é `match_history_<sessão>` em `SharedPreferences`. Personal: igual hoje. Public: derivado das tabelas do SQLite. Quem usa é decidido na T3e. |
 | `SessionArrivalsRepository` | `session_arrivals_repository.dart` | `getArrivals`, `getPlayerIdsBySessions`, `replaceArrivals`. Fora: `clearArrivals` (0 chamadores). |
 | `PlayersRepository` | `players_repository.dart` | **Só estes (11):** `getPlayersByGroup`, `createGhostPlayer`, `updatePlayer`, `setPlayerIcon`, `setGoalSound`, `removePlayerFromGroup`, `getPlayerById`, `setNameEffect`, `setMonthlyHighlight`, `setCommunityAttributes`, `setAdvancedStat`. Fora: `setCosmetics` (0 chamadores). |
 
@@ -138,6 +140,10 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 - **Telas inalcançáveis** (nenhuma rota ou botão as abre): `expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`. Removidas na T0g (Enzo confirmou).
 - Se algum desses itens for planejado (ex.: tela de logs do admin, login por e-mail, gráfico de evolução usando `rating_history`), reavaliar antes de apagar o código.
 
+### 4.6 `AppServices` (17 campos hoje, `lib/app/app_services.dart`)
+
+`features` (AppFeatures), `groups`, `members`, `seasons`, `players`, `playerAccounts`, `sessions`, `matches`, `sessionArrivals`, `actionLogs`, `auth`, `permissions`, `outbox`, `matchHistory`, `customBadges`, e os opcionais `siteSync` e `diagnostics` (nulos no public e na web). `AppServices.instance` é definido uma vez em `bootstrap_personal.dart`. Pontos de entrada: `lib/main.dart` (só chama `mainPersonal()`) → `lib/main_personal.dart`. Isolamento do Supabase conferido: 14 arquivos importam `supabase_flutter`, todos em `lib/data/supabase/`.
+
 ## 5. Feature flags (`AppFeatures`)
 
 | Flag | personal | public | web_readonly |
@@ -153,7 +159,9 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 | `hasDbExportImport` | false | true | false |
 | `isReadOnly` | false | false | true |
 
-Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e** `PermissionService.isAdmin` for true (e `isReadOnly` for false).
+Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e** `PermissionService.isAdmin` for true (e `isReadOnly` for false). No código: `bool canAdminister(bool isAdmin) => !isReadOnly && isAdmin;` em `AppFeatures`, usado em 9 telas. Ações de escrita que **não** exigiam admin na versão original só ganharam `!isReadOnly` (lista completa em `docs/DUVIDAS.md` #19).
+
+**Estado da T4:** implementada. `hasMembershipManagement`, `hasCosmetics`, `hasGoalSounds`, `hasSiteSync`, `hasCloudDraftSync`, `hasAdminDebug` e `isReadOnly` já são consultadas pelas telas. **Ainda sem uso:** `hasAuth`, `hasAuditLog`, `hasDbExportImport` (serão ligadas nas Fases 2 e 3). Para o site (Fase 2): decidir se `match_screen` existe na web (hoje ela tem ações de escrita condicionadas só a `!isReadOnly`).
 
 ## 6. Dados locais e transações (Fase 3 — responsabilidade do Claude)
 
@@ -173,7 +181,10 @@ Problemas no código atual (só afetam o build web; no celular funcionam):
 - Os scripts em `tool/legacy/` usam `dart:io` e ficam fora do app. `sync_service.dart` perdeu o `dart:io` na T0c; confirmar na Fase 2.
 - `file_picker` (usa `path`), `share_plus` e `audioplayers` têm limitações na web.
 
-Modelo de acesso (login por e-mail ou link público) **ainda em decisão**; a segurança real é por RLS de `SELECT`, não por esconder botão.
+- **Cache do elenco (achado de 02/11):** `PlayerComparisonScreen` lê **só** `players_<groupId>` no `SharedPreferences` e `match_screen` (adicionar jogadores) usa essa chave antes do Supabase. Na web não há `GroupBootstrap.prefetch` rodando como no celular, então essas telas ficariam vazias ou com "Desconhecido". A correção dos bugs B2/B3 (fase 1b) deve fazer essas telas buscarem pelo repositório quando o snapshot faltar, antes da Fase 2.
+- `SharedPreferences` na web é `localStorage` do navegador: nenhum dado de partida em andamento ou fila existe lá; telas que dependem disso precisam funcionar sem.
+
+Modelo de acesso: **link secreto sem login** (decidido; ver `TASKS.md`, Fase 2). A segurança real é por token + funções `SECURITY DEFINER` no banco (T6), não por esconder botão.
 
 ## 8. Checklist manual de regressão (rodar no celular após cada merge na main)
 
@@ -212,3 +223,13 @@ O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envi
 | Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
 | Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`; ninguém grava, mas o aparelho do Enzo pode ainda ter dados antigos nessas chaves. | **Não remover na T3e** (poderia mudar números no aparelho dele). Continuam como leitura legada; decidir depois da Fase 1. No app public ficam vazias e inofensivas. |
 | Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
+
+## 11. Bugs conhecidos que afetam fases futuras (detalhe em `docs/BACKLOG.md` seção 0)
+
+Investigados em `docs/ESTADO_ATUAL.md` seção 7. **Nenhum é regressão da Fase 1:** o código é igual ao da tag `pre-refactor`.
+
+- **B1 criar grupo:** o insert em `seasons` (`groups_repository.dart:134-138`) não envia `id`; a coluna é `NOT NULL` sem default. Sem transação, o grupo fica gravado sem temporada (órfão). Vale também para o app public: a criação de grupo local precisa gerar o id da temporada.
+- **B2/B3 cache do elenco:** `createGhostPlayer` e `_savePlayerName` não atualizam `players_<groupId>` nem o `CacheStore`; `_savePlayerName` nem grava no Supabase. Afeta a web (seção 7) e o public (a mesma tela de elenco).
+- **B4 estatísticas avançadas:** percentual de "Mais perdeu junto" usa denominador inconsistente com o critério do Top 1 (`player_detail.dart` ~1024-1038 e ~1161-1165). O exemplo do Enzo (3 derrotas com o parceiro de 10 → 70% em vez de 30%) **ainda não foi reproduzido** pela explicação do AG; começar a correção reproduzindo com esses números.
+- **B5 fila:** `SupabaseMatchOutbox.flush` trata qualquer erro como transitório; erro permanente (ex.: `23503`, jogador apagado) trava a fila para sempre e continua entrando nas estatísticas.
+- **Abrir o app sem rede:** `ProfileCheck` trata erro de rede como "sem perfil" (mostra "Como podemos te chamar?") e a fila só é reenviada ao abrir a tela de partida (BACKLOG 2b e 2c).

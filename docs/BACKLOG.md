@@ -2,6 +2,42 @@
 
 > Nada daqui deve ser mexido durante a refatoração (Fase 1): o app personal precisa continuar idêntico. Estes itens mudam números ou funcionalidades e entram em tarefas próprias depois.
 
+## 0. Bugs conhecidos (a investigar e corrigir, um por tarefa)
+
+Ponto de partida: a `main` atual (Fase 1 integrada, incluindo T4). Para cada bug: reproduzir, achar a causa no código, comparar com `git show pre-refactor:<arquivo>` para saber se é regressão, corrigir com teste.
+
+| # | Bug | Como aparece | Suspeita / observação |
+|---|---|---|---|
+| B1 | **Criar grupo falha** | `PostgrestException: null value in column "id" of relation "seasons" violates not-null constraint (23502)`. Aparece "Error saving group". | O grupo é gravado e a temporada falha: ficam **grupos órfãos** (2 "Teste" em 02/11). O id da temporada deveria ser gerado no código ao criar o grupo. Grupos de outras pessoas (de 23/10 e 28/10) foram criados antes; conferir se têm temporada (`left join seasons`). **Não é regressão** (código idêntico na tag `pre-refactor`, vindo do commit `4f287b5` de 13/09; a migração antiga gerava o id com uuid). **Prioridade alta.** Também: criação deveria ser atômica (sem grupo órfão se a temporada falhar). |
+| B2 | Jogador novo não aparece em "adicionar jogadores" numa pelada já existente | Aparece no elenco, na promoção a admin e na comparação; só aparece na pelada criada depois. | Provável cópia local do elenco (`players_<groupId>`, GroupBootstrap) que só é refeita ao criar pelada. Já havia timeout de 8 s no log (rede lenta). |
+| B3 | Nome editado não aparece em carta, título nem comparação (chegou a mostrar "Desconhecido") | Persiste só em algumas telas. | Mesma família do B2 (cache do elenco). Conferir o que `_savePlayerName` atualiza. |
+| B4 | ✅ **Corrigido pelo Enzo em 02/11.** Estatísticas avançadas do jogador com números errados | Ex.: 10 derrotas; o jogador com quem mais perdeu esteve em 3 delas, mas diz "cerca de 70%" (deveria ser 30%). | Provável erro de denominador no cálculo do percentual. Origem: `Plano_de_Acao.md`. Existe a branch `feature/player-advanced-stats` (do Enzo). |
+| B5 | **Partida presa na fila de envio sem aviso** | Gol de um jogador apagado continua nas estatísticas mesmo com histórico e `match_events` vazios; volta a cada reinício. | Provável: partida em `pending_matches_v1` que o banco recusa (jogador apagado). A fila tenta para sempre e não avisa. Ideia: detectar erro permanente, mostrar ao usuário e permitir descartar. Confirmar com `grep pending_matches_v1` no `shared_preferences.json`. |
+| B6 | **Qualquer pessoa com o app cria grupos** | Outras pessoas já criaram grupos ("du", "du fut", "Baba do Carlos"). A restrição de admin só existe dentro do grupo. | Não é bug de código, é desenho. Resolve com a versão offline e o site para essas pessoas. Manter `hasMembershipManagement` / flags de criação de grupo em mente. |
+
+Relacionados já registrados abaixo: 2c (tela do nome offline), 2d (catálogo de insígnias), 2b (fila ao abrir o app).
+
+### Resultado da investigação (docs/ESTADO_ATUAL.md seção 7, 02/11/2026)
+
+**Nenhum dos bugs é regressão da Fase 1:** todos existiam na tag `pre-refactor`. Tarefas de correção: Fase 1b em `TASKS.md`.
+
+- **B1:** `createGroup` insere em `groups`, `players`, `group_members` e por último em `seasons` sem `id` (`groups_repository.dart:134-138`). Sem transação, falhar na temporada deixa o grupo órfão. Correção: gerar o id com uuid + desfazer o que foi criado se algo falhar. Conferir se os grupos de outras pessoas têm temporada.
+- **B2:** o modal "adicionar jogadores" (`match_screen.dart:2806-2827`) lê `players_<groupId>` do `SharedPreferences` e **só consulta o Supabase se a chave estiver vazia**. `_addNewPlayer` (`players_screen.dart:140-159`) grava no Supabase mas não atualiza esse snapshot nem o `CacheStore`.
+- **B3:** `_savePlayerName` (`player_detail.dart:1207-1225`) só altera o snapshot local e nunca chama `updatePlayer`; o nome volta ao do banco na próxima recarga. `PlayerComparisonScreen` lê só o snapshot e mostra "Desconhecido" quando o jogador não está nele. Decisão pendente: quem pode renomear (TASKS, pergunta 4).
+- **B4:** card "Mais Perdeu Junto" usa `totalReference: myTotalLosses` (`player_detail.dart:1024-1038`), enquanto o Top 1 (`findMax`, ~1161-1165) usa `lossesWith/gamesWith`. **Atenção:** isso não reproduz o exemplo do Enzo (3 de 10 daria 30%, e a tela mostrava ~70%); a correção deve começar reproduzindo com os números reais. Decisão pendente: regra do percentual (TASKS, pergunta 5). O código novo veio do commit `ea08813` ("novas estatísticas", branch `feature/player-advanced-stats`).
+- **B5:** `SupabaseMatchOutbox.flush` (`supabase_match_outbox.dart:81-132`) trata todo erro como transitório. Um erro permanente (ex.: `23503`, jogador apagado) fica no topo da fila (`jobs.first`) tentando a cada 60 s para sempre, **bloqueia as partidas seguintes** e continua somado às estatísticas via `readAll()`.
+
+## 0b. Achados do teste das flags da T4 (02/11/2026, `flutter run -d linux`)
+
+Com todas as flags em `true` (app personal) nada mudou. As lacunas abaixo só aparecem com flags desligadas, ou seja, para o site e o app público. Resolver na Fase 2 (T5) ou na T13, não antes.
+
+| # | Achado | Detalhe |
+|---|---|---|
+| F1 | `hasCosmetics = false` **não esconde a tela "gerenciar cosméticos"** | A flag hoje só é consultada em `manage_badges_screen.dart:34` (`_canManageCosmetics`). A tela ou aba continua aparecendo. Decidir: a flag controla só a **gestão** ou também a **exibição** (molduras, efeitos de nome) nas cartas e rankings? Para o public (flag `false`) provavelmente os dois. |
+| F2 | Com `isReadOnly = true` ainda aparecem botões de gravar que dão erro | Ex.: editar/apagar pelada mostra "apenas admins podem", mesmo logado como admin (a mensagem engana: o app está em modo somente leitura). É o mesmo padrão que já existia para quem **não é admin**: a opção aparece e o banco/o app recusa. Está no `Plano_de_Acao.md` (item 2.4: tirar acesso às opções de escrita de quem não é admin). Correção: esconder o botão em vez de mostrar e recusar. Pré-requisito do site (T5). |
+| F3 | `match_screen` em somente leitura: dá para adicionar jogador à pelada e **iniciar** a partida, mas não encerrar | A T4 só bloqueou o encerramento (`DUVIDAS.md` #19, itens 7, 8 e 18). Decisão da Fase 2: `match_screen` existe na web? Se não existir, o problema some. |
+| F4 | `hasCloudDraftSync = false`: **teste inconclusivo** | Durante o teste houve `SocketException: Failed host lookup ... supabase.co` (falha de DNS da máquina) na fila de envio e o ícone de nuvem (selo de partida pendente) apareceu. Isso não depende da flag: a fila de envio não é controlada por ela. Repetir com a rede estável e conferir se `sessions` e `session_arrivals` deixam de ser atualizados durante a partida. |
+
 ## 1. Cálculos: possíveis bugs (decidir um a um: bug ou intencional?)
 
 Origem: `docs/DUVIDAS.md` (T0). Os testes de caracterização **travam o comportamento atual**; corrigir qualquer item muda as notas que todos veem, então é uma decisão consciente (e os testes correspondentes precisam ser atualizados junto).
