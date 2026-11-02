@@ -1,3 +1,4 @@
+import 'package:uuid/uuid.dart';
 import 'supabase_permission_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
@@ -14,6 +15,7 @@ Map<String, dynamic> buildCreateSeasonPayload({
   bool isActive = true,
 }) {
   return {
+    'id': const Uuid().v4(),
     'group_id': groupId,
     'name': name.trim(),
     'start_date': startDate != null
