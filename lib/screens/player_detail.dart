@@ -20,6 +20,7 @@ import '../models/player_stat_distribution.dart';
 import '../widgets/player/fifa_card.dart';
 import '../widgets/shared/icon_picker_modal.dart';
 import '../widgets/stats/player_stat_distribution_card.dart';
+import '../services/group_bootstrap.dart';
 import 'player_comparison_screen.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
@@ -1205,23 +1206,56 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _savePlayerName(String newName) async {
-    if (AppServices.instance.features.isReadOnly) return;
-    final prefs = await SharedPreferences.getInstance();
-    final String key = 'players_${widget.groupId}';
-    if (!prefs.containsKey(key)) return;
-    final players = ensurePlayerIds(
-      List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(key)!)),
-    );
-    final int index = players.indexWhere(
-      (p) => (p['id'] ?? '').toString() == widget.playerId,
-    );
-    if (index == -1) return;
-    players[index]['name'] = newName;
-    await prefs.setString(key, jsonEncode(players));
-    setState(() {
-      playerName = newName;
-      playerStats['name'] = newName;
-    });
+    if (!_canEditProfile) return;
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) return;
+
+    try {
+      final player =
+          await AppServices.instance.players.getPlayerById(widget.playerId);
+      if (player == null) {
+        throw Exception('Jogador não encontrado');
+      }
+
+      final updatedPlayer = player.copyWith(name: trimmed);
+      await AppServices.instance.players.updatePlayer(
+        updatedPlayer,
+        groupId: widget.groupId,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final String key = 'players_${widget.groupId}';
+      if (prefs.containsKey(key)) {
+        try {
+          final players = ensurePlayerIds(
+            List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(key)!)),
+          );
+          final int index = players.indexWhere(
+            (p) => (p['id'] ?? '').toString() == widget.playerId,
+          );
+          if (index != -1) {
+            players[index]['name'] = trimmed;
+            await prefs.setString(key, jsonEncode(players));
+          }
+        } catch (_) {}
+      }
+      await GroupBootstrap.refreshLocalSnapshot(widget.groupId);
+
+      if (mounted) {
+        setState(() {
+          playerName = trimmed;
+          playerStats['name'] = trimmed;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao salvar nome do jogador: $e");
+      if (mounted) {
+        final message = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    }
   }
 
   Future<void> _savePlayerIcon(String iconPath) async {
@@ -1848,7 +1882,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _showEditNameDialog() async {
-    if (AppServices.instance.features.isReadOnly) return;
+    if (!_canEditProfile) return;
     final controller = TextEditingController(text: playerName);
     await showDialog(
       context: context,
@@ -3893,7 +3927,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                                   side: const BorderSide(color: Colors.white24),
                                 ),
                               ),
-                            if (!AppServices.instance.features.isReadOnly)
+                            if (_canEditProfile)
                               OutlinedButton.icon(
                                 onPressed: _showEditNameDialog,
                                 icon: const Icon(Icons.edit, size: 16),

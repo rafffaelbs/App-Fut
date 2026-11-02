@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../services/group_bootstrap.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
@@ -45,6 +47,36 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
     _loadData();
   }
 
+  Future<Map<String, dynamic>> _findOrFetchPlayer(
+    String playerId,
+    List<Map<String, dynamic>> snapshotPlayers,
+  ) async {
+    final found = snapshotPlayers.firstWhere(
+      (p) => (p['id'] ?? '').toString() == playerId,
+      orElse: () => {},
+    );
+    if (found.isNotEmpty) return found;
+
+    try {
+      final p = await AppServices.instance.players.getPlayerById(playerId);
+      if (p != null) {
+        return GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase);
+      }
+    } catch (_) {}
+
+    try {
+      final list =
+          await AppServices.instance.players.getPlayersByGroup(widget.groupId);
+      for (final p in list) {
+        if (p.id == playerId) {
+          return GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase);
+        }
+      }
+    } catch (_) {}
+
+    return {};
+  }
+
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final String playersKey = 'players_${widget.groupId}';
@@ -56,8 +88,8 @@ class _PlayerComparisonScreenState extends State<PlayerComparisonScreen> {
       allPlayers = ensurePlayerIds(List<Map<String, dynamic>>.from(jsonDecode(prefs.getString(playersKey)!)));
     }
 
-    final p1 = allPlayers.firstWhere((p) => (p['id'] ?? '').toString() == widget.player1Id, orElse: () => {});
-    final p2 = allPlayers.firstWhere((p) => (p['id'] ?? '').toString() == widget.player2Id, orElse: () => {});
+    final p1 = await _findOrFetchPlayer(widget.player1Id, allPlayers);
+    final p2 = await _findOrFetchPlayer(widget.player2Id, allPlayers);
 
     final List<dynamic> allHistory = await getAllGroupMatches(widget.groupId);
     final globalStats = calculateGlobalStats(allHistory);

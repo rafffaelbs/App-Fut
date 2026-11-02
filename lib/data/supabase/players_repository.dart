@@ -19,12 +19,39 @@ import '../../domain/repositories/action_logs_repository.dart';
 /// para leitura (ver migração 005_goal_audio_and_action_logs.sql).
 const String goalSoundsBucket = 'goal-sounds';
 
+/// Valida a permissão para atualizar dados/nome de um jogador:
+/// - Admin do grupo pode renomear qualquer jogador.
+/// - O dono do perfil (jogador vinculado ao usuário logado) pode renomear o próprio.
+/// - Outros membros não têm permissão.
+Future<void> checkPlayerUpdatePermission({
+  required PermissionService permissions,
+  required String? currentUserId,
+  required String? groupId,
+  required PlayerModel player,
+  Future<PlayerModel?> Function(String playerId)? getPlayerById,
+}) async {
+  if (groupId != null && groupId.isNotEmpty) {
+    final isAdmin = await permissions.isAdmin(groupId);
+    final isOwner = currentUserId != null &&
+        (player.creatorId == currentUserId ||
+            (getPlayerById != null &&
+                (await getPlayerById(player.id))?.creatorId == currentUserId));
+
+    if (!isAdmin && !isOwner) {
+      throw Exception(
+        'Acesso negado: somente administradores ou o próprio jogador podem alterar o perfil.',
+      );
+    }
+  }
+}
+
 /// Players repository integrated with Supabase PostgreSQL.
 class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepository {
   final SupabaseClient _client;
   final CacheStore _cache;
   final PermissionService _permissions;
   final ActionLogsRepository _logs;
+  final String? Function()? _currentUserIdProvider;
   static const _uuid = Uuid();
 
   SupabasePlayersRepository({
@@ -32,10 +59,15 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
     CacheStore? cache,
     PermissionService? permissions,
     ActionLogsRepository? logsRepo,
+    String? Function()? currentUserIdProvider,
   })  : _client = client ?? supabase,
         _cache = cache ?? CacheStore(),
         _permissions = permissions ?? SupabasePermissionService(),
-        _logs = logsRepo ?? SupabaseActionLogsRepository(client: client ?? supabase);
+        _logs = logsRepo ?? SupabaseActionLogsRepository(client: client ?? supabase),
+        _currentUserIdProvider = currentUserIdProvider;
+
+  String? get _currentUserId =>
+      _currentUserIdProvider != null ? _currentUserIdProvider!() : _client.auth.currentUser?.id;
 
   /// Returns every player linked to a given group.
   ///
@@ -155,6 +187,14 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
 
   /// Updates a player's data.
   Future<PlayerModel> updatePlayer(PlayerModel player, {String? groupId}) async {
+    await checkPlayerUpdatePermission(
+      permissions: _permissions,
+      currentUserId: _currentUserId,
+      groupId: groupId,
+      player: player,
+      getPlayerById: getPlayerById,
+    );
+
     final updatePayload = <String, dynamic>{
       'name': player.name.trim(),
       'icon': player.icon,
