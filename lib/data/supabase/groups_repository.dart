@@ -9,6 +9,15 @@ import '../../models/group_member_model.dart';
 import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/groups_repository.dart';
 
+/// Monta o payload para inserção da temporada padrão ao criar um novo grupo.
+Map<String, dynamic> buildDefaultSeasonPayload(String groupId) {
+  return {
+    'group_id': groupId,
+    'name': 'Temporada 1',
+    'is_active': true,
+  };
+}
+
 /// Groups repository integrated with Supabase PostgreSQL.
 class SupabaseGroupsRepository implements GroupsRepository {
   final SupabaseClient _client;
@@ -131,11 +140,7 @@ class SupabaseGroupsRepository implements GroupsRepository {
       });
     }
 
-    await _client.from('seasons').insert({
-      'group_id': group.id,
-      'name': 'Temporada 1',
-      'is_active': true,
-    });
+    await _client.from('seasons').insert(buildDefaultSeasonPayload(group.id));
 
     return group;
   }
