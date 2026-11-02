@@ -5,6 +5,27 @@ import '../../models/season_model.dart';
 import '../../domain/services/permission_service.dart';
 import '../../domain/repositories/seasons_repository.dart';
 
+/// Monta o payload para inserção de uma nova temporada.
+Map<String, dynamic> buildCreateSeasonPayload({
+  required String groupId,
+  required String name,
+  DateTime? startDate,
+  DateTime? endDate,
+  bool isActive = true,
+}) {
+  return {
+    'group_id': groupId,
+    'name': name.trim(),
+    'start_date': startDate != null
+        ? "${startDate.year.toString().padLeft(4, '0')}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}"
+        : null,
+    'end_date': endDate != null
+        ? "${endDate.year.toString().padLeft(4, '0')}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}"
+        : null,
+    'is_active': isActive,
+  };
+}
+
 /// Repository for Seasons integrated with Supabase PostgreSQL.
 class SupabaseSeasonsRepository implements SeasonsRepository {
   final SupabaseClient _client;
@@ -64,17 +85,13 @@ class SupabaseSeasonsRepository implements SeasonsRepository {
           .eq('group_id', groupId);
     }
 
-    final insertPayload = {
-      'group_id': groupId,
-      'name': name.trim(),
-      'start_date': startDate != null
-          ? "${startDate.year.toString().padLeft(4, '0')}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}"
-          : null,
-      'end_date': endDate != null
-          ? "${endDate.year.toString().padLeft(4, '0')}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}"
-          : null,
-      'is_active': isActive,
-    };
+    final insertPayload = buildCreateSeasonPayload(
+      groupId: groupId,
+      name: name,
+      startDate: startDate,
+      endDate: endDate,
+      isActive: isActive,
+    );
 
     final response = await _client
         .from('seasons')
