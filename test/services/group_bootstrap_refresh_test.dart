@@ -64,5 +64,25 @@ void main() {
       final success = await GroupBootstrap.refreshLocalSnapshot(groupId);
       expect(success, isFalse);
     });
+
+    test('respeita allowEmpty: false (retorna false) e allowEmpty: true (salva lista vazia)', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('players_$groupId', jsonEncode([
+        {'id': 'p1', 'name': 'P1', 'rating': 7.0, 'overall': 70}
+      ]));
+
+      final emptyRepo = StubPlayersRepository(players: []);
+      setupTestAppServices(players: emptyRepo);
+
+      // allowEmpty: false (padrão) -> não sobrescreve com vazio e retorna false
+      final resFalse = await GroupBootstrap.refreshLocalSnapshot(groupId, allowEmpty: false);
+      expect(resFalse, isFalse);
+      expect(prefs.getString('players_$groupId'), isNotNull);
+
+      // allowEmpty: true -> aceita lista vazia e retorna true
+      final resTrue = await GroupBootstrap.refreshLocalSnapshot(groupId, allowEmpty: true);
+      expect(resTrue, isTrue);
+      expect(prefs.getString('players_$groupId'), equals('[]'));
+    });
   });
 }

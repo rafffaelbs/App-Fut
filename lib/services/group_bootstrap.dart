@@ -73,12 +73,15 @@ class GroupBootstrap {
   ///
   /// Retorna `true` se regravou o snapshot com sucesso, `false` se falhar
   /// (sem estourar exceção para o chamador).
-  static Future<bool> refreshLocalSnapshot(String groupId) async {
+  static Future<bool> refreshLocalSnapshot(
+    String groupId, {
+    bool allowEmpty = false,
+  }) async {
     if (groupId.isEmpty) return false;
     try {
       final players =
           await AppServices.instance.players.getPlayersByGroup(groupId);
-      if (players.isEmpty) return false;
+      if (players.isEmpty && !allowEmpty) return false;
 
       final prefs = await SharedPreferences.getInstance();
       final existingRaw = prefs.getString('players_$groupId');

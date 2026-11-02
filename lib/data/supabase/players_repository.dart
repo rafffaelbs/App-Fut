@@ -20,29 +20,59 @@ import '../../domain/repositories/action_logs_repository.dart';
 const String goalSoundsBucket = 'goal-sounds';
 
 /// Valida a permissão para atualizar dados/nome de um jogador:
-/// - Admin do grupo pode renomear qualquer jogador.
-/// - O dono do perfil (jogador vinculado ao usuário logado) pode renomear o próprio.
-/// - Outros membros não têm permissão.
+/// - Se o nome NÃO mudou em relação ao banco, permite a atualização sem checar permissões de renomeação.
+/// - Se o nome mudou:
+///   - O dono real do perfil (creatorId no banco == usuário atual) pode renomear.
+///   - Administrador pode renomear: se groupId informado, checa isAdmin(groupId);
+///     se groupId nulo, busca os grupos do jogador via getPlayerGroupIds e permite se for admin em qualquer um.
+///   - Outros casos: lança exceção de acesso negado.
 Future<void> checkPlayerUpdatePermission({
   required PermissionService permissions,
   required String? currentUserId,
   required String? groupId,
   required PlayerModel player,
-  Future<PlayerModel?> Function(String playerId)? getPlayerById,
+  required Future<PlayerModel?> Function(String playerId) getPlayerById,
+  Future<List<String>> Function(String playerId)? getPlayerGroupIds,
 }) async {
+  final current = await getPlayerById(player.id);
+  if (current == null) {
+    throw Exception('Jogador não encontrado');
+  }
+
+  // 1. Só exige permissão de renomear se o nome mudou em relação ao banco.
+  final nameChanged = player.name.trim() != current.name.trim();
+  if (!nameChanged) {
+    return;
+  }
+
+  // 2. Se o nome mudou: dono real (vindo do banco) pode renomear.
+  // NUNCA confiar no player.creatorId passado pelo chamador.
+  final isOwner = currentUserId != null &&
+      current.creatorId != null &&
+      current.creatorId == currentUserId;
+
+  if (isOwner) {
+    return;
+  }
+
+  // 3. Se não for dono, precisa ser admin.
   if (groupId != null && groupId.isNotEmpty) {
     final isAdmin = await permissions.isAdmin(groupId);
-    final isOwner = currentUserId != null &&
-        (player.creatorId == currentUserId ||
-            (getPlayerById != null &&
-                (await getPlayerById(player.id))?.creatorId == currentUserId));
-
-    if (!isAdmin && !isOwner) {
-      throw Exception(
-        'Acesso negado: somente administradores ou o próprio jogador podem alterar o perfil.',
-      );
+    if (isAdmin) {
+      return;
+    }
+  } else if (getPlayerGroupIds != null) {
+    final groupIds = await getPlayerGroupIds(player.id);
+    for (final gid in groupIds) {
+      if (await permissions.isAdmin(gid)) {
+        return;
+      }
     }
   }
+
+  throw Exception(
+    'Acesso negado: somente administradores ou o próprio jogador podem alterar o perfil.',
+  );
 }
 
 /// Players repository integrated with Supabase PostgreSQL.
@@ -185,6 +215,24 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
     return player;
   }
 
+  Future<List<String>> _getPlayerGroupIds(String playerId) async {
+    try {
+      final memberships = await _client
+          .from('group_members')
+          .select('group_id')
+          .eq('player_id', playerId);
+      final groupIds = <String>[];
+      for (final m in (memberships as List)) {
+        if (m is Map && m['group_id'] != null) {
+          groupIds.add(m['group_id'].toString());
+        }
+      }
+      return groupIds;
+    } catch (_) {
+      return <String>[];
+    }
+  }
+
   /// Updates a player's data.
   Future<PlayerModel> updatePlayer(PlayerModel player, {String? groupId}) async {
     await checkPlayerUpdatePermission(
@@ -192,7 +240,8 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
       currentUserId: _currentUserId,
       groupId: groupId,
       player: player,
-      getPlayerById: getPlayerById,
+      getPlayerById: (id) => getPlayerById(id),
+      getPlayerGroupIds: _getPlayerGroupIds,
     );
 
     final updatePayload = <String, dynamic>{
@@ -211,17 +260,10 @@ class SupabasePlayersRepository implements PlayersRepository, PlayerAccountRepos
     if (groupId != null && groupId.isNotEmpty) {
       await _cache.invalidate('players:group:$groupId');
     } else {
-      try {
-        final memberships = await _client
-            .from('group_members')
-            .select('group_id')
-            .eq('player_id', player.id);
-        for (final m in (memberships as List)) {
-          if (m is Map && m['group_id'] != null) {
-            await _cache.invalidate('players:group:${m['group_id']}');
-          }
-        }
-      } catch (_) {}
+      final groupIds = await _getPlayerGroupIds(player.id);
+      for (final gid in groupIds) {
+        await _cache.invalidate('players:group:$gid');
+      }
     }
 
     return PlayerModel.fromMap(Map<String, dynamic>.from(response));

@@ -307,11 +307,7 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   2. Criado o método `GroupBootstrap.refreshLocalSnapshot(groupId)`, que recria a chave `players_<groupId>` no mesmo formato a partir de `getPlayersByGroup(groupId)` preservando as notas já calculadas no snapshot existente (ou `p.rating ?? kRatingBase`), sem estourar erro para a UI caso falhe. Chamado em `_addNewPlayer`, remoção de jogador e após renomear.
   3. `updatePlayer` no repositório Supabase: anteriormente não realizava nenhuma checagem de permissão no código Dart. Passa a validar (quando `groupId` for informado) que o solicitante é administrador do grupo (`_permissions.isAdmin(groupId)`) OU é o próprio dono do perfil (`player.creatorId == currentUserId` ou verificação via `getPlayerById`). Outros membros recebem exceção de permissão (`Acesso negado: somente administradores ou o próprio jogador podem alterar o perfil.`). Na UI, o botão "Editar nome" é condicionado a `_canEditProfile` (igual ao de foto).
 
-
-
-
-
-
-
-
-
+### 28. RLS de `players` já cobre a regra de renomear (revisão da T-B2/B3)
+- **O que viu:** `pg_policies` da tabela `players` (02/11/2026): as policies de UPDATE (`players_update`, `players_admin_update`, `members_can_update_icon_and_sound`) permitem alterar a linha só se `creator_id = auth.uid()` (dono) ou se o usuário é admin de um grupo em que o jogador está (`group_members`).
+- **Impacto:** `updatePlayer` sem `groupId` ou com `creatorId` forjado no objeto não consegue gravar no banco; a checagem de permissão do app serve para mostrar a mensagem amigável. O banco é a barreira real.
+- **Ação:** nenhuma no código. Observação: o RLS libera o dono a alterar QUALQUER coluna da própria linha (não só o nome); se um dia isso importar, restringir por coluna ou RPC.

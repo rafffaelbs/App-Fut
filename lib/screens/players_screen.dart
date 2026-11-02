@@ -195,7 +195,7 @@ class _PlayersScreenState extends State<PlayersScreen> {
         groupId: widget.groupId,
         playerId: player['id'].toString(),
       );
-      await GroupBootstrap.refreshLocalSnapshot(widget.groupId);
+      await GroupBootstrap.refreshLocalSnapshot(widget.groupId, allowEmpty: true);
       await _loadPlayers();
     } catch(e) {
       debugPrint("Error removing player: $e");
