@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'supabase_permission_service.dart';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -93,21 +94,27 @@ class SupabaseGroupsRepository implements GroupsRepository {
       throw Exception('Você precisa estar logado para criar um grupo.');
     }
 
-    // 1. Insert group
-    final groupResp = await _client
-        .from('groups')
-        .insert({
-          'id': 'grupo_${DateTime.now().millisecondsSinceEpoch}',
-          'name': name.trim(),
-          'creator_id': currentUserId,
-          'invite_code': _generateInviteCode(),
-        })
-        .select()
-        .single();
+    String? createdGroupId;
+    String? createdPlayerId;
+    bool memberCreated = false;
+    String? createdSeasonId;
 
-    final group = GroupModel.fromMap(Map<String, dynamic>.from(groupResp));
+    try {
+      // 1. Insert group
+      final groupResp = await _client
+          .from('groups')
+          .insert({
+            'id': 'grupo_${DateTime.now().millisecondsSinceEpoch}',
+            'name': name.trim(),
+            'creator_id': currentUserId,
+            'invite_code': _generateInviteCode(),
+          })
+          .select()
+          .single();
 
-    if (currentUserId != null) {
+      final group = GroupModel.fromMap(Map<String, dynamic>.from(groupResp));
+      createdGroupId = group.id;
+
       final existingPlayer = await _client
           .from('players')
           .select()
@@ -132,6 +139,7 @@ class SupabaseGroupsRepository implements GroupsRepository {
         final newPlayer =
             PlayerModel.fromMap(Map<String, dynamic>.from(newPlayerResp));
         adminPlayerId = newPlayer.id;
+        createdPlayerId = newPlayer.id;
       }
 
       await _client.from('group_members').insert({
@@ -139,11 +147,52 @@ class SupabaseGroupsRepository implements GroupsRepository {
         'player_id': adminPlayerId,
         'role': GroupMemberModel.roleAdmin,
       });
+      memberCreated = true;
+
+      final seasonPayload = buildDefaultSeasonPayload(group.id);
+      createdSeasonId = seasonPayload['id'] as String?;
+      await _client.from('seasons').insert(seasonPayload);
+
+      return group;
+    } catch (e) {
+      // Desfazer somente o que ESTA chamada criou, em ordem inversa
+      if (createdSeasonId != null) {
+        try {
+          await _client.from('seasons').delete().eq('id', createdSeasonId);
+        } catch (err) {
+          debugPrint('Erro ao desfazer criação de season: $err');
+        }
+      }
+
+      if (memberCreated && createdGroupId != null) {
+        try {
+          await _client
+              .from('group_members')
+              .delete()
+              .eq('group_id', createdGroupId);
+        } catch (err) {
+          debugPrint('Erro ao desfazer criação de group_member: $err');
+        }
+      }
+
+      if (createdPlayerId != null) {
+        try {
+          await _client.from('players').delete().eq('id', createdPlayerId);
+        } catch (err) {
+          debugPrint('Erro ao desfazer criação de player: $err');
+        }
+      }
+
+      if (createdGroupId != null) {
+        try {
+          await _client.from('groups').delete().eq('id', createdGroupId);
+        } catch (err) {
+          debugPrint('Erro ao desfazer criação de group: $err');
+        }
+      }
+
+      rethrow;
     }
-
-    await _client.from('seasons').insert(buildDefaultSeasonPayload(group.id));
-
-    return group;
   }
 
   /// Updates the group name
