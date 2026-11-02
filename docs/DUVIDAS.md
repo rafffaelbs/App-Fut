@@ -244,6 +244,38 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **Dúvida / Impacto:** O repositório `PlayersRepository` deve se responsabilizar por invalidar o `CacheStore` e/ou atualizar o snapshot local do `GroupBootstrap` após inserções (`createGhostPlayer`) e alterações de nome (`updatePlayer`), garantindo que todas as telas enxerguem os dados sincronizados imediatamente?
 - **Ação:** Registrado aqui para direcionar a resolução conjunta dos bugs B2 e B3.
 
+---
+
+### 23. Desfazer em `createGroup` e dependência de `deleteGroup` com `requireAdmin` — Bug B1
+- **O que viu:**
+  - O método `deleteGroup(String groupId)` em `lib/data/supabase/groups_repository.dart:161-168` exige permissão de administrador via `await _permissions.requireAdmin(groupId, ...)`.
+  - No fluxo de `createGroup`, caso ocorra falha após a inserção do grupo em `groups` (por exemplo, na criação do jogador ou na inserção em `group_members`), o usuário ainda não possui o vínculo de admin estabelecido e sincronizado na tabela `group_members`, de modo que chamar `deleteGroup` no bloco de rollback lançaria `Exception('Access denied: Only administrators can delete the group.')`, mascarando o erro original e abortando o processo de limpeza.
+  - Além disso, `deleteGroup` apenas remove da tabela `groups` e não remove registros parciais inseridos em `group_members`, `players` ou `seasons`.
+- **Ação tomada:** Conforme especificado na tarefa, o rollback em `createGroup` não utilizou `deleteGroup`, executando diretamente chamadas `_client.from(...).delete()` na ordem inversa estrita (`seasons`, `group_members`, `players`, `groups`), cada qual isolada em seu próprio bloco `try/catch` com `debugPrint`, garantindo que nenhuma falha no rollback impeça a execução dos demais passos nem oculte a exceção original (`rethrow`).
+
+---
+
+### 24. Mapeamento de inserts em `lib/data/supabase/` sem envio de `id`
+- **O que viu:** Varredura completa via `grep -rn "\.insert(" lib/data/supabase/` identificou todos os pontos de inserção no Supabase. Os seguintes inserts não enviam a coluna `'id'`:
+  1. `lib/data/supabase/seasons_repository.dart:81` (`seasons`): o método `createSeason` monta `insertPayload` (linhas 67–77) apenas com `group_id`, `name`, `start_date`, `end_date`, `is_active`, sem enviar `'id'`. Como a tabela `seasons` no PostgreSQL tem coluna `id` `NOT NULL` sem default (`gen_random_uuid()`), qualquer chamada a `createSeason` falhará com o mesmo erro `23502` observado em `createGroup`. **Requer atenção prioritária.**
+  2. `lib/data/supabase/matches_repository.dart:185, 237, 318` (`match_lineups`): inserções utilizam `toMap(includeId: false)`. Se a tabela possuir PK composta ou `DEFAULT uuid_generate_v4()`, funciona normalmente; caso contrário, falhará se `id` for obrigatório.
+  3. `lib/data/supabase/matches_repository.dart:189, 246, 327, 372` (`match_events`): inserções utilizam `toMap(includeId: false)`.
+  4. `lib/data/supabase/matches_repository.dart:255, 336` e `lib/data/supabase/ratings_repository.dart:70` (`rating_history`): inserções utilizam `toMap(includeId: false)`.
+  5. `lib/data/supabase/group_members_repository.dart:93` (`group_members`): insere `group_id`, `player_id`, `role` (chave primária natural composta).
+  6. `lib/data/supabase/group_members_repository.dart:149` (`group_join_requests`): insere `group_id`, `user_id`, `requested_name` sem `id`.
+  7. `lib/data/supabase/action_logs_repository.dart:26` (`group_action_logs`): insere `group_id`, `actor_id`, `action`, `target_player_id`, `details` sem `id`.
+  8. `lib/data/supabase/session_arrivals_repository.dart:93` (`session_arrivals`): insere `session_id`, `player_id`, `arrival_order`, `desistiu`, `team`, `is_goalkeeper` sem `id`.
+- **Ação:** Nenhuma dessas tabelas além de `seasons` em `createGroup` foi alterada nesta tarefa, conforme a regra de listar sem modificar.
+
+---
+
+### 25. `lib/app/app_features.dart` (linha 67) com `isReadOnly: true` commitado na `main`
+- **O que viu:**
+  - No commit `fc7d0d68dcdd49a8db5b126d6a864fc0cb13c32c` ("docs: atualização de docs"), o arquivo `lib/app/app_features.dart` foi commitado com `isReadOnly: true` na classe `_PersonalAppFeatures` (provavelmente resquício de teste manual das flags da T4).
+  - Isso faz com que o teste unitário existente `test/app/app_features_test.dart` (linha 18: `expect(features.isReadOnly, isFalse)`) falhe na `main`.
+- **Impacto / Ação:** Conforme as regras do projeto de não alterar arquivos fora do escopo estrito da tarefa para manter o `git diff main --stat` limpo e focado, o arquivo não foi alterado na branch `fix/create-group-season-id`. Registrado aqui para que o valor seja revertido para `isReadOnly: false` na `main`.
+
+
 
 
 
