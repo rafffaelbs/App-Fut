@@ -353,3 +353,16 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - `SupabaseMatchOutbox.readAll()` é chamado exclusivamente em `SupabaseMatchesRepository._pendingMatches()` (`lib/data/supabase/matches_repository.dart:27`), o qual alimenta `getMatchesBySession` e `getMatchesByGroup` para mesclar partidas pendentes em memória no Histórico, Ranking e Estatísticas.
   - O selo da AppBar em `match_screen.dart:1721-1734` monitora `AppServices.instance.outbox.pending` via `ValueListenableBuilder<int>`.
   - O diálogo `_showPendingSyncDialog` (`match_screen.dart:3702-3734`) exibe a contagem de `outbox.pending` e o texto de `outbox.lastError`, sem listar as partidas. No Passo 3, ele passará a consumir `outbox.failedJobs()` quando `outbox.failed.value > 0`.
+
+---
+
+### 30. Descarte local vs. linhas parciais no Supabase em erros permanentes (Bug B5 - revisão Claude Code)
+- **O que viu:**
+  - Quando `savePendingMatch` falha com um erro permanente (por exemplo `23503` violação de chave estrangeira em `match_lineups` ou `match_events`), a ordem de escrita é:
+    1. `_client.from("matches").upsert({...match, "id": matchId})` (bem-sucedido)
+    2. Se `isRetry == true`: `delete` em `match_lineups` e `match_events`
+    3. `insert` em paralelo em `match_lineups` e `match_events` (falha aqui)
+  - Com isso, a linha principal na tabela `matches` (e possíveis escalações/eventos gravados antes da falha) já foi gravada e commitada no Supabase.
+  - Quando o usuário toca em "Descartar" no diálogo de "Partidas com problema", o método `discardFailed(matchId)` remove o registro apenas do armazenamento local do dispositivo (`SharedPreferences`, chave `pending_matches_v1`). A linha parcial em `matches` permanece no Supabase.
+- **Impacto:** A partida pode ficar no banco de dados remoto com registro de placar mas sem escalação completa ou sem eventos.
+- **Ação:** Nenhuma alteração de código ou banco de dados nesta etapa (preservando a regra de não alterar tabelas/RPCs/RLS). Registrado aqui para futura avaliação de migração para RPC transacional atômica no Supabase para criação de partidas ou rotina de limpeza remota ao descartar.
