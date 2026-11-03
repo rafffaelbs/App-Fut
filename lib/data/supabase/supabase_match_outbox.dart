@@ -2,8 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/repositories/matches_repository.dart';
 import '../../domain/services/match_outbox.dart';
+
+const _permanentPostgrestCodes = {'23503', '23502', '23514', '22P02'};
+
+/// Retorna true SOMENTE para PostgrestException com code em {'23503','23502','23514','22P02'}.
+/// Retorna false para tudo o resto: SocketException, TimeoutException, ClientException,
+/// erros HTTP, 5xx, 401/JWT expirado, 42501 (permissão negada/RLS), 23505 (duplicada) e qualquer erro desconhecido.
+bool isPermanentOutboxError(Object error) {
+  if (error is PostgrestException) {
+    final code = error.code;
+    return code != null && _permanentPostgrestCodes.contains(code);
+  }
+  return false;
+}
 
 /// Fila ("outbox") de partidas finalizadas que ainda não subiram pro Supabase.
 ///
