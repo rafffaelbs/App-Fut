@@ -6,6 +6,20 @@
 
 ---
 
+## Atualização de 03/11/2026 (Fase 1b concluída)
+
+> **Aviso:** O restante deste documento descreve o estado de 02/11/2026 (ao término da Fase 1, com 162 testes). A suíte agora conta com **217 testes passando** e zero erros no `flutter analyze`.
+
+Desde o levantamento original, a **Fase 1b (correção de bugs)** foi implementada e integrada na `main`, abrangendo 6 correções principais:
+1. **T-B1 (`fix/create-group-season-id`):** Geração de `id` via `Uuid().v4()` na temporada inicial ao criar grupo em `groups_repository.dart` e rollback reverso em caso de falha, resolvendo o erro 23502 e evitando grupos órfãos.
+2. **T-B1b (`fix/create-season-id`):** Geração de `id` via `Uuid().v4()` no payload de `createSeason` em `seasons_repository.dart`, sanando a restrição NOT NULL sem default no Supabase.
+3. **T-B2/B3 (`fix/players-cache`):** Invalidação de cache `players:group:<groupId>` no `CacheStore` nas mutações de jogadores; recarga do snapshot local via `GroupBootstrap.refreshLocalSnapshot`; persistência de nome no Supabase via `updatePlayer` com verificação de permissão (admin ou dono); fallback resiliente em `match_screen` e `PlayerComparisonScreen`.
+4. **T-B4 (`feature/player-advanced-stats`):** Correção do cálculo de percentual de derrotas conjuntas no detalhe do jogador ("Mais Perdeu Junto"), validado pelo Enzo.
+5. **T-B5 (`fix/outbox-permanent-errors`):** Classificação de erros permanentes no Supabase (`23503`, `23502`, `23514`, `22P02`) via `isPermanentOutboxError`. Partidas com falhas permanentes persistentes recebem `status: 'failed'`, não bloqueiam a fila outbox e saem das estatísticas (`readAll`), acompanhadas de diálogo com opções de copiar dados, tentar de novo e descartar.
+6. **T-B6 / T-B6b / T-B6c (`fix/offline-startup`, `fix/groups-offline-cache`, `fix/home-pending-indicator`):** Distinção entre erro de rede e ausência de perfil no `ProfileCheckResult`; gatilhos automáticos de `outbox.flush()` e `refreshCounts()` no startup e resume do app; cache offline de grupos em `groups:my:<userId>` com getter `lastLoadFromCache` e aviso de dados salvos na `HomePage`; e indicador visual de partidas pendentes e com problema na AppBar da tela inicial.
+
+---
+
 ## 1. Git
 
 ### 1.1 `git log main --oneline | head -40`
