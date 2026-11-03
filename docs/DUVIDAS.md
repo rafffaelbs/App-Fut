@@ -226,6 +226,7 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   1. Taxa de derrotas quando atuam juntos (`lossesWith / gamesWith`, ex.: "perdeu 4 de 5 partidas jogadas com fulano = 80% de taxa de derrota")?
   2. Proporção das derrotas do jogador em que aquele parceiro esteve presente (`lossesWith / myTotalLosses`), ajustando a visualização da barra para não pressupor partição estrita de 100%?
 - **Ação:** Registrado aqui para alinhamento antes de modificar o cálculo.
+Resolvido em feature/player-advanced-stats
 
 ---
 
@@ -236,6 +237,7 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - O mesmo código existia na tag `pre-refactor` (introduzido no commit `4f287b5` em 13/09/2026 por Enzo).
 - **Dúvida / Impacto:** Devemos gerar o `id` da temporada no código Dart via `const Uuid().v4()` (padronizando com a criação de jogadores em `players_repository.dart:100` e temporadas em `data_migration_service.dart:327`), ou deve ser adicionado um `DEFAULT gen_random_uuid()` no schema da tabela `seasons` do PostgreSQL? E como tratar os grupos órfãos já existentes no Supabase (criar temporada padrão via script/migration)?
 - **Ação:** Registrado aqui para direcionar a correção na tarefa correspondente ao Bug B1.
+Resolvido em fix/create-group-season-id
 
 ---
 
@@ -245,6 +247,7 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - Em `lib/screens/players_screen.dart:140-159`, `_addNewPlayer` cria o jogador no Supabase via `createGhostPlayer`, mas não atualiza a chave `'players_${widget.groupId}'` nem invalida o cache. Em seguida, a tela de partida (`match_screen.dart:2806-2827`) lê o elenco de `'players_${widget.groupId}'` e só consulta o Supabase se a chave local estiver completamente vazia. Por isso, jogadores recém-criados só aparecem em peladas criadas posteriormente (após um novo `prefetch`).
 - **Dúvida / Impacto:** O repositório `PlayersRepository` deve se responsabilizar por invalidar o `CacheStore` e/ou atualizar o snapshot local do `GroupBootstrap` após inserções (`createGhostPlayer`) e alterações de nome (`updatePlayer`), garantindo que todas as telas enxerguem os dados sincronizados imediatamente?
 - **Ação:** Registrado aqui para direcionar a resolução conjunta dos bugs B2 e B3.
+Resolvido em fix/players-cache
 
 ---
 
@@ -368,3 +371,30 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   - Quando o usuário toca em "Descartar" no diálogo de "Partidas com problema", o método `discardFailed(matchId)` remove o registro apenas do armazenamento local do dispositivo (`SharedPreferences`, chave `pending_matches_v1`). A linha parcial em `matches` permanece no Supabase.
 - **Impacto:** A partida pode ficar no banco de dados remoto com registro de placar mas sem escalação completa ou sem eventos.
 - **Ação:** Nenhuma alteração de código ou banco de dados nesta etapa (preservando a regra de não alterar tabelas/RPCs/RLS). Registrado aqui para futura avaliação de migração para RPC transacional atômica no Supabase para criação de partidas ou rotina de limpeza remota ao descartar.
+
+---
+
+### 31. Atualização e harmonização de documentação — Pós-Fase 1b (03/11/2026)
+- **O que viu e corrigiu na documentação:**
+  1. `docs/TASKS.md`:
+     - Tabela de Status atualizada marcando a Fase 1b como concluída (217 testes passando).
+     - Marcadas todas as tarefas da Fase 1b como concluídas com o nome de suas respectivas branches: T-B1 (`fix/create-group-season-id`), T-B1b (`fix/create-season-id`), T-B2/B3 (`fix/players-cache`), T-B4 (`feature/player-advanced-stats`), T-B5 (`fix/outbox-permanent-errors`), T-B6 (`fix/offline-startup`), T-B6b (`fix/groups-offline-cache`), T-B6c (`fix/home-pending-indicator`).
+     - Pergunta em aberto 4: corrigida frase desatualizada ("o repositório continua exigindo admin"), registrando que a checagem no app (`checkPlayerUpdatePermission`) e as policies de RLS do Supabase (`creator_id = auth.uid()` ou admin do grupo em `group_members`) é que protegem a mutação, permitindo ao dono do perfil alterar o próprio nome.
+     - Pergunta em aberto 6: atualizada com a decisão do Enzo de que todos os grupos antigos de teste e de terceiros foram apagados do banco em 02/11, adiando a discussão de arquitetura de grupos para após a versão offline.
+  2. `docs/BACKLOG.md`:
+     - Tabela da Seção 0 atualizada com B1, B2, B3 e B5 corrigidos com suas branches; B4 mantido como corrigido pelo Enzo; B6 mantido como decisão de desenho.
+     - Seções 2b e 2c marcadas como resolvidas pela T-B6 (`fix/offline-startup`).
+     - Corrigida a suposição antiga de que a HomePage "já usa cache" (agora a HomePage de fato possui cache implementado na T-B6b via `groups:my:<userId>`).
+     - Adicionada a seção "Pendências deixadas pela Fase 1b" com as 9 pendências mapeadas e suas origens (DUVIDAS 30, DUVIDAS 26, DUVIDAS 28, DUVIDAS 27, revisão de outbox e testes).
+  3. `docs/ARCHITECTURE.md`:
+     - Status atualizado no topo para Fase 1 e Fase 1b concluídas (217 testes).
+     - Tabela 4.1: adicionado getter `lastLoadFromCache` em `GroupsRepository`.
+     - Seção 4.3b: interface `MatchOutbox` atualizada com `failed`, `failedJobs()`, `retryFailed()`, `discardFailed()` e `refreshCounts()`, além de registrar a presença do selo de pendências na HomePage.
+     - Seção 9 (item 2): atualizados os gatilhos de envio da fila outbox (incluindo startup e resume do app); detalhado o isolamento de partidas com erros permanentes (`23503`, `23502`, `23514`, `22P02`) via `status: 'failed'`; removida a frase desatualizada que afirmava não existir reenvio ao abrir o app; e incluída a camada de cache de grupos `groups:my:<userId>` no item 3.
+     - Seção 11: substituída por "Bugs conhecidos: resolvidos na Fase 1b" com resumo e link para o BACKLOG, mantendo o que permanece em aberto.
+  4. `docs/ESTADO_ATUAL.md`:
+     - Adicionada a seção curta "Atualização de 03/11/2026 (Fase 1b concluída)" no topo resumindo as 6 correções e a suíte de 217 testes, mantendo o restante do documento como levantamento histórico de 02/11/2026.
+  5. `docs/CONTEXTO_NOVA_CONVERSA.md`:
+     - Atualizados os tópicos "Onde estamos" e "Próximos passos" para refletir a conclusão da Fase 1b e apontar para a Fase 2 (site).
+  6. `lib/main_personal.dart`:
+     - Comentário com texto de instrução da tarefa em `_ProfileCheckState.initState` substituído por comentário normal de código.
