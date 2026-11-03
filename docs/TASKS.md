@@ -1,4 +1,4 @@
-# TASKS.md — Plano de tarefas (v3, Fase 1 concluída em 02/11/2026)
+# TASKS.md — Plano de tarefas (v4, Fase 1 e 1b concluídas em 03/11/2026)
 
 ## Status
 
@@ -6,8 +6,8 @@
 |---|---|
 | Fase 0 (T0, T0b, T0c, T0d, T0e, T0g) | ✅ concluída e integrada na `main` |
 | Fase 1 (T1, T2, T3a a T3e, T4) | ✅ concluída e integrada na `main`. 162 testes passando. Prompts abaixo ficam como **histórico** |
-| **Fase 1b (correção de bugs)** | ⏳ **próxima.** Ver seção "FASE 1b" abaixo |
-| Fase 2 (site somente leitura) | ⏳ depois da 1b (T5 a T7b) |
+| **Fase 1b (correção de bugs)** | ✅ concluída em 03/11/2026 e integrada na `main`. 217 testes passando. Prompts abaixo ficam como **histórico** |
+| Fase 2 (site somente leitura) | ⏳ próxima (T5 a T7b) |
 | Fase 3 (app público offline) | ⏳ depois da Fase 2 (T8 a T15) |
 
 Ponto de partida oficial: a `main` atual. Foto do código: `docs/ESTADO_ATUAL.md`. A tag `pre-refactor` fica só como referência de comparação.
@@ -392,17 +392,17 @@ Aceite: analyze/test ok; checklist manual completo (inclui item 9, modo avião).
 
 ---
 
-## FASE 1b — Correção de bugs (antes do site)
+## FASE 1b — Correção de bugs (concluída em 03/11/2026)
 
-Aqui o comportamento **pode** mudar: é correção. Regras: um bug = uma branch; primeiro um teste que reproduz o bug (falha), depois a correção (passa); commit separado por correção; não mexer na proteção offline (seção 9 do `ARCHITECTURE.md`) nem em chaves de `SharedPreferences`. Origem: `docs/BACKLOG.md` seção 0 e `docs/ESTADO_ATUAL.md` seção 7. Para a revisão do Claude Code, manter a linha "não rode git checkout/switch/stash".
+Fase 1b concluída com sucesso e integrada na `main` (217 testes passando). Regras cumpridas: um bug = uma branch; testes antes e depois; proteção offline e chaves do SharedPreferences preservadas. Os prompts e descrições originais abaixo ficam mantidos como **histórico**.
 
-Ordem sugerida: B1 → B2/B3 → B5 → B6. **B4 já foi corrigido pelo Enzo (02/11)**; a tarefa T-B4 abaixo fica só como histórico.
+### T-B1 · Criar grupo sem erro de temporada — ✅ Concluída (branch `fix/create-group-season-id`)
+Branch: `fix/create-group-season-id` · Revisão: CLAUDE
 
-### T-B1 · Criar grupo sem erro de temporada — AG, revisão CLAUDE
-Branch: `fix/create-group-season-id`
+Bug: criar grupo falhava com PostgrestException "null value in column id of relation seasons" (23502) e deixava grupo órfão. Corrigido com geração de `id` via `const Uuid().v4()` no payload da temporada inicial e rollback atômico em ordem inversa em caso de falha.
 
 ```
-[cabeçalho, exceto "não mude comportamento": esta tarefa corrige um bug]
+[Prompt original mantido como histórico]
 Bug: criar grupo falha com PostgrestException "null value in column id of relation seasons"
 (23502) e deixa o grupo gravado sem temporada (grupo órfão).
 1) Em lib/data/supabase/groups_repository.dart (createGroup, ~134-138) o insert em seasons
@@ -420,13 +420,18 @@ Aceite: analyze/test ok; checklist: criar grupo no celular e conferir no Supabas
 grupo tem 1 temporada ativa.
 ```
 
-Depois (Enzo, no Supabase): apagar os grupos órfãos de teste. Conferir se os grupos de outras pessoas ("du", "du fut", "Baba do Carlos") têm temporada; se não tiverem, decidir se criamos a temporada para eles (script SQL que eu escrevo).
+### T-B1b · Criar temporada sem erro de id — ✅ Concluída (branch `fix/create-season-id`)
+Branch: `fix/create-season-id`
 
-### T-B2 · Cache do elenco e nome do jogador — AG, revisão CLAUDE
-Branch: `fix/players-cache` · Depende de decisão do Enzo (pergunta 4)
+Mapeado em `DUVIDAS.md` 24: `createSeason` em `seasons_repository.dart` também inseria sem `id` em tabela com `id` NOT NULL sem default no Supabase. Corrigido com extração da função pura `buildCreateSeasonPayload` gerando UUID v4 e teste unitário cobrindo o payload gerado.
+
+### T-B2/B3 · Cache do elenco e nome do jogador — ✅ Concluída (branch `fix/players-cache`)
+Branch: `fix/players-cache` · Revisão: CLAUDE
+
+Corrigido: (a) `SupabasePlayersRepository` invalida `players:group:<groupId>` no `CacheStore` ao criar, remover ou editar jogadores; (b) criação e remoção de jogadores e alteração de nome atualizam o snapshot local via `GroupBootstrap.refreshLocalSnapshot`; (c) `_savePlayerName` chama `AppServices.instance.players.updatePlayer` persistindo no Supabase e validando permissão (admin ou próprio dono); (d) telas de partida (`match_screen`) e comparação buscam no repositório com fallback no snapshot.
 
 ```
-[cabeçalho, exceto "não mude comportamento"]
+[Prompt original mantido como histórico]
 Bugs (ver docs/ESTADO_ATUAL.md 7.2): (a) jogador criado no Elenco não aparece em "adicionar
 jogadores" de uma pelada já existente; (b) player_detail._savePlayerName (~1207-1225) só
 grava no SharedPreferences, nunca no Supabase, e o nome volta ao antigo; a comparação mostra
@@ -444,35 +449,30 @@ Aceite: analyze/test ok; checklist manual: criar jogador com pelada aberta e adi
 renomear e conferir carta, título, comparação e Supabase. Teste em modo avião (item 9).
 ```
 
-### T-B5 · Fila de envio: erro permanente — CLAUDE desenha, AG implementa, revisão CLAUDE
-Branch: `fix/outbox-permanent-errors` · **Prompt detalhado: eu escrevo antes de executar** (é a parte crítica contra perda de partidas)
+### T-B4 · Estatísticas avançadas com percentuais errados — ✅ Resolvido pelo Enzo em 02/11 (branch `feature/player-advanced-stats`)
+Branch: `feature/player-advanced-stats` · Corrigido e validado pelo Enzo antes da Fase 1b.
 
-Ideia: separar erro transitório (rede, timeout, 5xx) de erro permanente (`23503` jogador apagado, payload inválido). Partida com erro permanente sai do topo da fila (não bloqueia as seguintes), fica guardada para o admin ver e descartar, e **não** entra mais nas estatísticas até ser resolvida. Cuidado: partida nunca é apagada em silêncio.
+### T-B5 · Fila de envio: erro permanente — ✅ Concluída (branch `fix/outbox-permanent-errors`)
+Branch: `fix/outbox-permanent-errors` · Revisão: CLAUDE
 
-### T-B6 · Abrir o app sem rede — AG, revisão CLAUDE
-Branch: `fix/offline-startup` · Junta BACKLOG 2b e 2c
+Implementada a separação entre erros transitórios e erros permanentes na fila outbox (`SupabaseMatchOutbox`). Erros permanentes (`23503`, `23502`, `23514`, `22P02`) detectados por `isPermanentOutboxError`: após 2 falhas consecutivas, a partida recebe `status: 'failed'` (campos `status`, `permanent_failures`, `error_code`, `error_message`, `failed_at` no mesmo `pending_matches_v1`), sai do topo da fila para não bloquear as seguintes, e é excluída das estatísticas (`readAll`). A UI exibe diálogo de partidas com problema com ações de Copiar dados, Tentar de novo (`retryFailed`) e Descartar (`discardFailed`).
 
-- `main_personal.dart` `_ProfileCheckState._check` (~89-101): separar "erro na consulta" de "consulta vazia". Erro de rede não mostra `CompleteProfileScreen`; mostra o `HomePage` (que tem cache) ou "sem conexão, tentar de novo".
-- Chamar `outbox.flush()` ao iniciar o app e ao voltar do background (`WidgetsBindingObserver`) e carregar a contagem de pendentes na inicialização.
-- Teste obrigatório: modo avião com fechar e reabrir (item 9 do checklist).
+### T-B6 · Abrir o app sem rede — ✅ Concluída (branch `fix/offline-startup`)
+Branch: `fix/offline-startup` · Revisão: CLAUDE
 
-### T-B4 · Estatísticas avançadas com percentuais errados — ✅ resolvido pelo Enzo (02/11), não executar
-Branch: `fix/advanced-stats-percent` (não usada)
+Junta BACKLOG 2b e 2c:
+- `main_personal.dart`: `ProfileCheckResult` separa explicitamente erro de rede (`failed`) de lista vazia (`noProfile`). Em caso de falha de conexão na verificação de perfil, não bloqueia em `CompleteProfileScreen`, navegando para a `HomePage` com os dados em cache.
+- Adicionados gatilhos automáticos de `outbox.refreshCounts()` e `outbox.flush()` na inicialização do app (após login reconhecido) e ao retornar do background (`WidgetsBindingObserver` / `didChangeAppLifecycleState` com `AppLifecycleState.resumed`).
 
-```
-[cabeçalho, exceto "não mude comportamento"]
-Bug: no detalhe do jogador, "Mais perdeu junto" mostra percentuais que não fazem sentido.
-Exemplo do dono: 10 derrotas; o jogador com quem mais perdeu esteve em 3 delas; a tela
-mostra cerca de 70% e deveria ser 30%.
-1) ANTES de mexer: escreva um teste que reproduz esse caso com números fixos
-   (10 derrotas, 3 com o parceiro X, e N jogos juntos). A explicação já levantada em
-   docs/ESTADO_ATUAL.md 7.3 (denominador myTotalLosses no card, gamesWith no findMax) NÃO
-   explica 70% (3/10 daria 30%): descubra de onde vem o 70% e registre em DUVIDAS.md.
-   Linhas: player_detail.dart ~852-858, ~931-949, ~1024-1038, ~1121-1165;
-   player_stat_distribution_card.dart.
-2) Corrija conforme a regra definida pelo Enzo (pergunta 5). Não altere os calculators de nota.
-Aceite: teste novo passa; analyze/test ok; conferir no celular com um jogador real.
-```
+### T-B6b · Cache da lista de grupos offline — ✅ Concluída (branch `fix/groups-offline-cache`)
+Branch: `fix/groups-offline-cache`
+
+Cache offline da lista de grupos: `GroupsRepository.getMyGroups` utiliza `CacheStore` na chave `groups:my:<userId>`, expõe o getter `lastLoadFromCache`, invalida nas mutações (`createGroup`, `updateGroup`, `deleteGroup`) e a `HomePage` exibe o aviso "Sem conexão. Mostrando dados salvos." quando renderizada a partir do cache local.
+
+### T-B6c · Indicador de pendências na HomePage — ✅ Concluída (branch `fix/home-pending-indicator`)
+Branch: `fix/home-pending-indicator`
+
+Ícone de pendências e partidas com problema adicionado na AppBar da `HomePage`, exibindo reativamente as contagens de `outbox.pending` e `outbox.failed` fora da `MatchScreen`, permitindo ao usuário acompanhar o estado da sincronização e abrir o diálogo de status/recuperação a partir da tela inicial.
 
 ---
 
@@ -519,10 +519,10 @@ Decisão tomada: **link secreto, sem login**. Segurança por token + funções n
 2. ~~Resultado do inventário (T0d)~~ **Recebido** (ver seção 10 do ARCHITECTURE). Pergunta que ficou: as insígnias personalizadas (`custom_badges_*`, que existem só no aparelho) são criadas só por você, ou outros admins também criam?
 3. Posso apagar as 4 telas inalcançáveis (`expanded_ranking_screen`, `group_ranking_screen`, `tournament_screen`, `blank_screen`; T0g)? E o `RatingsRepository` inteiro está sem uso: se o gráfico de evolução do redesign for usar `rating_history`, avise; senão ele fica fora do SQLite e pode ser apagado depois. **Resolvido:** telas apagadas na T0g; `RatingsRepository` fica como está.
 
-### Perguntas abertas atuais (02/11/2026)
+### Perguntas abertas atuais (03/11/2026)
 
-4. ~~**Quem pode renomear jogador?**~~ **Decidido (02/11):** só admin renomeia qualquer jogador; o dono do perfil renomeia o próprio. Implementar na T-B2 (o repositório continua exigindo admin; confira se o dono do perfil passa pela regra e, se não passar, ajuste só essa condição e registre em DUVIDAS.md).
+4. ~~**Quem pode renomear jogador?**~~ **Resolvido (02/11 na T-B2/B3):** só admin renomeia qualquer jogador e o dono do perfil renomeia o próprio. Na verdade quem protege é o RLS do Supabase (`creator_id = auth.uid()` ou admin do grupo em `group_members`) e a checagem amigável do app (`checkPlayerUpdatePermission`), não uma exigência rígida de admin no repositório (ver `DUVIDAS.md` 27 e 28).
 5. ~~**Regra do percentual de "Mais perdeu junto"**~~ **Resolvido pelo Enzo (02/11)** ao corrigir o B4. Ideia para o futuro: oferecer as duas visões (% das derrotas do jogador e taxa de derrota jogando juntos). Cuidado: com poucos jogos juntos (1 jogo, 1 derrota) a taxa dá 100% para sempre; se a segunda visão voltar, usar um mínimo de jogos (`minBase`).
-6. **Grupos de outras pessoas** ("du", "du fut", "Baba do Carlos"): têm temporada? Rodar no Supabase: `select g.id, g.name, count(s.id) from groups g left join seasons s on s.group_id = g.id group by 1,2;`. Se a coluna `id` de `seasons` perdeu o default, vale também `select column_default from information_schema.columns where table_name='seasons' and column_name='id';`.
+6. ~~**Grupos de outras pessoas**~~ **Resolvido (decisão do Enzo):** todos os grupos antigos foram apagados do Supabase em 02/11; a discussão sobre grupos volta depois do app offline.
 7. **Insígnias personalizadas** (`custom_badges_*`, só no aparelho): só o Enzo cria ou outros admins também? E o comportamento "apagar do catálogo não remove do jogador" (BACKLOG 2d) é desejado?
 8. **Site (Fase 2):** `match_screen` existe na versão web? (ações de escrita hoje só condicionadas a `!isReadOnly`.)
