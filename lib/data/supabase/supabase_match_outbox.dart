@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -224,10 +225,12 @@ class SupabaseMatchOutbox implements MatchOutbox {
       if (j['match_id'].toString() == matchId && j['status'] == 'failed') {
         j.remove('status');
         j['permanent_failures'] = 0;
-        j['attempts'] = 0;
+        final currentAttempts = (j['attempts'] as num?)?.toInt() ?? 0;
+        j['attempts'] = math.max(currentAttempts, 1);
         j.remove('error_code');
         j.remove('error_message');
         j.remove('failed_at');
+        j.remove('last_attempt_at');
         found = true;
       }
     }
