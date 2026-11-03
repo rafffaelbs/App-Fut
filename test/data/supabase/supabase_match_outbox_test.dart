@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_do_fut/data/supabase/supabase_match_outbox.dart';
 import 'package:app_do_fut/domain/repositories/matches_repository.dart';
 import 'package:app_do_fut/models/match_event_model.dart';
@@ -10,6 +13,8 @@ class FakeMatchesRepository implements MatchesRepository {
   final List<Map<String, dynamic>> savedCalls = [];
   bool shouldThrow = false;
   String errorMessage = 'Network error';
+  Object? customException;
+  Object? Function(String matchId, int callIndex)? onSave;
 
   @override
   Future<void> savePendingMatch({
@@ -19,6 +24,15 @@ class FakeMatchesRepository implements MatchesRepository {
     required List<Map<String, dynamic>> events,
     bool isRetry = false,
   }) async {
+    if (onSave != null) {
+      final exc = onSave!(matchId, savedCalls.length);
+      if (exc != null) {
+        throw exc;
+      }
+    }
+    if (customException != null) {
+      throw customException!;
+    }
     if (shouldThrow) {
       throw Exception(errorMessage);
     }
@@ -169,6 +183,321 @@ void main() {
       expect(call['isRetry'], true);
       expect(outbox.pending.value, 0);
       expect(outbox.lastError.value, isNull);
+    });
+
+    group('Cenários do Passo 4 (B5)', () {
+      test('1. isPermanentOutboxError: true para 23503/23502/23514/22P02; false para 42501, 23505, SocketException, TimeoutException e Exception generico', () {
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'FK', code: '23503')),
+          isTrue,
+        );
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'Not null', code: '23502')),
+          isTrue,
+        );
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'Check', code: '23514')),
+          isTrue,
+        );
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'Syntax', code: '22P02')),
+          isTrue,
+        );
+
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'RLS', code: '42501')),
+          isFalse,
+        );
+        expect(
+          isPermanentOutboxError(const PostgrestException(message: 'Duplicate', code: '23505')),
+          isFalse,
+        );
+        expect(
+          isPermanentOutboxError(const SocketException('Sem conexao')),
+          isFalse,
+        );
+        expect(
+          isPermanentOutboxError(TimeoutException('Tempo esgotado')),
+          isFalse,
+        );
+        expect(
+          isPermanentOutboxError(Exception('Erro generico')),
+          isFalse,
+        );
+      });
+
+      test('2. Erro de rede/timeout/42501 NUNCA isola a partida, por mais tentativas que tenha', () async {
+        final errors = [
+          const SocketException('Sem internet'),
+          TimeoutException('Timeout 25s'),
+          const PostgrestException(message: 'Permission denied', code: '42501'),
+          const SocketException('Sem internet 2'),
+          TimeoutException('Timeout 25s 2'),
+        ];
+
+        await outbox.enqueue(sampleJob);
+
+        for (int i = 0; i < errors.length; i++) {
+          fakeMatchesRepo.customException = errors[i];
+          await outbox.flush();
+
+          expect(outbox.pending.value, 1);
+          expect(outbox.failed.value, 0);
+
+          final prefs = await SharedPreferences.getInstance();
+          final raw = prefs.getString('pending_matches_v1')!;
+          final jobs = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+          expect(jobs.length, 1);
+          expect(jobs.first['status'], isNull);
+          expect(jobs.first['attempts'], i + 1);
+          expect(jobs.first['permanent_failures'], 0);
+        }
+      });
+
+      test('3. Erro 23503 incrementa permanent_failures mas partida nao vira failed; 2o erro 23503 marca failed e flush segue para proxima', () async {
+        final job2 = {
+          ...sampleJob,
+          'match_id': 'match-uuid-2',
+        };
+
+        await outbox.enqueue(sampleJob);
+        await outbox.enqueue(job2);
+
+        expect(outbox.pending.value, 2);
+        expect(outbox.failed.value, 0);
+
+        // 1ª tentativa: erro 23503 no primeiro job
+        fakeMatchesRepo.customException = const PostgrestException(
+          message: 'violates foreign key constraint',
+          code: '23503',
+        );
+        await outbox.flush();
+
+        // Ainda não virou failed (permanent_failures == 1)
+        expect(outbox.pending.value, 2);
+        expect(outbox.failed.value, 0);
+        final jobs1 = await SupabaseMatchOutbox.readAll();
+        expect(jobs1.length, 2);
+        expect(fakeMatchesRepo.savedCalls.length, 0);
+
+        // 2ª tentativa: erro 23503 no job 1 e sucesso no job 2
+        fakeMatchesRepo.customException = null;
+        fakeMatchesRepo.onSave = (matchId, callIndex) {
+          if (matchId == 'match-uuid-1') {
+            return const PostgrestException(
+              message: 'violates foreign key constraint',
+              code: '23503',
+            );
+          }
+          return null; // sucesso para job 2
+        };
+
+        await outbox.flush();
+
+        // Job 1 virou failed e Job 2 foi enviado com sucesso na mesma execução
+        expect(outbox.pending.value, 0);
+        expect(outbox.failed.value, 1);
+
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+        expect(fakeMatchesRepo.savedCalls.first['matchId'], 'match-uuid-2');
+
+        final failedList = await outbox.failedJobs();
+        expect(failedList.length, 1);
+        final failedJob = failedList.first;
+        expect(failedJob['match_id'], 'match-uuid-1');
+        expect(failedJob['status'], 'failed');
+        expect(failedJob['error_code'], '23503');
+        expect(failedJob['error_message'], contains('foreign key'));
+        expect(failedJob['failed_at'], isNotNull);
+        expect(failedJob['permanent_failures'], 2);
+      });
+
+      test('4. Um sucesso (ou erro de rede) entre dois 23503 zera permanent_failures', () async {
+        await outbox.enqueue(sampleJob);
+
+        // 1º erro 23503: permanent_failures = 1
+        fakeMatchesRepo.customException = const PostgrestException(
+          message: 'FK 1',
+          code: '23503',
+        );
+        await outbox.flush();
+
+        var prefs = await SharedPreferences.getInstance();
+        var jobs = (jsonDecode(prefs.getString('pending_matches_v1')!) as List)
+            .cast<Map<String, dynamic>>();
+        expect(jobs.first['permanent_failures'], 1);
+        expect(jobs.first['status'], isNull);
+
+        // Erro de rede intermediário: zera permanent_failures
+        fakeMatchesRepo.customException = const SocketException('Sem internet');
+        await outbox.flush();
+
+        prefs = await SharedPreferences.getInstance();
+        jobs = (jsonDecode(prefs.getString('pending_matches_v1')!) as List)
+            .cast<Map<String, dynamic>>();
+        expect(jobs.first['permanent_failures'], 0);
+        expect(jobs.first['status'], isNull);
+
+        // Próximo erro 23503: vai para 1 novamente, e NÃO para 2
+        fakeMatchesRepo.customException = const PostgrestException(
+          message: 'FK 2',
+          code: '23503',
+        );
+        await outbox.flush();
+
+        prefs = await SharedPreferences.getInstance();
+        jobs = (jsonDecode(prefs.getString('pending_matches_v1')!) as List)
+            .cast<Map<String, dynamic>>();
+        expect(jobs.first['permanent_failures'], 1);
+        expect(jobs.first['status'], isNull);
+        expect(outbox.failed.value, 0);
+      });
+
+      test('5. readAll não devolve jobs failed, mas devolve os pendentes normais', () async {
+        final jobs = [
+          {...sampleJob, 'match_id': 'job-pending-1'},
+          {
+            ...sampleJob,
+            'match_id': 'job-failed-1',
+            'status': 'failed',
+            'error_code': '23503',
+          },
+          {...sampleJob, 'match_id': 'job-pending-2'},
+        ];
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode(jobs),
+        });
+
+        final read = await SupabaseMatchOutbox.readAll();
+        expect(read.length, 2);
+        expect(
+          read.map((j) => j['match_id']),
+          containsAll(['job-pending-1', 'job-pending-2']),
+        );
+        expect(read.map((j) => j['match_id']), isNot(contains('job-failed-1')));
+      });
+
+      test('6. pending e failed refletem as contagens corretas', () async {
+        final jobs = [
+          {...sampleJob, 'match_id': 'p1'},
+          {...sampleJob, 'match_id': 'p2'},
+          {...sampleJob, 'match_id': 'f1', 'status': 'failed'},
+          {...sampleJob, 'match_id': 'f2', 'status': 'failed'},
+          {...sampleJob, 'match_id': 'f3', 'status': 'failed'},
+        ];
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode(jobs),
+        });
+
+        // Leitura de failedJobs sincroniza as contagens
+        final failedList = await outbox.failedJobs();
+        expect(failedList.length, 3);
+        expect(outbox.pending.value, 2);
+        expect(outbox.failed.value, 3);
+
+        // Com erro de rede no flush, pendentes não sobem e as contagens continuam íntegras
+        fakeMatchesRepo.customException = const SocketException('offline');
+        await outbox.flush();
+        expect(outbox.pending.value, 2);
+        expect(outbox.failed.value, 3);
+      });
+
+      test('7. discardFailed remove só o job failed pedido e não mexe em pendentes normais nem em outros failed; discardFailed de não-failed não remove nada', () async {
+        final jobs = [
+          {...sampleJob, 'match_id': 'p1'},
+          {...sampleJob, 'match_id': 'f1', 'status': 'failed'},
+          {...sampleJob, 'match_id': 'f2', 'status': 'failed'},
+        ];
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode(jobs),
+        });
+
+        // Tenta descartar um job que NÃO é failed (p1)
+        await outbox.discardFailed('p1');
+        var list = await outbox.failedJobs();
+        expect(list.length, 2);
+        var all = await SupabaseMatchOutbox.readAll();
+        expect(all.length, 1);
+
+        // Tenta descartar id inexistente
+        await outbox.discardFailed('inexistente');
+        list = await outbox.failedJobs();
+        expect(list.length, 2);
+
+        // Descarta f1
+        await outbox.discardFailed('f1');
+        list = await outbox.failedJobs();
+        expect(list.length, 1);
+        expect(list.first['match_id'], 'f2');
+
+        // p1 continua lá intacto
+        all = await SupabaseMatchOutbox.readAll();
+        expect(all.length, 1);
+        expect(all.first['match_id'], 'p1');
+      });
+
+      test('8. retryFailed devolve o job à fila normal e dispara flush', () async {
+        final jobs = [
+          {
+            ...sampleJob,
+            'match_id': 'f1',
+            'status': 'failed',
+            'permanent_failures': 2,
+            'attempts': 2,
+            'error_code': '23503',
+            'error_message': 'FK error',
+            'failed_at': '2026-11-02T20:00:00.000Z',
+          },
+        ];
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode(jobs),
+        });
+
+        await outbox.retryFailed('f1');
+
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+        expect(fakeMatchesRepo.savedCalls.first['matchId'], 'f1');
+        expect(outbox.pending.value, 0);
+        expect(outbox.failed.value, 0);
+
+        final failedList = await outbox.failedJobs();
+        expect(failedList, isEmpty);
+        final pendingList = await SupabaseMatchOutbox.readAll();
+        expect(pendingList, isEmpty);
+      });
+
+      test('9. Job antigo (sem os campos novos) continua sendo enviado e removido em caso de sucesso, sem duplicar', () async {
+        final legacyJob = {
+          'match_id': 'legacy-uuid-1',
+          'match': {
+            'id': 'legacy-uuid-1',
+            'session_id': 'session-leg',
+            'group_id': 'group-leg',
+            'score_red': 1,
+            'score_white': 0,
+            'played_at': '2026-10-30T19:00:00.000Z',
+            'duration_seconds': 500,
+          },
+          'lineups': [
+            {'player_id': 'p1', 'team': 'red', 'is_goalkeeper': false},
+          ],
+          'events': [],
+        };
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([legacyJob]),
+        });
+
+        await outbox.flush();
+
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+        expect(fakeMatchesRepo.savedCalls.first['matchId'], 'legacy-uuid-1');
+        expect(outbox.pending.value, 0);
+        expect(outbox.failed.value, 0);
+
+        // Nova chamada a flush não reenvia (não duplica)
+        await outbox.flush();
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+      });
     });
   });
 }
