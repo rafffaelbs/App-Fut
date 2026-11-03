@@ -311,3 +311,45 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
 - **O que viu:** `pg_policies` da tabela `players` (02/11/2026): as policies de UPDATE (`players_update`, `players_admin_update`, `members_can_update_icon_and_sound`) permitem alterar a linha só se `creator_id = auth.uid()` (dono) ou se o usuário é admin de um grupo em que o jogador está (`group_members`).
 - **Impacto:** `updatePlayer` sem `groupId` ou com `creatorId` forjado no objeto não consegue gravar no banco; a checagem de permissão do app serve para mostrar a mensagem amigável. O banco é a barreira real.
 - **Ação:** nenhuma no código. Observação: o RLS libera o dono a alterar QUALQUER coluna da própria linha (não só o nome); se um dia isso importar, restringir por coluna ou RPC.
+
+---
+
+### 29. Respostas do Passo 0 — Bug B5 (Fila de Partidas Outbox e Idempotência)
+- **(a) O formato exato de um job em `pending_matches_v1` (campos e tipos):**
+  - `match_id`: `String` (UUID da partida).
+  - `attempts`: `int` (contagem de tentativas acumuladas, começa em 0).
+  - `match`: `Map<String, dynamic>` com dados da tabela `matches`:
+    - `id`: `String` (UUID da partida, idêntico a `match_id`)
+    - `session_id`: `String` (UUID da sessão)
+    - `group_id`: `String` (UUID do grupo)
+    - `score_red`: `int`
+    - `score_white`: `int`
+    - `played_at`: `String` (data/hora em ISO 8601)
+    - `duration_seconds`: `int`
+  - `lineups`: `List<Map<String, dynamic>>` (sem `match_id`), onde cada item contém:
+    - `player_id`: `String` (UUID do atleta)
+    - `team`: `String` (`'red'` ou `'white'`)
+    - `is_goalkeeper`: `bool`
+  - `events`: `List<Map<String, dynamic>>` (sem `match_id`), onde cada item contém:
+    - `player_id`: `String` (UUID do atleta)
+    - `assist_player_id`: `String?` (UUID do assistente ou `null`)
+    - `event_type`: `String` (ex.: `'goal'`)
+    - `team`: `String` (`'red'` ou `'white'`)
+    - `minute`: `String?` (minuto do evento ou `null`)
+  - *Campos novos opcionais (Bug B5):*
+    - `permanent_failures`: `int` (contagem de erros permanentes consecutivos, começa em 0).
+    - `status`: `String?` (`'failed'` após 2 falhas permanentes seguidas).
+    - `error_code`: `String?` (ex.: `'23503'`).
+    - `error_message`: `String?` (texto curto do erro).
+    - `failed_at`: `String?` (timestamp ISO 8601 da falha).
+- **(b) Ordem das escritas em `savePendingMatch`, falhas parciais e idempotência (`isRetry`):**
+  - **Ordem de escrita:**
+    1. `_client.from("matches").upsert({...match, "id": matchId})`
+    2. Se `isRetry == true`: executa em paralelo `_client.from("match_lineups").delete().eq("match_id", matchId)` e `_client.from("match_events").delete().eq("match_id", matchId)`.
+    3. Executa em paralelo `insert` em `match_lineups` e `match_events`.
+  - **O que fica gravado se falhar no meio:** Se falhar no passo 1, nada é gravado. Se falhar no passo 3, a linha em `matches` e parte de escalações/eventos podem ficar gravados.
+  - **Idempotência e `isRetry`:** O reenvio (`isRetry == true`, ativado sempre que `attempts > 0`) usa `upsert` na tabela principal (`matches`) pelo `id` pré-gerado e faz `delete` prévio completo em `match_lineups` e `match_events` antes de reinserir. Portanto, **o envio é 100% idempotente e um reenvio NUNCA duplica dados**.
+- **(c) Todos os pontos que leem a fila (`readAll`) e como o selo/diálogo obtém a lista:**
+  - `SupabaseMatchOutbox.readAll()` é chamado exclusivamente em `SupabaseMatchesRepository._pendingMatches()` (`lib/data/supabase/matches_repository.dart:27`), o qual alimenta `getMatchesBySession` e `getMatchesByGroup` para mesclar partidas pendentes em memória no Histórico, Ranking e Estatísticas.
+  - O selo da AppBar em `match_screen.dart:1721-1734` monitora `AppServices.instance.outbox.pending` via `ValueListenableBuilder<int>`.
+  - O diálogo `_showPendingSyncDialog` (`match_screen.dart:3702-3734`) exibe a contagem de `outbox.pending` e o texto de `outbox.lastError`, sem listar as partidas. No Passo 3, ele passará a consumir `outbox.failedJobs()` quando `outbox.failed.value > 0`.
