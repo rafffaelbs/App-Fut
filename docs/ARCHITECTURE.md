@@ -3,7 +3,7 @@
 > Documento de referência para quem executa as tarefas (Antigravity / Claude Code).
 > Base: `docs/INVENTARIO_SUPABASE.md`. Em caso de conflito entre este documento e o código, **pare e registre em `docs/DUVIDAS.md`** em vez de decidir sozinho.
 >
-> **Status (02/11/2026): Fase 1 concluída.** T0 a T4 estão integradas na `main` (interfaces, `AppServices`, `AppFeatures`, camada `lib/data/`). A foto factual do código nessa data está em `docs/ESTADO_ATUAL.md` (162 testes passando, 0 erros no analyze, isolamento do Supabase verificado). A tag `pre-refactor` marca o app antes da Fase 1. Bugs conhecidos: seção 11 e `docs/BACKLOG.md` seção 0.
+> **Status (03/11/2026): Fase 1 e Fase 1b concluídas.** T0 a T4 e correções da Fase 1b (T-B1 a T-B6c) estão integradas na `main` (interfaces, `AppServices`, `AppFeatures`, camada `lib/data/`, proteção offline com fila outbox tolerante a erros e cache de grupos). 217 testes passando, 0 erros novos no analyze, isolamento do Supabase verificado. A tag `pre-refactor` marca o app antes da refatoração. Bugs resolvidos e pendências: seção 11 e `docs/BACKLOG.md`.
 
 ## 1. Objetivo
 
@@ -65,7 +65,7 @@ docs/
 
 | Interface | Origem | Observação |
 |---|---|---|
-| `GroupsRepository` | `groups_repository.dart` | `getMyGroups`, `createGroup`, `updateGroup`, `deleteGroup`. No public: um grupo único criado no primeiro uso. |
+| `GroupsRepository` | `groups_repository.dart` | `getMyGroups`, `createGroup`, `updateGroup`, `deleteGroup` + getter `lastLoadFromCache`. No public: um grupo único criado no primeiro uso. |
 | `SeasonsRepository` | `seasons_repository.dart` | Todos os 5 métodos, assinaturas iguais. |
 | `SessionsRepository` | `sessions_repository.dart` | 7 métodos (`getCachedSession`, `getSessionById`, `getSessionsByGroup`, `createSession`, `updateSession`, `updateRuntimeState`, `deleteSession`) **+ novo** `getRuntimeState(String sessionId)` (ver 4.4). Fora: `getSessionsBySeason`, `finalizeSession` (0 chamadores). |
 | `MatchesRepository` | `matches_repository.dart` | **Só estes (5):** `getMatchesBySession`, `getMatchesByGroup`, `savePendingMatch`, `updatePartialMatch`, `deleteMatch`. Fora: `saveFullMatch` e `updateFullMatch` (0 chamadores). `savePendingMatch` fica (fila offline do personal); no public pode gravar direto. |
@@ -110,11 +110,16 @@ abstract class PermissionService {
 ### 4.3b Serviços da camada de rede (descobertos no `INVENTARIO_OFFLINE.md`)
 
 ```dart
-abstract class MatchOutbox {            // fila de envio de partidas (hoje: PendingMatchQueue)
+abstract class MatchOutbox {            // fila de envio de partidas (hoje: SupabaseMatchOutbox)
   ValueListenable<int> get pending;
+  ValueListenable<int> get failed;       // partidas com erro permanente (status 'failed')
   ValueListenable<String?> get lastError;
   Future<void> enqueue(Map<String, dynamic> job);
   Future<void> flush();
+  Future<void> refreshCounts();
+  Future<List<Map<String, dynamic>>> failedJobs();
+  Future<void> retryFailed(String matchId);
+  Future<void> discardFailed(String matchId);
 }
 abstract class SiteSyncService {        // hoje: sync_service (o que sobra após a T0c)
   Future<String> getOrCreateSyncCode();
@@ -125,7 +130,7 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 }
 ```
 
-- `MatchOutbox` — personal: `SupabaseMatchOutbox` (a atual `PendingMatchQueue`, comportamento idêntico). Public: `LocalMatchOutbox`, que grava direto no SQLite; `pending` fica sempre 0 e `flush` não faz nada.
+- `MatchOutbox` — personal: `SupabaseMatchOutbox` (a antiga `PendingMatchQueue`, com suporte a contagem de falhas permanentes e recuperação). Public: `LocalMatchOutbox`, que grava direto no SQLite; `pending` fica sempre 0 e `flush` não faz nada. O selo de pendentes também aparece na HomePage.
 - `SiteSyncService` e `DiagnosticsService` — só personal; no public ficam `null` em `AppServices`.
 - `CacheStore` (cache de leitura usado só pelos repositórios Supabase) vai junto com eles para `lib/data/supabase/`.
 - `GroupBootstrap` (snapshot local do elenco) fica em `lib/services/`; só depende de repositórios via `AppServices`.
@@ -203,8 +208,9 @@ Modelo de acesso: **link secreto sem login** (decidido; ver `TASKS.md`, Fase 2).
 Fonte: `docs/INVENTARIO_OFFLINE.md`. São 4 camadas independentes; **nenhuma é o `sync_service`**:
 
 1. **Estado da partida em andamento** — `match_screen._saveMatchState()` grava a cada ação no `SharedPreferences` (placar, eventos, times, cronômetro, goleiros...). Se o app fecha, `_loadMatchState()` restaura e recalcula o cronômetro pela hora de início.
-2. **Fila de envio (outbox)** — `SupabaseMatchOutbox` (antes `PendingMatchQueue`): ao finalizar, a partida é gravada em `pending_matches_v1` e enviada em segundo plano. **Gatilhos reais de envio** (confirmados no código, `DUVIDAS.md` item 14): 2 s depois de enfileirar; reenvio automático por timer (5s, 10s, 20s, 40s, 60s) enquanto o app está aberto; `initState` da `MatchScreen`; `_startMatch`; botão "Tentar agora" do diálogo de pendências. **Não existe** reenvio ao voltar do background nem ao abrir o app (`_onAppResumed` não existe; era um erro do `INVENTARIO_OFFLINE.md`). Consequência: se o app for fechado com partida pendente, ela só sobe quando a tela de partida for aberta de novo. Telas de histórico/ranking mesclam as pendentes via `_pendingMatches()`. Melhoria prevista no `BACKLOG.md`.
-3. **Cache de leitura** — `CacheStore` (chaves `cache:*`) usado pelos repositórios de partidas, sessões e jogadores como fallback quando a rede falha.
+2. **Fila de envio (outbox)** — `SupabaseMatchOutbox` (antes `PendingMatchQueue`): ao finalizar, a partida é gravada em `pending_matches_v1` e enviada em segundo plano. **Gatilhos reais de envio** (confirmados no código, `DUVIDAS.md` itens 14 e 29): 2 s depois de enfileirar; reenvio automático por timer (5s, 10s, 20s, 40s, 60s) enquanto o app está aberto; `initState` da `MatchScreen`; `_startMatch`; botão "Tentar agora" do diálogo de pendências; ao abrir o app após login reconhecido (`_ProfileCheckState.initState` via `triggerOutboxFlush()`); e ao voltar do segundo plano (`_AuthGateState.didChangeAppLifecycleState` com `AppLifecycleState.resumed`).
+   - **Isolamento de partidas com problema:** 2 erros permanentes consecutivos entre `23503`, `23502`, `23514`, `22P02` (detectados via `isPermanentOutboxError`) marcam a partida com `status: 'failed'` (campos novos: `status`, `permanent_failures`, `error_code`, `error_message` e `failed_at` no mesmo `pending_matches_v1`). Partidas com erro permanente saem do topo da fila para não bloquear os envios seguintes e são excluídas das estatísticas (`readAll`). A UI oferece opções de "Copiar dados", "Tentar de novo" (`retryFailed`) e "Descartar" (`discardFailed`).
+3. **Cache de leitura** — `CacheStore` (chaves `cache:*`) usado pelos repositórios de partidas, sessões e jogadores como fallback quando a rede falha. Inclui também o cache da lista de grupos da conta (`groups:my:<userId>`), adicionado na T-B6b com o getter `lastLoadFromCache` e aviso na tela, permitindo que a `HomePage` abra e mostre os grupos salvos mesmo sem conexão (corrigindo a suposição antiga de que a HomePage "já usava cache").
 4. **Snapshot do elenco** — `GroupBootstrap` (`players_<groupId>`, `ratings_snapshot_at_<groupId>`) permite sorteio/draft sem rede.
 
 Chaves de `SharedPreferences` que NÃO podem mudar: `pending_matches_v1`, `cache:*`, `my_sync_code`, `cache_has_pending_cloud_sync`, `cache_last_cloud_sync_at`, `cache_last_cloud_fetch_at`, `present_players_*`, `team_red_*`, `team_white_*`, `score_red_*`, `score_white_*`, `match_events_*`, `is_overtime_*`, `seconds_played_*`, `is_running_*`, `start_timestamp_*`, `red_streak_*`, `white_streak_*`, `active_gk_*`, `first_gk_*`, `match_history_*`, `players_*`, `ratings_snapshot_at_*`.
@@ -224,12 +230,20 @@ O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envi
 | Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`; ninguém grava, mas o aparelho do Enzo pode ainda ter dados antigos nessas chaves. | **Não remover na T3e** (poderia mudar números no aparelho dele). Continuam como leitura legada; decidir depois da Fase 1. No app public ficam vazias e inofensivas. |
 | Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
 
-## 11. Bugs conhecidos que afetam fases futuras (detalhe em `docs/BACKLOG.md` seção 0)
+## 11. Bugs conhecidos: resolvidos na Fase 1b (detalhe em `docs/BACKLOG.md` seção 0)
 
-Investigados em `docs/ESTADO_ATUAL.md` seção 7. **Nenhum é regressão da Fase 1:** o código é igual ao da tag `pre-refactor`.
+Os bugs mapeados no levantamento da Fase 1 foram integralmente corrigidos e integrados na `main` durante a Fase 1b (ver detalhes completos e testes em [BACKLOG.md](file:///home/marinho/Documents/github/App-Fut/docs/BACKLOG.md)):
 
-- **B1 criar grupo:** o insert em `seasons` (`groups_repository.dart:134-138`) não envia `id`; a coluna é `NOT NULL` sem default. Sem transação, o grupo fica gravado sem temporada (órfão). Vale também para o app public: a criação de grupo local precisa gerar o id da temporada.
-- **B2/B3 cache do elenco:** `createGhostPlayer` e `_savePlayerName` não atualizam `players_<groupId>` nem o `CacheStore`; `_savePlayerName` nem grava no Supabase. Afeta a web (seção 7) e o public (a mesma tela de elenco).
-- **B4 estatísticas avançadas:** percentual de "Mais perdeu junto" usa denominador inconsistente com o critério do Top 1 (`player_detail.dart` ~1024-1038 e ~1161-1165). O exemplo do Enzo (3 derrotas com o parceiro de 10 → 70% em vez de 30%) **ainda não foi reproduzido** pela explicação do AG; começar a correção reproduzindo com esses números.
-- **B5 fila:** `SupabaseMatchOutbox.flush` trata qualquer erro como transitório; erro permanente (ex.: `23503`, jogador apagado) trava a fila para sempre e continua entrando nas estatísticas.
-- **Abrir o app sem rede:** `ProfileCheck` trata erro de rede como "sem perfil" (mostra "Como podemos te chamar?") e a fila só é reenviada ao abrir a tela de partida (BACKLOG 2b e 2c).
+- **B1 / B1b — Criar grupo e temporada (branches `fix/create-group-season-id` e `fix/create-season-id`):** `createGroup` e `createSeason` agora geram UUID v4 (`const Uuid().v4()`) no código Dart para o campo `id` da temporada, sanando o erro `23502` (`NOT NULL` sem default no PostgreSQL), e contam com rollback sequencial em caso de falha intermediária.
+- **B2 / B3 — Cache do elenco e nome do jogador (branch `fix/players-cache`):** `SupabasePlayersRepository` invalida `players:group:<groupId>` no `CacheStore` ao criar, remover ou atualizar jogadores. Mutações atualizam o snapshot local via `GroupBootstrap.refreshLocalSnapshot`. `updatePlayer` persiste alterações no Supabase validando permissões (admin ou dono da conta). As telas de partida e comparação usam fallback automático caso o jogador não esteja no snapshot local.
+- **B4 — Estatísticas avançadas do jogador (branch `feature/player-advanced-stats`):** Percentuais de distribuição de derrotas corrigidos pelo Enzo em 02/11.
+- **B5 — Partida presa na fila de envio (branch `fix/outbox-permanent-errors`):** Separação de erros transitórios e permanentes (`isPermanentOutboxError` cobrindo `23503`, `23502`, `23514`, `22P02`). Partidas com 2 falhas permanentes consecutivas recebem `status: 'failed'`, não bloqueiam a fila e saem de `readAll()`, com interface para copiar dados, tentar de novo ou descartar.
+- **Abrir o app sem rede (branches `fix/offline-startup` e `fix/groups-offline-cache`):** `ProfileCheckResult` distingue erro de rede de lista vazia; `GroupsRepository.getMyGroups` faz cache offline sob `groups:my:<userId>` com o getter `lastLoadFromCache` e aviso de dados salvos na `HomePage`; gatilhos automáticos de outbox ao abrir o app e ao retornar do background.
+
+### O que continua em aberto (ver `docs/BACKLOG.md` "Pendências deixadas pela Fase 1b"):
+- **B6:** Qualquer pessoa com o app cria grupos (decisão de desenho; todos os grupos legados de teste/terceiros foram apagados do Supabase pelo Enzo em 02/11; discussão de gestão de grupos retorna após o app offline).
+- Linhas parciais em `matches`/`match_lineups`/`match_events` no Supabase quando uma partida isolada falha e o descarte remove apenas o armazenamento local (`DUVIDAS.md` 30; candidata: T-B5b).
+- `createSeason` sequencial sem bloco transacional / RPC atômica (`DUVIDAS.md` 26).
+- RLS da tabela `players` permitindo ao dono alterar outras colunas além do nome (`DUVIDAS.md` 28).
+- Tratamento de JSON corrompido em `_readFromPrefs` da outbox para não sobrescrever a fila no próximo enqueue.
+- Latência de rede no diálogo de adicionar jogadores offline e detalhes de cache/snapshot mapeados na revisão da Fase 1b.
