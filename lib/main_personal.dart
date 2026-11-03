@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/theme/app_theme.dart';
 import 'package:app_do_fut/widgets/player/fifa_card.dart';
@@ -9,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/bootstrap_personal.dart';
 import 'package:app_do_fut/domain/repositories/player_account_repository.dart';
+import 'package:app_do_fut/domain/services/auth_service.dart';
+import 'package:app_do_fut/domain/services/match_outbox.dart';
 import 'package:app_do_fut/models/group_model.dart';
 
 // Global route observer for tracking navigation
@@ -65,6 +68,24 @@ Future<ProfileCheckResult> checkUserProfile({
   }
 }
 
+/// Atualiza as contagens da fila e, havendo usuário logado e itens pendentes,
+/// dispara o envio em segundo plano engolindo erros.
+Future<void> triggerOutboxFlush({
+  AuthService? auth,
+  MatchOutbox? outbox,
+}) async {
+  final authService = auth ?? AppServices.instance.auth;
+  final outboxService = outbox ?? AppServices.instance.outbox;
+  try {
+    await outboxService.refreshCounts();
+    if (authService.isSignedIn && outboxService.pending.value > 0) {
+      await outboxService.flush();
+    }
+  } catch (e) {
+    debugPrint('Error flushing outbox: $e');
+  }
+}
+
 /// Decides what to show based on auth + profile-completion state:
 /// not logged in -> LoginScreen; logged in but no player profile linked ->
 /// CompleteProfileScreen; otherwise -> HomePage ("Meus Grupos").
@@ -75,7 +96,26 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(triggerOutboxFlush());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
@@ -112,6 +152,10 @@ class _ProfileCheckState extends State<_ProfileCheck> {
   void initState() {
     super.initState();
     _check();
+    // Na inicialização (depois do login reconhecido, sem bloquear a abertura nem esperar rede):
+    // chame refreshCounts() e depois flush() em segundo plano, engolindo erros.
+    // Só faça flush se houver usuário logado (AppServices.instance.auth.isSignedIn) e pending > 0.
+    unawaited(triggerOutboxFlush());
   }
 
   Future<void> _check() async {
@@ -155,7 +199,6 @@ class _ProfileCheckState extends State<_ProfileCheck> {
     return HomePage(suggestedName: _pendingName);
   }
 }
-
 
 
 class HomePage extends StatefulWidget {

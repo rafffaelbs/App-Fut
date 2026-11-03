@@ -212,6 +212,12 @@ class SupabaseMatchOutbox implements MatchOutbox {
   }
 
   @override
+  Future<void> refreshCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    _updateCounts(_read(prefs));
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> failedJobs() async {
     final prefs = await SharedPreferences.getInstance();
     final jobs = _read(prefs);

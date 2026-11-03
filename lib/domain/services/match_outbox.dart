@@ -18,6 +18,9 @@ abstract class MatchOutbox {
   /// Tenta enviar as partidas pendentes ao destino remoto ou banco local.
   Future<void> flush();
 
+  /// Lê a fila em SharedPreferences e atualiza os ValueListenable pending e failed SEM enviar nada.
+  Future<void> refreshCounts();
+
   /// Retorna os jobs que falharam com erro permanente (status 'failed').
   Future<List<Map<String, dynamic>>> failedJobs();
 

@@ -189,6 +189,9 @@ class StubMatchOutbox implements MatchOutbox {
   Future<void> flush() async {}
 
   @override
+  Future<void> refreshCounts() async {}
+
+  @override
   ValueListenable<String?> get lastError => ValueNotifier(null);
 
   @override
@@ -350,6 +353,8 @@ AppServices setupTestAppServices({
   PermissionService? permissions,
   AuthService? auth,
   AppFeatures? features,
+  MatchOutbox? outbox,
+  PlayerAccountRepository? playerAccounts,
 }) {
   final services = AppServices(
     features: features ?? AppFeatures.personal(),
@@ -357,17 +362,18 @@ AppServices setupTestAppServices({
     members: StubMembershipRepository(),
     seasons: StubSeasonsRepository(),
     players: players ?? StubPlayersRepository(),
-    playerAccounts: StubPlayerAccountRepository(),
+    playerAccounts: playerAccounts ?? StubPlayerAccountRepository(),
     sessions: StubSessionsRepository(),
     matches: StubMatchesRepository(),
     sessionArrivals: StubSessionArrivalsRepository(),
     actionLogs: StubActionLogsRepository(),
     auth: auth ?? StubAuthService(),
     permissions: permissions ?? StubPermissionService(),
-    outbox: StubMatchOutbox(),
+    outbox: outbox ?? StubMatchOutbox(),
     matchHistory: StubMatchHistoryStore(),
     customBadges: StubCustomBadgesRepository(),
   );
   AppServices.instance = services;
   return services;
 }
+
