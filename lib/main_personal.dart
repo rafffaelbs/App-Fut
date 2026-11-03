@@ -213,6 +213,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<GroupModel> groups = [];
   bool isLoading = true;
+  bool _hasConnectionError = false;
 
   @override
   void initState() {
@@ -233,7 +234,10 @@ class _HomePageState extends State<HomePage> {
 
   // --- PERSISTENCE: LOAD ---
   Future _loadGroups() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      _hasConnectionError = false;
+    });
     try {
       final fetchedGroups = await AppServices.instance.groups.getMyGroups();
       setState(() {
@@ -241,6 +245,9 @@ class _HomePageState extends State<HomePage> {
       });
     } catch (e) {
       debugPrint("Error loading groups: $e");
+      setState(() {
+        _hasConnectionError = true;
+      });
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -636,6 +643,19 @@ class _HomePageState extends State<HomePage> {
                     "Nenhum grupo ainda.",
                     style: TextStyle(color: Colors.white54),
                   ),
+                  if (_hasConnectionError) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      "Sem conexão.",
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ] else if (AppServices.instance.groups.lastLoadFromCache) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      "Sem conexão. Mostrando dados salvos.",
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   if (AppServices.instance.features.hasMembershipManagement)
                     ElevatedButton.icon(
@@ -661,10 +681,21 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: groups.length,
-              itemBuilder: (context, index) {
+          : Column(
+              children: [
+                if (AppServices.instance.groups.lastLoadFromCache)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12, bottom: 4),
+                    child: Text(
+                      "Sem conexão. Mostrando dados salvos.",
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: groups.length,
+                    itemBuilder: (context, index) {
                 final group = groups[index];
 
                 return Container(
@@ -739,6 +770,9 @@ class _HomePageState extends State<HomePage> {
                 );
               },
             ),
+          ),
+        ],
+      ),
 
       floatingActionButton: AppServices.instance.features.isReadOnly
           ? null
