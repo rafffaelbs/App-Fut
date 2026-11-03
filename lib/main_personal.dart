@@ -152,9 +152,7 @@ class _ProfileCheckState extends State<_ProfileCheck> {
   void initState() {
     super.initState();
     _check();
-    // Na inicialização (depois do login reconhecido, sem bloquear a abertura nem esperar rede):
-    // chame refreshCounts() e depois flush() em segundo plano, engolindo erros.
-    // Só faça flush se houver usuário logado (AppServices.instance.auth.isSignedIn) e pending > 0.
+    // Dispara a sincronização de partidas pendentes da outbox em segundo plano após o login.
     unawaited(triggerOutboxFlush());
   }
 
