@@ -3746,13 +3746,22 @@ class _MatchScreenState extends State<MatchScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          count == 0
-                              ? "Tudo sincronizado."
-                              : "$count partida(s) aguardando envio ao servidor."
-                                  "${err != null ? '\n\nÚltimo erro: $err' : ''}",
-                          style: const TextStyle(color: Colors.white70),
-                        ),
+                        if (count == 0 && failedCount == 0)
+                          const Text(
+                            "Tudo sincronizado.",
+                            style: TextStyle(color: Colors.white70),
+                          )
+                        else if (count > 0)
+                          Text(
+                            "$count partida(s) aguardando envio ao servidor."
+                            "${err != null ? '\n\nÚltimo erro: $err' : ''}",
+                            style: const TextStyle(color: Colors.white70),
+                          )
+                        else
+                          const Text(
+                            "Nenhuma partida aguardando envio regular.",
+                            style: TextStyle(color: Colors.white70),
+                          ),
                         if (failedCount > 0) ...[
                           const SizedBox(height: 16),
                           const Divider(color: AppColors.borderSubtle),
@@ -3786,7 +3795,11 @@ class _MatchScreenState extends State<MatchScreen>
                                     _buildFailedMatchCard(
                                       ctx,
                                       job,
-                                      () => setDialogState(() {}),
+                                      () {
+                                        if (ctx.mounted) {
+                                          setDialogState(() {});
+                                        }
+                                      },
                                     ),
                                 ],
                               );
@@ -3932,7 +3945,9 @@ class _MatchScreenState extends State<MatchScreen>
                     const Text("Tentar de novo", style: TextStyle(fontSize: 12)),
                 onPressed: () async {
                   await AppServices.instance.outbox.retryFailed(matchId);
-                  onUpdated();
+                  if (ctx.mounted) {
+                    onUpdated();
+                  }
                 },
               ),
               TextButton.icon(
@@ -3976,7 +3991,9 @@ class _MatchScreenState extends State<MatchScreen>
                   );
                   if (confirmed == true) {
                     await AppServices.instance.outbox.discardFailed(matchId);
-                    onUpdated();
+                    if (ctx.mounted) {
+                      onUpdated();
+                    }
                   }
                 },
               ),
