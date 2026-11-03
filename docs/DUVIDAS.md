@@ -130,11 +130,13 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
        - `lib/screens/match_screen.dart:129` no `initState()` ao abrir a tela da partida;
        - `lib/screens/match_screen.dart:602` em `_startMatch()` quando a partida é iniciada;
        - `lib/screens/match_screen.dart:3706` no botão "Tentar agora" do diálogo `_showPendingSyncDialog`;
+       - `lib/main_personal.dart` na inicialização após login reconhecido (`_ProfileCheckState.initState`, via `triggerOutboxFlush()`, em segundo plano se logado e `pending > 0`);
+       - `lib/main_personal.dart` ao voltar do segundo plano (`_AuthGateState.didChangeAppLifecycleState` com `AppLifecycleState.resumed`, via `triggerOutboxFlush()`, se logado e `pending > 0`);
        - Timer interno em `SupabaseMatchOutbox.enqueue` (disparo automático 2 segundos após enfileirar);
        - Timer interno de backoff em `SupabaseMatchOutbox._scheduleRetry` (5s, 10s, 20s, 40s, 60s) em caso de erro.
      - **Mesclagem em memória sem rede (`readAll`)**: chamado em `lib/data/supabase/matches_repository.dart:27` em `_pendingMatches()` para exibir partidas ainda não sincronizadas no Histórico, Ranking e Estatísticas.
-- **Impacto:** Não houve alteração de comportamento. A documentação `INVENTARIO_OFFLINE.md` continha menção a um método inexistente (`_onAppResumed`). Todos os gatilhos reais existentes no código foram 100% preservados na abstração `SupabaseMatchOutbox`.
-- **Ação:** Registrado aqui conforme instrução 5 da tarefa T3d.
+- **Impacto:** Conforme planejado no BACKLOG item 2b, foram adicionados os gatilhos ao inicializar o app (com login reconhecido) e ao voltar do segundo plano (`WidgetsBindingObserver`), chamando `refreshCounts()` e `flush()` sem bloquear a UI e sem duplicar envios. Todos os demais gatilhos originais foram estritamente preservados.
+- **Ação:** Registrado aqui conforme instrução 5 da tarefa T3d e atualizado na tarefa de resolução do BACKLOG 2b/2c.
 
 ---
 
