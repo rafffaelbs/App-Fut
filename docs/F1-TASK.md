@@ -1,0 +1,334 @@
+# F1-TASK.md — Fase 1 (interfaces) e Fase 1b (correção de bugs) (✅ concluídas, histórico)
+
+> Só consulta. Fase 1 concluída em 02/11/2026 e Fase 1b em 03/11/2026, ambas na `main`.
+
+## Cabeçalho a colar no INÍCIO de todo prompt
+
+```
+Contexto: leia docs/ARCHITECTURE.md e docs/INVENTARIO_SUPABASE.md (e docs/INVENTARIO_OFFLINE.md
+quando a tarefa tocar fila, cache ou match_screen) antes de começar.
+Regras: não mude comportamento visível do app; não altere fórmulas dos calculators,
+nomes de tabelas/colunas do Supabase, RLS ou RPCs; não altere chaves de SharedPreferences;
+não adicione pacotes; preserve os textos de erro existentes. Se encontrar algo que o
+documento não cobre, NÃO decida: registre em docs/DUVIDAS.md (arquivo, linha, o que viu)
+e continue com o resto.
+Ao terminar: rode `flutter analyze` e `flutter test`, faça commits pequenos e
+me diga em 5 linhas o que mudou e o que ficou pendente.
+```
+
+## FASE 1 — Interfaces (o app personal continua idêntico)
+
+### T1 · Criar as interfaces de repositório — AG, revisão CLAUDE
+Branch: `refactor/domain-interfaces` · T0e concluída (o `docs/CODIGO_MORTO.md` já existe)
+
+```
+[cabeçalho]
+Crie classes abstratas em lib/domain/repositories/ (um arquivo por interface, nome em
+snake_case, ex.: players_repository.dart) seguindo EXATAMENTE a seção 4 do
+docs/ARCHITECTURE.md:
+GroupsRepository, SeasonsRepository, SessionsRepository, MatchesRepository,
+SessionArrivalsRepository, PlayersRepository,
+PlayerAccountRepository, MembershipRepository,
+ActionLogsRepository.
+Copie as assinaturas públicas dos repositórios atuais em lib/repositories/
+(mesmos nomes, parâmetros, valores padrão e tipos de retorno). Distribua os métodos
+entre as interfaces conforme o mapa da seção 4. Não inclua isCurrentUserAdmin em
+MembershipRepository. Em SessionsRepository adicione:
+  Future<Map<String, dynamic>?> getRuntimeState(String sessionId);
+Crie também lib/domain/services/auth_service.dart e permission_service.dart com as
+assinaturas da seção 4.3 (e a classe AppAuthException(String message)).
+Regras novas (vieram dos inventários):
+- Leia docs/CODIGO_MORTO.md (já existe na main). Método marcado "0 CHAMADORES" NÃO entra em
+  nenhuma interface. Não apague
+  esses métodos das classes atuais; só não os liste nas interfaces e anote em docs/DUVIDAS.md.
+  LISTA EXATA do que ENTRA em cada interface (nada a mais, nada a menos):
+    GroupsRepository: getMyGroups, createGroup, updateGroup, deleteGroup
+    SeasonsRepository: getSeasons, getCurrentSeason, createSeason, updateSeason, deleteSeason
+    SessionsRepository: getCachedSession, getSessionById, getSessionsByGroup, createSession,
+      updateSession, updateRuntimeState, deleteSession + getRuntimeState (novo)
+    MatchesRepository: getMatchesBySession, getMatchesByGroup, savePendingMatch,
+      updatePartialMatch, deleteMatch
+    SessionArrivalsRepository: getArrivals, getPlayerIdsBySessions, replaceArrivals
+    PlayersRepository: getPlayersByGroup, createGhostPlayer, updatePlayer, setPlayerIcon,
+      setGoalSound, removePlayerFromGroup, getPlayerById, setNameEffect,
+      setMonthlyHighlight, setCommunityAttributes, setAdvancedStat
+    PlayerAccountRepository: claimGhostProfiles, getMyPlayers
+    MembershipRepository: getMembers, getMyMembership, promoteToAdmin, demoteToMember,
+      findGroupByCode, requestToJoin, listPendingRequests, approveRequest, rejectRequest
+    ActionLogsRepository: log
+  NÃO crie GoalSoundRepository nem RatingsRepository (todos os métodos de Ratings têm 0
+  chamadores; setGoalSound fica em PlayersRepository). isCurrentUserAdmin NÃO entra em
+  nenhuma interface repositório (vai para PermissionService).
+- Crie CustomBadgesRepository em lib/domain/repositories/custom_badges_repository.dart:
+    Future<List<Map<String, dynamic>>> getCustomBadges(String groupId);
+    Future<void> saveCustomBadges(String groupId, List<Map<String, dynamic>> badges);
+  (hoje essa lista vive em SharedPreferences, chave custom_badges_<groupId>, usada em
+  manage_badges_screen e player_detail).
+- Crie MatchHistoryStore em lib/domain/repositories/match_history_store.dart:
+    Future<List<Map<String, dynamic>>> readSession(String sessionId);
+    Future<void> appendToSession(String sessionId, Map<String, dynamic> record);
+  (hoje: SharedPreferences, chave match_history_<sessionId>). Só a interface: quem a usa
+  será decidido na T3e.
+Somente arquivos NOVOS: não altere nenhum arquivo existente nesta tarefa.
+Aceite: flutter analyze ok; git diff main --stat mostra apenas arquivos novos em lib/domain/.
+```
+
+Revisão CLAUDE: o Enzo me manda o conteúdo de `lib/domain/` (só essa pasta).
+
+### T2 · AuthService e PermissionService — AG, revisão CLAUDE (só o PermissionService)
+Branch: `refactor/auth-permission` · Depende de T1
+
+```
+[cabeçalho]
+1) Crie lib/data/supabase/supabase_auth_service.dart (implements AuthService) usando o
+   cliente Supabase atual. Converta AuthException em AppAuthException(message) com a
+   mesma mensagem que as telas mostram hoje.
+2) Crie lib/data/supabase/supabase_permission_service.dart (implements PermissionService)
+   movendo a lógica atual de GroupMembersRepository.isCurrentUserAdmin (creator_id do
+   grupo OU role == 'admin'). requireAdmin lança a MESMA exceção e mensagem que os
+   repositórios lançam hoje.
+3) Substitua os usos diretos de auth:
+   - lib/main.dart linhas ~68, 70, 589 (AuthGate e logout)
+   - lib/screens/login_screen.dart linhas ~30, 35 (signUp/signInWithPassword) e o import
+     de supabase_flutter
+   - lib/screens/complete_profile_screen.dart linha ~94 (signOut)
+   - supabase_config.dart: currentUser/currentUserId passam a vir do AuthService
+4) Todo uso de isCurrentUserAdmin (repositórios e telas listados na seção 5 do
+   inventário) passa a chamar PermissionService.isAdmin / requireAdmin. Nos
+   repositórios, receba PermissionService no construtor.
+5) Remova isCurrentUserAdmin de GroupMembersRepository.
+Por enquanto o acesso aos serviços pode ser por um campo estático temporário em
+SupabaseService (será substituído na T3b).
+Aceite: flutter analyze e flutter test ok; grep "isCurrentUserAdmin" em lib/ retorna
+nada; comportamento idêntico (checklist manual itens 1, 7 e 8).
+```
+
+Revisão CLAUDE: `supabase_permission_service.dart` + o diff de um repositório (ex.: `seasons_repository.dart`).
+
+### T3a · Mover e renomear os repositórios Supabase — AG
+Branch: `refactor/supabase-data-layer` · Depende de T1 e T2
+
+```
+[cabeçalho]
+1) Mova (git mv) cada arquivo de lib/repositories/*_repository.dart para
+   lib/data/supabase/ e renomeie a classe com prefixo Supabase
+   (PlayersRepository -> SupabasePlayersRepository, etc.).
+2) Cada classe passa a "implements" a(s) interface(s) de lib/domain/repositories/
+   conforme o mapa da seção 4. SupabasePlayersRepository implementa
+   PlayersRepository e PlayerAccountRepository;
+   SupabaseGroupMembersRepository implementa MembershipRepository.
+3) Implemente SessionsRepository.getRuntimeState com a consulta que hoje está em
+   match_screen.dart linhas ~410-415 (mesmas colunas, mesmo comportamento).
+4) Mova lib/config/supabase_config.dart para lib/data/supabase/supabase_config.dart.
+5) Mova lib/services/cache_store.dart para lib/data/supabase/cache_store.dart (só os
+   repositórios o usam). Mantenha o prefixo de chaves "cache:".
+6) Atualize os imports. Não mude a lógica interna dos métodos (inclusive o uso de
+   CacheStore como fallback e de PendingMatchQueue.readAll em _pendingMatches).
+7) As constantes estáticas (action* de ActionLogsRepository e validNameEffects de
+   PlayersRepository) agora existem nas interfaces de lib/domain/repositories. Apague as
+   cópias nas classes Supabase* e aponte TODAS as referências (inclusive nas telas) para as
+   constantes das interfaces. Os VALORES não mudam.
+8) A T2 criou SupabaseService.auth e SupabaseService.permissions (estáticos): mantenha-os
+   por enquanto (a T3b os substitui por AppServices). getMyPlayers (players_repository
+   ~linha 260) continua usando o cliente Supabase direto: é permitido dentro de
+   lib/data/supabase.
+Aceite: flutter analyze ok; flutter test ok; app compila.
+```
+
+### T3b · AppServices no lugar do SupabaseService.instance — AG
+Branch: `refactor/app-services` · Depende de T3a
+
+```
+[cabeçalho]
+1) Crie lib/app/app_services.dart: uma classe que guarda as INTERFACES
+   (groups, members, seasons, players, playerAccounts, sessions, matches,
+   sessionArrivals, actionLogs, auth, permissions) e um acesso estático
+   AppServices.instance (definido uma vez na inicialização). Deixe campos previstos mas
+   ainda nulos/vazios para outbox, siteSync e diagnostics (serão preenchidos na T3c e T3d).
+2) Crie lib/bootstrap_personal.dart que inicializa o Supabase (o que hoje está em
+   SupabaseConfig/ main) e monta o AppServices com as implementações Supabase*.
+3) Crie lib/main_personal.dart chamando o bootstrap e rodando o app. lib/main.dart
+   passa a apenas chamar main_personal.
+4) Substitua em TODO o código fora de lib/data/supabase/ os usos de
+   SupabaseService.instance.* por AppServices.instance.* (tipados pelas interfaces).
+   Isso inclui lib/services/pending_match_queue.dart (que chama
+   SupabaseService.instance.matches).
+5) Apague lib/repositories/supabase_service.dart e a pasta lib/repositories/ se vazia.
+Aceite: flutter analyze ok; flutter test ok; a verificação de isolamento do Supabase
+(seção 2, regra 2 do ARCHITECTURE.md) imprime apenas os serviços que a T3c e a T3d vão tratar
+(sync_service, cache_sync_manager e, se a T0b ainda não foi feita, data_migration_service e
+fix_event_times_service); checklist manual completo.
+```
+
+### T3c · SiteSyncService e DiagnosticsService — AG
+Branch: `refactor/site-sync-diagnostics` · Depende de T3b · Pode rodar em paralelo com a T3d
+
+Contexto: `sync_service` e `cache_sync_manager` **não** são a proteção contra queda de internet. Servem para (a) enviar o "pacote do site" para `sync_data` em segundo plano e (b) o painel de debug do admin.
+
+```
+[cabeçalho]
+1) Crie lib/domain/services/site_sync_service.dart com a interface
+   SiteSyncService { Future<String> getOrCreateSyncCode();
+                     Future<void> exportDataToSupabase(String syncCode); }
+   Mova o que restou de lib/services/sync_service.dart para
+   lib/data/supabase/supabase_site_sync_service.dart (class SupabaseSiteSyncService
+   implements SiteSyncService), levando junto o SiteDataGenerator se ele só serve a isso.
+2) Crie lib/domain/services/diagnostics_service.dart com a interface DiagnosticsService,
+   expondo os métodos públicos de CacheSyncManager (markDirty, recordCloudSyncSuccess,
+   recordCloudFetchSuccess, testSupabaseConnection, getStatus, getDebugStorageDump), e
+   mova a classe CacheSyncStatus para esse arquivo. Mova a implementação para
+   lib/data/supabase/supabase_diagnostics_service.dart. SupabaseSiteSyncService usa
+   DiagnosticsService nas chamadas record*.
+3) Registre ambos no AppServices como siteSync e diagnostics (nuláveis).
+4) match_screen (_triggerBackgroundSync e _scheduleSiteSync) e admin_debug_screen passam a
+   usar AppServices.instance.siteSync / diagnostics. Nulo = recurso desligado (não faz nada
+   ou esconde o item).
+5) NÃO altere chaves de SharedPreferences: my_sync_code, cache_has_pending_cloud_sync,
+   cache_last_cloud_sync_at, cache_last_cloud_fetch_at.
+Aceite: analyze/test ok; a verificação de isolamento não lista mais sync_service nem
+cache_sync_manager; checklist manual completo, incluindo abrir o painel de debug do admin
+e tocar "TESTAR CONEXÃO AGORA".
+```
+
+### T3d · MatchOutbox (a fila de envio) — AG, revisão CLAUDE
+Branch: `refactor/match-outbox` · Depende de T3b · **Teste extra do Enzo obrigatório (modo avião)**
+
+```
+[cabeçalho]
+Objetivo: abstrair a fila de envio de partidas (PendingMatchQueue), que protege contra
+queda de internet. O COMPORTAMENTO deve ficar idêntico.
+1) Crie lib/domain/services/match_outbox.dart:
+     abstract class MatchOutbox {
+       ValueListenable<int> get pending;
+       ValueListenable<String?> get lastError;
+       Future<void> enqueue(Map<String, dynamic> job);
+       Future<void> flush();
+     }
+2) Mova PendingMatchQueue para lib/data/supabase/supabase_match_outbox.dart
+   (class SupabaseMatchOutbox implements MatchOutbox). PRESERVE: chave
+   'pending_matches_v1', formato do job, backoff 5/10/20/40/60s, timeout de 25s,
+   reenvio ao voltar do background e demais gatilhos. O método estático readAll continua
+   existindo e é usado por SupabaseMatchesRepository (mesma camada).
+3) Registre no AppServices como outbox. Em match_screen (linhas ~129, 605, 1705, 3418, 3660,
+   3676, 3678, 3690), troque PendingMatchQueue.instance por AppServices.instance.outbox.
+4) Evite a dependência circular: SupabaseMatchOutbox recebe por construtor a implementação
+   de savePendingMatch (SupabaseMatchesRepository), em vez de buscar em um singleton.
+5) Registre em docs/DUVIDAS.md qualquer outro ponto que enfileire/reenvie partidas.
+Aceite: analyze/test ok; checklist manual completo; teste do modo avião (item 9 do checklist).
+```
+
+Revisão CLAUDE: `supabase_match_outbox.dart` (o diff completo dele; é crítico para não perder partidas).
+
+### T3e · Histórico de partidas e insígnias via interfaces — AG, revisão CLAUDE
+Branch: `refactor/local-only-data` · Depende de T3b e da T0g · **Prompt detalhado: eu escrevo depois da T1**
+
+Objetivo: telas e cálculos deixam de ler `match_history_*` e `custom_badges_*` direto do `SharedPreferences` e passam a usar `MatchHistoryStore` e `CustomBadgesRepository` (implementação do personal = SharedPreferences, **comportamento idêntico**). A T0e confirmou que `GroupRankingScreen` é inalcançável (removida na T0g). Ainda leem `match_history_*`: `RankingScreen` (fallback), `MatchScreen` (fallback e gravação), `PlayerDetail` e `getAllGroupMatches` (usado por `PlayerComparisonScreen`). Leem `custom_badges_*`: `ManageBadgesScreen` e `PlayerDetail`. As chaves legadas (`sessions_*`, `seasons_*`, `app_groups`, `players_grupo_`) ficam sem leitores depois da T0g e podem ser limpas aqui. Antes de refatorar, escreva o teste de caracterização de `getAllGroupMatches` usando repositórios falsos (via `AppServices`): hoje ele não tem teste (DUVIDAS.md item 3).
+
+### T4 · AppFeatures e flavor personal — AG
+Branch: `feat/app-features` · Depende de T3c, T3d e T3e
+
+```
+[cabeçalho]
+1) Crie lib/app/app_features.dart com as flags da seção 5 do ARCHITECTURE.md
+   (hasAuth, hasMembershipManagement, hasCosmetics, hasGoalSounds, hasAuditLog,
+   hasSiteSync, hasCloudDraftSync, hasAdminDebug, hasDbExportImport, isReadOnly)
+   e a configuração "personal" (como na coluna personal).
+2) Registre em AppServices.
+3) Nas telas, a visibilidade de recursos passa a ser: AppFeatures permite E
+   PermissionService.isAdmin (quando aplicável) E !isReadOnly. Cobrir: engrenagem do
+   GroupDashboardScreen (ManageJoinRequests, ManageMembers, ManageBadges, ManageSeasons,
+   AdminDebug), FAB de SessionsScreen e PlayersScreen, opções de cosméticos/atributos no
+   PlayerDetail e ManageBadgesScreen, upload de som de gol, tela de login/AuthGate (hasAuth).
+4) Em match_screen, condicione por flag: o envio do pacote do site
+   (_scheduleSiteSync/_triggerBackgroundSync -> hasSiteSync), o rascunho em nuvem
+   (_scheduleCloudSync e a restauração remota do _loadMatchState -> hasCloudDraftSync).
+No personal tudo continua aparecendo e funcionando exatamente como hoje.
+Aceite: analyze/test ok; checklist manual completo (inclui item 9, modo avião).
+```
+
+**Gate cumprido (02/11/2026):** Fase 1 integrada na `main`. Testes do Enzo mostraram que nenhum comportamento mudou; os problemas achados no caminho já existiam na versão original (ver Fase 1b).
+
+---
+
+## FASE 1b — Correção de bugs (concluída em 03/11/2026)
+
+Fase 1b concluída com sucesso e integrada na `main` (217 testes passando). Regras cumpridas: um bug = uma branch; testes antes e depois; proteção offline e chaves do SharedPreferences preservadas. Os prompts e descrições originais abaixo ficam mantidos como **histórico**.
+
+### T-B1 · Criar grupo sem erro de temporada — ✅ Concluída (branch `fix/create-group-season-id`)
+Branch: `fix/create-group-season-id` · Revisão: CLAUDE
+
+Bug: criar grupo falhava com PostgrestException "null value in column id of relation seasons" (23502) e deixava grupo órfão. Corrigido com geração de `id` via `const Uuid().v4()` no payload da temporada inicial e rollback atômico em ordem inversa em caso de falha.
+
+```
+[Prompt original mantido como histórico]
+Bug: criar grupo falha com PostgrestException "null value in column id of relation seasons"
+(23502) e deixa o grupo gravado sem temporada (grupo órfão).
+1) Em lib/data/supabase/groups_repository.dart (createGroup, ~134-138) o insert em seasons
+   não envia 'id'. Gere o id no código com const Uuid().v4() (já usado no arquivo para
+   players; a migração antiga fazia o mesmo em tool/legacy/data_migration_service.dart:327).
+2) Faça grep de .insert( em todos os arquivos de lib/data/supabase/ e LISTE em
+   docs/DUVIDAS.md qualquer insert sem id onde a tabela possa não ter default. Não corrija
+   além do seasons sem avisar.
+3) Se algum passo depois do insert em groups falhar (players, group_members, seasons),
+   desfaça o que este createGroup criou (reaproveite a lógica de deleteGroup) dentro de
+   try/catch e relance a exceção original. Não altere tabelas nem RLS.
+4) Teste que falha antes e passa depois (cliente falso ou função pura que monta o payload
+   da temporada).
+Aceite: analyze/test ok; checklist: criar grupo no celular e conferir no Supabase que o
+grupo tem 1 temporada ativa.
+```
+
+### T-B1b · Criar temporada sem erro de id — ✅ Concluída (branch `fix/create-season-id`)
+Branch: `fix/create-season-id`
+
+Mapeado em `DUVIDAS.md` 24: `createSeason` em `seasons_repository.dart` também inseria sem `id` em tabela com `id` NOT NULL sem default no Supabase. Corrigido com extração da função pura `buildCreateSeasonPayload` gerando UUID v4 e teste unitário cobrindo o payload gerado.
+
+### T-B2/B3 · Cache do elenco e nome do jogador — ✅ Concluída (branch `fix/players-cache`)
+Branch: `fix/players-cache` · Revisão: CLAUDE
+
+Corrigido: (a) `SupabasePlayersRepository` invalida `players:group:<groupId>` no `CacheStore` ao criar, remover ou editar jogadores; (b) criação e remoção de jogadores e alteração de nome atualizam o snapshot local via `GroupBootstrap.refreshLocalSnapshot`; (c) `_savePlayerName` chama `AppServices.instance.players.updatePlayer` persistindo no Supabase e validando permissão (admin ou próprio dono); (d) telas de partida (`match_screen`) e comparação buscam no repositório com fallback no snapshot.
+
+```
+[Prompt original mantido como histórico]
+Bugs (ver docs/ESTADO_ATUAL.md 7.2): (a) jogador criado no Elenco não aparece em "adicionar
+jogadores" de uma pelada já existente; (b) player_detail._savePlayerName (~1207-1225) só
+grava no SharedPreferences, nunca no Supabase, e o nome volta ao antigo; a comparação mostra
+"Desconhecido".
+1) Depois de gravar no Supabase com sucesso, criar jogador (players_screen._addNewPlayer),
+   remover jogador e renomear devem atualizar o snapshot players_<groupId> (reaproveite
+   GroupBootstrap; NÃO crie chave nova) e invalidar o cache players:group:<groupId>.
+2) _savePlayerName passa a chamar AppServices.instance.players.updatePlayer(...). Preserve
+   a mensagem de permissão do repositório e mostre-a. Offline: mostrar erro e NÃO alterar o
+   snapshot.
+3) match_screen._showMultiSelectDialog (~2806-2827): tentar o repositório primeiro e usar o
+   snapshot só se falhar. PlayerComparisonScreen (~49-60): se o jogador não estiver no
+   snapshot, buscar no repositório; nunca mostrar "Desconhecido" para jogador que existe.
+Aceite: analyze/test ok; checklist manual: criar jogador com pelada aberta e adicioná-lo;
+renomear e conferir carta, título, comparação e Supabase. Teste em modo avião (item 9).
+```
+
+### T-B4 · Estatísticas avançadas com percentuais errados — ✅ Resolvido pelo Enzo em 02/11 (branch `feature/player-advanced-stats`)
+Branch: `feature/player-advanced-stats` · Corrigido e validado pelo Enzo antes da Fase 1b.
+
+### T-B5 · Fila de envio: erro permanente — ✅ Concluída (branch `fix/outbox-permanent-errors`)
+Branch: `fix/outbox-permanent-errors` · Revisão: CLAUDE
+
+Implementada a separação entre erros transitórios e erros permanentes na fila outbox (`SupabaseMatchOutbox`). Erros permanentes (`23503`, `23502`, `23514`, `22P02`) detectados por `isPermanentOutboxError`: após 2 falhas consecutivas, a partida recebe `status: 'failed'` (campos `status`, `permanent_failures`, `error_code`, `error_message`, `failed_at` no mesmo `pending_matches_v1`), sai do topo da fila para não bloquear as seguintes, e é excluída das estatísticas (`readAll`). A UI exibe diálogo de partidas com problema com ações de Copiar dados, Tentar de novo (`retryFailed`) e Descartar (`discardFailed`).
+
+### T-B6 · Abrir o app sem rede — ✅ Concluída (branch `fix/offline-startup`)
+Branch: `fix/offline-startup` · Revisão: CLAUDE
+
+Junta BACKLOG 2b e 2c:
+- `main_personal.dart`: `ProfileCheckResult` separa explicitamente erro de rede (`failed`) de lista vazia (`noProfile`). Em caso de falha de conexão na verificação de perfil, não bloqueia em `CompleteProfileScreen`, navegando para a `HomePage` com os dados em cache.
+- Adicionados gatilhos automáticos de `outbox.refreshCounts()` e `outbox.flush()` na inicialização do app (após login reconhecido) e ao retornar do background (`WidgetsBindingObserver` / `didChangeAppLifecycleState` com `AppLifecycleState.resumed`).
+
+### T-B6b · Cache da lista de grupos offline — ✅ Concluída (branch `fix/groups-offline-cache`)
+Branch: `fix/groups-offline-cache`
+
+Cache offline da lista de grupos: `GroupsRepository.getMyGroups` utiliza `CacheStore` na chave `groups:my:<userId>`, expõe o getter `lastLoadFromCache`, invalida nas mutações (`createGroup`, `updateGroup`, `deleteGroup`) e a `HomePage` exibe o aviso "Sem conexão. Mostrando dados salvos." quando renderizada a partir do cache local.
+
+### T-B6c · Indicador de pendências na HomePage — ✅ Concluída (branch `fix/home-pending-indicator`)
+Branch: `fix/home-pending-indicator`
+
+Ícone de pendências e partidas com problema adicionado na AppBar da `HomePage`, exibindo reativamente as contagens de `outbox.pending` e `outbox.failed` fora da `MatchScreen`, permitindo ao usuário acompanhar o estado da sincronização e abrir o diálogo de status/recuperação a partir da tela inicial.
+
