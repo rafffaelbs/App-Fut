@@ -193,6 +193,18 @@ class StubMatchOutbox implements MatchOutbox {
 
   @override
   ValueListenable<int> get pending => ValueNotifier(0);
+
+  @override
+  ValueListenable<int> get failed => ValueNotifier(0);
+
+  @override
+  Future<List<Map<String, dynamic>>> failedJobs() async => [];
+
+  @override
+  Future<void> retryFailed(String matchId) async {}
+
+  @override
+  Future<void> discardFailed(String matchId) async {}
 }
 
 class StubCustomBadgesRepository implements CustomBadgesRepository {

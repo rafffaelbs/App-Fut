@@ -39,6 +39,10 @@ class SupabaseMatchOutbox implements MatchOutbox {
   @override
   final ValueNotifier<int> pending = ValueNotifier<int>(0);
 
+  /// Quantidade de partidas na fila com erro permanente (status 'failed').
+  @override
+  final ValueNotifier<int> failed = ValueNotifier<int>(0);
+
   /// Último erro de envio (null quando está tudo certo).
   @override
   final ValueNotifier<String?> lastError = ValueNotifier<String?>(null);
@@ -62,18 +66,25 @@ class SupabaseMatchOutbox implements MatchOutbox {
   List<Map<String, dynamic>> _read(SharedPreferences prefs) =>
       _readFromPrefs(prefs);
 
+  void _updateCounts(List<Map<String, dynamic>> jobs) {
+    pending.value = jobs.where((j) => j['status'] != 'failed').length;
+    failed.value = jobs.where((j) => j['status'] == 'failed').length;
+  }
+
   Future<void> _write(
       SharedPreferences prefs, List<Map<String, dynamic>> jobs) async {
     await prefs.setString(_prefsKey, jsonEncode(jobs));
-    pending.value = jobs.length;
+    _updateCounts(jobs);
   }
 
   /// Lê a fila direto do armazenamento local (sem rede). Usado pelos
   /// repositórios pra mostrar partidas ainda não enviadas no Histórico,
-  /// Ranking e Estatísticas.
+  /// Ranking e Estatísticas. NÃO inclui jobs com status 'failed'.
   static Future<List<Map<String, dynamic>>> readAll() async {
     final prefs = await SharedPreferences.getInstance();
-    return _readFromPrefs(prefs);
+    return _readFromPrefs(prefs)
+        .where((j) => j['status'] != 'failed')
+        .toList();
   }
 
   /// Guarda a partida localmente e dispara o envio em segundo plano.
@@ -82,7 +93,7 @@ class SupabaseMatchOutbox implements MatchOutbox {
   @override
   Future<void> enqueue(Map<String, dynamic> job) async {
     final prefs = await SharedPreferences.getInstance();
-    final jobs = _read(prefs)..add({...job, 'attempts': 0});
+    final jobs = _read(prefs)..add({...job, 'attempts': 0, 'permanent_failures': 0});
     await _write(prefs, jobs);
     // Espera um instante antes de subir: primeiro a súmula é guardada e os
     // próximos times aparecem; só depois a rede entra em ação.
@@ -97,14 +108,18 @@ class SupabaseMatchOutbox implements MatchOutbox {
     _flushing = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      pending.value = _read(prefs).length;
+      _updateCounts(_read(prefs));
 
       while (true) {
         final jobs = _read(prefs);
-        if (jobs.isEmpty) break;
-        final job = jobs.first;
+        final jobIndex = jobs.indexWhere((j) => j['status'] != 'failed');
+        if (jobIndex == -1) break;
+
+        final job = jobs[jobIndex];
         final matchId = job['match_id'].toString();
         final attempts = (job['attempts'] as num?)?.toInt() ?? 0;
+        final permanentFailures =
+            (job['permanent_failures'] as num?)?.toInt() ?? 0;
 
         try {
           await _matchesRepository.savePendingMatch(
@@ -128,20 +143,109 @@ class SupabaseMatchOutbox implements MatchOutbox {
           _retryDelaySeconds = 5;
         } catch (e) {
           debugPrint('SupabaseMatchOutbox: falha ao enviar $matchId: $e');
-          final fresh = _read(prefs);
-          for (final j in fresh) {
-            if (j['match_id'].toString() == matchId) {
-              j['attempts'] = attempts + 1;
+          final isPermanent = isPermanentOutboxError(e);
+
+          if (isPermanent) {
+            final newPermanentFailures = permanentFailures + 1;
+            if (newPermanentFailures >= 2) {
+              String? errorCode;
+              String? errorMsg;
+              if (e is PostgrestException) {
+                errorCode = e.code;
+                errorMsg = e.message;
+              } else {
+                errorMsg = e.toString();
+              }
+              final fresh = _read(prefs);
+              for (final j in fresh) {
+                if (j['match_id'].toString() == matchId) {
+                  j['permanent_failures'] = newPermanentFailures;
+                  j['status'] = 'failed';
+                  if (errorCode != null && errorCode.isNotEmpty) {
+                    j['error_code'] = errorCode;
+                  }
+                  j['error_message'] = errorMsg;
+                  j['failed_at'] = DateTime.now().toIso8601String();
+                }
+              }
+              await _write(prefs, fresh);
+              lastError.value = e.toString();
+              // NÃO dê break: continue o while com o próximo job que não esteja failed
+              continue;
+            } else {
+              // 1ª falha permanente consecutiva: retry no backoff como hoje
+              final fresh = _read(prefs);
+              for (final j in fresh) {
+                if (j['match_id'].toString() == matchId) {
+                  j['permanent_failures'] = newPermanentFailures;
+                  j['attempts'] = attempts + 1;
+                }
+              }
+              await _write(prefs, fresh);
+              lastError.value = e.toString();
+              _scheduleRetry();
+              break;
             }
+          } else {
+            // Erro NÃO permanente: zera permanent_failures, incrementa attempts, break
+            final fresh = _read(prefs);
+            for (final j in fresh) {
+              if (j['match_id'].toString() == matchId) {
+                j['permanent_failures'] = 0;
+                j['attempts'] = attempts + 1;
+              }
+            }
+            await _write(prefs, fresh);
+            lastError.value = e.toString();
+            _scheduleRetry();
+            break;
           }
-          await _write(prefs, fresh);
-          lastError.value = e.toString();
-          _scheduleRetry();
-          break;
         }
       }
     } finally {
       _flushing = false;
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> failedJobs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jobs = _read(prefs);
+    _updateCounts(jobs);
+    return jobs.where((j) => j['status'] == 'failed').toList();
+  }
+
+  @override
+  Future<void> retryFailed(String matchId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jobs = _read(prefs);
+    bool found = false;
+    for (final j in jobs) {
+      if (j['match_id'].toString() == matchId && j['status'] == 'failed') {
+        j.remove('status');
+        j['permanent_failures'] = 0;
+        j['attempts'] = 0;
+        j.remove('error_code');
+        j.remove('error_message');
+        j.remove('failed_at');
+        found = true;
+      }
+    }
+    if (found) {
+      await _write(prefs, jobs);
+      await flush();
+    }
+  }
+
+  @override
+  Future<void> discardFailed(String matchId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jobs = _read(prefs);
+    final countBefore = jobs.length;
+    jobs.removeWhere((j) =>
+        j['match_id'].toString() == matchId && j['status'] == 'failed');
+    if (jobs.length != countBefore) {
+      await _write(prefs, jobs);
     }
   }
 
