@@ -8,7 +8,7 @@ import 'package:app_do_fut/screens/join_group_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/bootstrap_personal.dart';
-
+import 'package:app_do_fut/domain/repositories/player_account_repository.dart';
 import 'package:app_do_fut/models/group_model.dart';
 
 // Global route observer for tracking navigation
@@ -35,6 +35,33 @@ class MyApp extends StatelessWidget {
       },
       home: const AuthGate(),
     );
+  }
+}
+
+/// Resultado da verificação de perfil do usuário logado.
+enum ProfileCheckResult {
+  hasProfile,
+  noProfile,
+  failed,
+}
+
+/// Avalia se o usuário atual possui cadastro de jogador vinculado.
+/// Em caso de falha de conexão/RPC, retorna [ProfileCheckResult.failed].
+/// Retorna [ProfileCheckResult.noProfile] somente se a busca sucedeu e veio vazia.
+Future<ProfileCheckResult> checkUserProfile({
+  PlayerAccountRepository? playerAccounts,
+}) async {
+  final accounts = playerAccounts ?? AppServices.instance.playerAccounts;
+  try {
+    // Automatically links "ghost" players with the same email.
+    await accounts.claimGhostProfiles();
+    final myPlayers = await accounts.getMyPlayers();
+    return myPlayers.isNotEmpty
+        ? ProfileCheckResult.hasProfile
+        : ProfileCheckResult.noProfile;
+  } catch (e) {
+    debugPrint('Error checking profile: $e');
+    return ProfileCheckResult.failed;
   }
 }
 
@@ -78,7 +105,8 @@ class _ProfileCheck extends StatefulWidget {
 
 class _ProfileCheckState extends State<_ProfileCheck> {
   bool _loading = true;
-  bool _hasProfile = false;
+  ProfileCheckResult _result = ProfileCheckResult.failed;
+  String? _pendingName;
 
   @override
   void initState() {
@@ -87,16 +115,12 @@ class _ProfileCheckState extends State<_ProfileCheck> {
   }
 
   Future<void> _check() async {
-    try {
-      // Automatically links "ghost" players with the same email.
-      await AppServices.instance.playerAccounts.claimGhostProfiles();
-      final myPlayers = await AppServices.instance.playerAccounts
-          .getMyPlayers();
-      if (mounted) setState(() => _hasProfile = myPlayers.isNotEmpty);
-    } catch (e) {
-      debugPrint('Error checking profile: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    final result = await checkUserProfile();
+    if (mounted) {
+      setState(() {
+        _result = result;
+        _loading = false;
+      });
     }
   }
 
@@ -111,7 +135,7 @@ class _ProfileCheckState extends State<_ProfileCheck> {
       );
     }
 
-    if (!_hasProfile) {
+    if (_result == ProfileCheckResult.noProfile) {
       final email = AppServices.instance.auth.currentUserEmail ?? '';
       return CompleteProfileScreen(
         initialEmail: email,
@@ -122,8 +146,7 @@ class _ProfileCheckState extends State<_ProfileCheck> {
           // name as a suggestion in both flows.
           setState(() {
             _pendingName = name;
-            _hasProfile =
-                true; // moves on to Home; the group will create the player
+            _result = ProfileCheckResult.hasProfile; // moves on to Home; the group will create the player
           });
         },
       );
@@ -131,9 +154,9 @@ class _ProfileCheckState extends State<_ProfileCheck> {
 
     return HomePage(suggestedName: _pendingName);
   }
-
-  String? _pendingName;
 }
+
+
 
 class HomePage extends StatefulWidget {
   final String? suggestedName;
