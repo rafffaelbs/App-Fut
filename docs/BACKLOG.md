@@ -8,12 +8,12 @@ Ponto de partida: a `main` atual (Fase 1 integrada, incluindo T4). Para cada bug
 
 | # | Bug | Como aparece | Suspeita / observação |
 |---|---|---|---|
-| B1 | **Criar grupo falha** | `PostgrestException: null value in column "id" of relation "seasons" violates not-null constraint (23502)`. Aparece "Error saving group". | O grupo é gravado e a temporada falha: ficam **grupos órfãos** (2 "Teste" em 02/11). O id da temporada deveria ser gerado no código ao criar o grupo. Grupos de outras pessoas (de 23/10 e 28/10) foram criados antes; conferir se têm temporada (`left join seasons`). **Não é regressão** (código idêntico na tag `pre-refactor`, vindo do commit `4f287b5` de 13/09; a migração antiga gerava o id com uuid). **Prioridade alta.** Também: criação deveria ser atômica (sem grupo órfão se a temporada falhar). |
-| B2 | Jogador novo não aparece em "adicionar jogadores" numa pelada já existente | Aparece no elenco, na promoção a admin e na comparação; só aparece na pelada criada depois. | Provável cópia local do elenco (`players_<groupId>`, GroupBootstrap) que só é refeita ao criar pelada. Já havia timeout de 8 s no log (rede lenta). |
-| B3 | Nome editado não aparece em carta, título nem comparação (chegou a mostrar "Desconhecido") | Persiste só em algumas telas. | Mesma família do B2 (cache do elenco). Conferir o que `_savePlayerName` atualiza. |
-| B4 | ✅ **Corrigido pelo Enzo em 02/11.** Estatísticas avançadas do jogador com números errados | Ex.: 10 derrotas; o jogador com quem mais perdeu esteve em 3 delas, mas diz "cerca de 70%" (deveria ser 30%). | Provável erro de denominador no cálculo do percentual. Origem: `Plano_de_Acao.md`. Existe a branch `feature/player-advanced-stats` (do Enzo). |
-| B5 | **Partida presa na fila de envio sem aviso** | Gol de um jogador apagado continua nas estatísticas mesmo com histórico e `match_events` vazios; volta a cada reinício. | Provável: partida em `pending_matches_v1` que o banco recusa (jogador apagado). A fila tenta para sempre e não avisa. Ideia: detectar erro permanente, mostrar ao usuário e permitir descartar. Confirmar com `grep pending_matches_v1` no `shared_preferences.json`. |
-| B6 | **Qualquer pessoa com o app cria grupos** | Outras pessoas já criaram grupos ("du", "du fut", "Baba do Carlos"). A restrição de admin só existe dentro do grupo. | Não é bug de código, é desenho. Resolve com a versão offline e o site para essas pessoas. Manter `hasMembershipManagement` / flags de criação de grupo em mente. |
+| B1 | ✅ **Corrigido na branch `fix/create-group-season-id` (e `fix/create-season-id`).** Criar grupo falha | `PostgrestException: null value in column "id" of relation "seasons" violates not-null constraint (23502)`. Aparece "Error saving group". | Resolvido: id da temporada gerado via `const Uuid().v4()` em `createGroup` e `createSeason`, com rollback atômico na ordem inversa. |
+| B2 | ✅ **Corrigido na branch `fix/players-cache`.** Jogador novo não aparece em "adicionar jogadores" numa pelada já existente | Aparece no elenco, na promoção a admin e na comparação; só aparecia na pelada criada depois. | Resolvido: `_addNewPlayer` e remoção chamam `GroupBootstrap.refreshLocalSnapshot` e `SupabasePlayersRepository` invalida `players:group:<groupId>` no `CacheStore`. |
+| B3 | ✅ **Corrigido na branch `fix/players-cache`.** Nome editado não aparece em carta, título nem comparação (chegou a mostrar "Desconhecido") | Persistia só em algumas telas. | Resolvido: `_savePlayerName` chama `updatePlayer` no Supabase validando permissões (admin ou próprio dono); comparação e `match_screen` consultam repositório com fallback no snapshot. |
+| B4 | ✅ **Corrigido pelo Enzo em 02/11 (branch `feature/player-advanced-stats`).** Estatísticas avançadas do jogador com números errados | Ex.: 10 derrotas; o jogador com quem mais perdeu esteve em 3 delas, mas dizia "cerca de 70%" (deveria ser 30%). | Corrigido pelo Enzo antes da Fase 1b. |
+| B5 | ✅ **Corrigido na branch `fix/outbox-permanent-errors`.** Partida presa na fila de envio sem aviso | Gol de um jogador apagado continuava nas estatísticas mesmo com histórico e `match_events` vazios; voltava a cada reinício. | Resolvido: `isPermanentOutboxError` classifica erros permanentes (`23503`, `23502`, `23514`, `22P02`); após 2 falhas a partida ganha `status: 'failed'`, sai do topo da fila e das estatísticas; diálogo com Copiar, Tentar de novo e Descartar. |
+| B6 | **Qualquer pessoa com o app cria grupos** | Outras pessoas já criaram grupos ("du", "du fut", "Baba do Carlos"). A restrição de admin só existe dentro do grupo. | Não é bug de código, é decisão de desenho. Todos os grupos antigos foram apagados do Supabase em 02/11; a discussão volta depois do app offline. |
 
 Relacionados já registrados abaixo: 2c (tela do nome offline), 2d (catálogo de insígnias), 2b (fila ao abrir o app).
 
@@ -38,6 +38,18 @@ Com todas as flags em `true` (app personal) nada mudou. As lacunas abaixo só ap
 | F3 | `match_screen` em somente leitura: dá para adicionar jogador à pelada e **iniciar** a partida, mas não encerrar | A T4 só bloqueou o encerramento (`DUVIDAS.md` #19, itens 7, 8 e 18). Decisão da Fase 2: `match_screen` existe na web? Se não existir, o problema some. |
 | F4 | `hasCloudDraftSync = false`: **teste inconclusivo** | Durante o teste houve `SocketException: Failed host lookup ... supabase.co` (falha de DNS da máquina) na fila de envio e o ícone de nuvem (selo de partida pendente) apareceu. Isso não depende da flag: a fila de envio não é controlada por ela. Repetir com a rede estável e conferir se `sessions` e `session_arrivals` deixam de ser atualizados durante a partida. |
 
+## Pendências deixadas pela Fase 1b
+
+- linha parcial em matches/lineups/events que pode ficar no Supabase quando uma partida isolada falha, e "Descartar" só remove a cópia local (DUVIDAS 30); candidata: T-B5b, que tentaria apagar a partida parcial no servidor ao descartar;
+- createSeason sem transação (DUVIDAS 26);
+- o RLS de players deixa o dono alterar qualquer coluna da própria linha, não só o nome (DUVIDAS 28);
+- se _readFromPrefs da fila (supabase_match_outbox.dart) encontra JSON corrompido, devolve lista vazia e o próximo enqueue sobrescreve a fila: risco de perder partidas pendentes (revisão da T-B5);
+- o diálogo "adicionar jogadores" pode demorar offline até a requisição falhar (match_screen ~2806-2860);
+- setPlayerIcon e os outros métodos que alteram jogador podem não invalidar o cache players:group:<id> (conferir);
+- refreshLocalSnapshot ignora lista vazia, então remover o último jogador mantém o snapshot;
+- testes que faltam: fallback offline do match_screen, falha de rede ao renomear, teste de widget do gatilho de abertura da fila, HomePage offline;
+- mensagem de permissão nova em updatePlayer (DUVIDAS 27).
+
 ## 1. Cálculos: possíveis bugs (decidir um a um: bug ou intencional?)
 
 Origem: `docs/DUVIDAS.md` (T0). Os testes de caracterização **travam o comportamento atual**; corrigir qualquer item muda as notas que todos veem, então é uma decisão consciente (e os testes correspondentes precisam ser atualizados junto).
@@ -59,20 +71,13 @@ Origem: `docs/DUVIDAS.md` (T0). Os testes de caracterização **travam o comport
 - **A conferir:** o log de auditoria (`group_action_logs`, gravado por `setCommunityAttributes`) pode já registrar valores antigos e novos em `details`. Se registra, dá para reconstruir um histórico a partir dele.
 - `RatingsRepository` e a tabela `rating_history` (hoje sem uso) **ficam como estão**; não serão apagados nem levados ao SQLite v1. O desenho novo provavelmente será diferente (histórico da comunidade, e não de notas por partida). O drift tem migrações, então a tabela nova entra depois sem problema.
 
-## 2b. Fila de envio: reenviar ao abrir o app e ao voltar do background (achado da T3d)
+## 2b. Fila de envio: reenviar ao abrir o app e ao voltar do background (resolvido pela T-B6)
 
-Hoje uma partida pendente só é enviada quando a `MatchScreen` é aberta (`initState`), quando uma partida é iniciada, pelo botão manual ou pelo timer enquanto o app está aberto. Não há reenvio ao iniciar o app nem ao voltar do background, e o selo de pendentes só aparece depois de abrir a tela de partida. Melhoria: chamar `outbox.flush()` no bootstrap e ao retomar o app (`WidgetsBindingObserver`), e carregar a contagem de pendentes na inicialização. Muda comportamento (é uma melhoria), então fica para depois da Fase 1, com teste do modo avião.
+Resolvido na Tarefa T-B6 (`fix/offline-startup`): chamadas a `outbox.refreshCounts()` e `outbox.flush()` integradas na inicialização (após login reconhecido em `_ProfileCheckState.initState`) e ao retornar do background via `WidgetsBindingObserver` (`_AuthGateState.didChangeAppLifecycleState` com `AppLifecycleState.resumed`).
 
-## 2c. Tela "Como podemos te chamar?" aparece sem rede (achado do teste da T3e, item 16)
+## 2c. Tela "Como podemos te chamar?" aparece sem rede (resolvido pela T-B6)
 
-Comportamento **já existente** (confirmado contra a tag `pre-refactor`; não é regressão da T2/T3).
-
-- Em `lib/main_personal.dart` (`_ProfileCheckState._check`, ~linhas 89-101), `claimGhostProfiles()` + `getMyPlayers()` são chamados no Supabase. Se a chamada falha (sem rede, rede lenta, RPC com erro), o `catch` só imprime no log e `_hasProfile` continua `false`, então `CompleteProfileScreen` aparece.
-- O nome digitado ali só fica em memória (`_pendingName`), usado como sugestão na tela de entrar em grupo. Nada é gravado.
-- O botão "Sair" da tela faz `auth.signOut()`.
-- **Correção sugerida (pequena):** separar "a consulta deu erro" de "a consulta voltou vazia". Se deu erro, não mostrar a tela de nome: mostrar o `HomePage` (que já usa cache) ou um aviso "sem conexão, tentar de novo". Só mostrar a tela de nome quando a consulta der certo e vier vazia. Uma variável `_failed` e um `if` no build; não mexe em tabela, RPC nem SharedPreferences.
-- **Fazer junto com o item 2b** (reenviar fila ao abrir o app): os dois tratam de abrir o app sem rede. Muda comportamento, então só depois da Fase 1, com teste em modo avião.
-- A sessão salva já é reconhecida offline; o que falta é não confundir "erro de rede" com "sem perfil".
+Resolvido na Tarefa T-B6 (`fix/offline-startup`): `ProfileCheckResult` separa explicitamente erro de rede (`failed`) de lista vazia (`noProfile`). Em caso de falha de conexão, o app não exibe `CompleteProfileScreen`, navegando para a `HomePage` que exibe os grupos do cache local (`groups:my:<userId>`, adicionado na T-B6b) com aviso de dados salvos.
 
 ## 2d. Catálogo de insígnias personalizadas: apagar não remove dos jogadores (item 9 do teste da T3e)
 
