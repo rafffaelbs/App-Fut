@@ -491,6 +491,53 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _showOutboxStatusDialog(
+    BuildContext context,
+    int pendingCount,
+    int failedCount,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Envio de partidas',
+            style: TextStyle(color: AppColors.textWhite, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (pendingCount > 0)
+                Text(
+                  '$pendingCount partida(s) aguardando envio',
+                  style: const TextStyle(color: AppColors.textWhite, fontSize: 14),
+                ),
+              if (failedCount > 0)
+                Text(
+                  '$failedCount partida(s) com problema',
+                  style: const TextStyle(color: AppColors.danger, fontSize: 14),
+                ),
+              const SizedBox(height: 12),
+              const Text(
+                'Abra a pelada para ver os detalhes e tentar de novo',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK', style: TextStyle(color: AppColors.accentBlue)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -628,6 +675,54 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         centerTitle: true,
+        actions: [
+          ValueListenableBuilder<int>(
+            valueListenable: AppServices.instance.outbox.pending,
+            builder: (context, pendingCount, _) {
+              return ValueListenableBuilder<int>(
+                valueListenable: AppServices.instance.outbox.failed,
+                builder: (context, failedCount, _) {
+                  final total = pendingCount + failedCount;
+                  if (total == 0) return const SizedBox.shrink();
+
+                  if (failedCount > 0) {
+                    return IconButton(
+                      tooltip: 'Partidas com problema: $failedCount'
+                          '${pendingCount > 0 ? ' (aguardando envio: $pendingCount)' : ''}',
+                      icon: Badge(
+                        backgroundColor: AppColors.danger,
+                        textColor: AppColors.textWhite,
+                        label: Text('$total'),
+                        child: const Icon(
+                          Icons.cloud_off_outlined,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                      onPressed: () => _showOutboxStatusDialog(
+                        context,
+                        pendingCount,
+                        failedCount,
+                      ),
+                    );
+                  }
+
+                  return IconButton(
+                    tooltip: 'Aguardando envio: $pendingCount',
+                    icon: Badge(
+                      label: Text('$pendingCount'),
+                      child: const Icon(Icons.cloud_upload_outlined),
+                    ),
+                    onPressed: () => _showOutboxStatusDialog(
+                      context,
+                      pendingCount,
+                      failedCount,
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
 
       body: isLoading
