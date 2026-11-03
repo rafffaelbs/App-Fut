@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 import '../utils/player_identity.dart';
@@ -1720,15 +1721,39 @@ class _MatchScreenState extends State<MatchScreen>
         actions: [
           ValueListenableBuilder<int>(
             valueListenable: AppServices.instance.outbox.pending,
-            builder: (context, count, _) {
-              if (count == 0) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'Aguardando envio: $count',
-                icon: Badge(
-                  label: Text('$count'),
-                  child: const Icon(Icons.cloud_upload_outlined),
-                ),
-                onPressed: _showPendingSyncDialog,
+            builder: (context, pendingCount, _) {
+              return ValueListenableBuilder<int>(
+                valueListenable: AppServices.instance.outbox.failed,
+                builder: (context, failedCount, _) {
+                  final total = pendingCount + failedCount;
+                  if (total == 0) return const SizedBox.shrink();
+
+                  if (failedCount > 0) {
+                    return IconButton(
+                      tooltip: 'Partidas com problema: $failedCount'
+                          '${pendingCount > 0 ? ' (aguardando envio: $pendingCount)' : ''}',
+                      icon: Badge(
+                        backgroundColor: AppColors.danger,
+                        textColor: AppColors.textWhite,
+                        label: Text('$total'),
+                        child: const Icon(
+                          Icons.cloud_off_outlined,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                      onPressed: _showPendingSyncDialog,
+                    );
+                  }
+
+                  return IconButton(
+                    tooltip: 'Aguardando envio: $pendingCount',
+                    icon: Badge(
+                      label: Text('$pendingCount'),
+                      child: const Icon(Icons.cloud_upload_outlined),
+                    ),
+                    onPressed: _showPendingSyncDialog,
+                  );
+                },
               );
             },
           ),
@@ -3702,31 +3727,260 @@ class _MatchScreenState extends State<MatchScreen>
   void _showPendingSyncDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.headerBlue,
-        title: const Text("Sincronização",
-            style: TextStyle(color: AppColors.textWhite)),
-        content: ValueListenableBuilder<int>(
-          valueListenable: AppServices.instance.outbox.pending,
-          builder: (_, count, __) => ValueListenableBuilder<String?>(
-            valueListenable: AppServices.instance.outbox.lastError,
-            builder: (_, err, __) => Text(
-              count == 0
-                  ? "Tudo sincronizado."
-                  : "$count partida(s) aguardando envio ao servidor."
-                      "${err != null ? '\n\nÚltimo erro: $err' : ''}",
-              style: const TextStyle(color: Colors.white70),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.headerBlue,
+          title: const Text("Sincronização",
+              style: TextStyle(color: AppColors.textWhite)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: ValueListenableBuilder<int>(
+                valueListenable: AppServices.instance.outbox.pending,
+                builder: (context, count, _) => ValueListenableBuilder<int>(
+                  valueListenable: AppServices.instance.outbox.failed,
+                  builder: (context, failedCount, _) =>
+                      ValueListenableBuilder<String?>(
+                    valueListenable: AppServices.instance.outbox.lastError,
+                    builder: (context, err, _) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          count == 0
+                              ? "Tudo sincronizado."
+                              : "$count partida(s) aguardando envio ao servidor."
+                                  "${err != null ? '\n\nÚltimo erro: $err' : ''}",
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        if (failedCount > 0) ...[
+                          const SizedBox(height: 16),
+                          const Divider(color: AppColors.borderSubtle),
+                          const SizedBox(height: 8),
+                          const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  color: AppColors.danger, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                "Partidas com problema",
+                                style: TextStyle(
+                                  color: AppColors.textWhite,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          FutureBuilder<List<Map<String, dynamic>>>(
+                            future: AppServices.instance.outbox.failedJobs(),
+                            builder: (context, snapshot) {
+                              final failedList = snapshot.data ?? [];
+                              if (failedList.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return Column(
+                                children: [
+                                  for (final job in failedList)
+                                    _buildFailedMatchCard(
+                                      ctx,
+                                      job,
+                                      () => setDialogState(() {}),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => AppServices.instance.outbox.flush(),
+              child: const Text("Tentar agora"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Fechar"),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => AppServices.instance.outbox.flush(),
-            child: const Text("Tentar agora"),
+      ),
+    );
+  }
+
+  String _formatFailedMatchScoreAndDate(Map<String, dynamic> job) {
+    final match = job['match'] as Map<String, dynamic>? ?? {};
+    final scoreRed = match['score_red'] ?? 0;
+    final scoreWhite = match['score_white'] ?? 0;
+    final playedAtStr = match['played_at']?.toString();
+    String dateFormatted = '';
+    if (playedAtStr != null) {
+      final dt = DateTime.tryParse(playedAtStr)?.toLocal();
+      if (dt != null) {
+        final day = dt.day.toString().padLeft(2, '0');
+        final month = dt.month.toString().padLeft(2, '0');
+        final hour = dt.hour.toString().padLeft(2, '0');
+        final minute = dt.minute.toString().padLeft(2, '0');
+        dateFormatted = '$day/$month às $hour:$minute - ';
+      }
+    }
+    return '${dateFormatted}Vermelho $scoreRed x $scoreWhite Branco';
+  }
+
+  String _formatOutboxErrorMessage(String? code, String? rawMsg) {
+    switch (code) {
+      case '23503':
+        return 'Um jogador desta partida não existe mais no grupo';
+      case '23502':
+        return 'Dados obrigatórios da partida estão ausentes no servidor';
+      case '23514':
+        return 'Os dados da partida violam uma restrição do banco de dados';
+      case '22P02':
+        return 'Formato de identificador ou dado inválido';
+      default:
+        if (rawMsg != null && rawMsg.trim().isNotEmpty) {
+          return rawMsg;
+        }
+        return 'Erro permanente ao processar a partida';
+    }
+  }
+
+  Widget _buildFailedMatchCard(
+    BuildContext ctx,
+    Map<String, dynamic> job,
+    VoidCallback onUpdated,
+  ) {
+    final matchId = job['match_id']?.toString() ?? '';
+    final scoreAndDate = _formatFailedMatchScoreAndDate(job);
+    final errorReason = _formatOutboxErrorMessage(
+      job['error_code']?.toString(),
+      job['error_message']?.toString(),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            scoreAndDate,
+            style: const TextStyle(
+              color: AppColors.textWhite,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Fechar"),
+          const SizedBox(height: 4),
+          Text(
+            errorReason,
+            style: const TextStyle(
+              color: AppColors.danger,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.borderSubtle),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.copy, size: 14),
+                label:
+                    const Text("Copiar dados", style: TextStyle(fontSize: 12)),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: jsonEncode(job)));
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text("Dados da partida copiados com sucesso!"),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.highlightBlue,
+                  side: const BorderSide(color: AppColors.borderSubtle),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.refresh, size: 14),
+                label:
+                    const Text("Tentar de novo", style: TextStyle(fontSize: 12)),
+                onPressed: () async {
+                  await AppServices.instance.outbox.retryFailed(matchId);
+                  onUpdated();
+                },
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.delete_outline, size: 14),
+                label:
+                    const Text("Descartar", style: TextStyle(fontSize: 12)),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: ctx,
+                    builder: (confirmCtx) => AlertDialog(
+                      backgroundColor: AppColors.headerBlue,
+                      title: const Text(
+                        "Descartar partida?",
+                        style: TextStyle(color: AppColors.textWhite),
+                      ),
+                      content: const Text(
+                        "Esta partida será removida deste aparelho e não será enviada ao servidor. "
+                        "Você pode copiar os dados antes de descartar para não perder as informações.\n\n"
+                        "Deseja realmente descartar esta partida?",
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmCtx, false),
+                          child: const Text("Cancelar",
+                              style: TextStyle(color: Colors.white54)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmCtx, true),
+                          child: const Text("Descartar",
+                              style: TextStyle(color: AppColors.danger)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await AppServices.instance.outbox.discardFailed(matchId);
+                    onUpdated();
+                  }
+                },
+              ),
+            ],
           ),
         ],
       ),
