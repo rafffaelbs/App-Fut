@@ -618,6 +618,65 @@ void main() {
         expect(call['isRetry'], isFalse,
             reason: 'Primeira tentativa de envio de um job novo deve ter isRetry == false');
       });
+
+      test('13. (b) refreshCounts reflete a fila gravada (pendentes normais e failed) sem chamar o repositório', () async {
+        final jobNormal1 = {...sampleJob, 'match_id': 'normal-1'};
+        final jobNormal2 = {...sampleJob, 'match_id': 'normal-2'};
+        final jobFailed = {...sampleJob, 'match_id': 'failed-1', 'status': 'failed'};
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([jobNormal1, jobNormal2, jobFailed]),
+        });
+
+        expect(outbox.pending.value, 0);
+        expect(outbox.failed.value, 0);
+
+        await outbox.refreshCounts();
+
+        expect(outbox.pending.value, 2,
+            reason: 'Deve identificar 2 jobs normais pendentes');
+        expect(outbox.failed.value, 1,
+            reason: 'Deve identificar 1 job com status failed');
+        expect(fakeMatchesRepo.savedCalls, isEmpty,
+            reason: 'refreshCounts não deve realizar nenhuma chamada ao repositório');
+      });
+
+      test('14. (d) a mesma partida não é enviada duas vezes se dois gatilhos chegam juntos', () async {
+        final job = {
+          ...sampleJob,
+          'match_id': 'concurrent-match-1',
+        };
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([job]),
+        });
+
+        final saveStarted = Completer<void>();
+        final allowSaveFinish = Completer<void>();
+
+        fakeMatchesRepo.beforeSave = (matchId, callIndex) async {
+          if (!saveStarted.isCompleted) {
+            saveStarted.complete();
+          }
+          await allowSaveFinish.future;
+        };
+
+        // Primeiro gatilho dispara flush
+        final flush1 = outbox.flush();
+
+        // Aguarda início do envio no repositório (_flushing torna-se true)
+        await saveStarted.future;
+
+        // Segundo gatilho chega enquanto o primeiro ainda está processando
+        final flush2 = outbox.flush();
+
+        // Libera o salvamento do primeiro
+        allowSaveFinish.complete();
+
+        await Future.wait([flush1, flush2]);
+
+        expect(fakeMatchesRepo.savedCalls.length, 1,
+            reason: 'A partida deve ser enviada exatamente uma vez mesmo com dois gatilhos simultâneos');
+      });
     });
   });
 }
+
