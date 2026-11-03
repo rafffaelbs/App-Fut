@@ -20,26 +20,22 @@ App Flutter de gestão de pelada de futsal (repo `~/Documents/github/App-Fut`, b
 2. **site somente leitura (Flutter Web)** para quem usa iPhone ver rankings e estatísticas por **link secreto, sem login** (substitui o site React antigo que lê `sync_data`).
 3. **app público offline** (SQLite/drift, sem login, dono = admin, tema neutro, 1 grupo, botões exportar/importar `.db`).
 
-## Onde estamos (02/11/2026)
+## Onde estamos (03/11/2026)
 
-- **Fase 0 e Fase 1 concluídas e na `main`** (T0 a T4): interfaces em `lib/domain/`, `AppServices`, `AppFeatures`, camada `lib/data/supabase/` e `lib/data/prefs/`. 162 testes passando, 0 erros no analyze, isolamento do Supabase verificado. A tag `pre-refactor` marca o app antes da refatoração.
-- A **proteção contra queda de internet** (estado local da partida, fila `pending_matches_v1`, `CacheStore`, snapshot do elenco) **não pode ser alterada** sem tarefa própria (seção 9 do ARCHITECTURE).
-- Nos testes apareceram **bugs que já existiam na versão original** (nenhum é regressão). Decidi tratá-los como bugs a corrigir com calma, partindo da `main` atual. Estão no `BACKLOG.md` seção 0 e viraram a **Fase 1b** do `TASKS.md`:
-  - **B1** criar grupo falha (insert em `seasons` sem `id`) e deixa grupo órfão. **Prioridade alta.**
-  - **B2/B3** jogador novo não aparece na pelada já aberta; renomear jogador só grava no celular (nunca no Supabase) e a comparação mostra "Desconhecido".
-  - **B4** estatísticas avançadas com percentual errado: **já corrigi e validei (02/11)**; não precisa de tarefa. Ideia futura: oferecer as duas visões de percentual, com mínimo de jogos para não dar 100% eterno.
-  - **B5** partida presa na fila de envio quando o banco recusa (ex.: jogador apagado), bloqueando as seguintes e inflando as estatísticas.
-  - **Abrir o app sem rede:** tela "Como podemos te chamar?" aparece quando falta rede; fila só reenvia ao abrir a tela de partida.
-  - **B6** (não é bug de código): qualquer pessoa com o app cria grupos (outras pessoas já criaram "du", "du fut", "Baba do Carlos"). Isso reforça o site e o app offline.
-- Pendências minhas: rodar no Supabase a consulta de temporadas por grupo e apagar os grupos "Teste" órfãos (TASKS, pergunta 6); testar o que faltou do roteiro da T4 (criar/apagar grupo, partes 11 e 12 do teste de não admin, virar cada flag); commitar os docs atualizados e o `Plano_de_Acao.md`.
+- **Fase 0, Fase 1 e Fase 1b concluídas e na `main`** (T0 a T4 e T-B1 a T-B6c): interfaces em `lib/domain/`, `AppServices`, `AppFeatures`, camada `lib/data/` (Supabase e SharedPreferences), fila outbox com isolamento de erros permanentes e cache offline de grupos. 217 testes passando, 0 erros no analyze. A tag `pre-refactor` marca o app antes da refatoração.
+- A **proteção contra queda de internet** (estado local da partida, fila `pending_matches_v1` com isolamento de falhas, `CacheStore` com `groups:my:<userId>`, snapshot do elenco) foi fortalecida e comprovada.
+- Os **bugs da Fase 1b** foram todos corrigidos e integrados:
+  - **B1 / B1b** criar grupo e temporada (UUID v4 gerado no cliente, rollback reverso em caso de falha).
+  - **B2/B3** cache do elenco e nome do jogador (invalidação de cache, refresh do snapshot e persistência de nome no Supabase via `updatePlayer` com permissão de admin ou dono).
+  - **B4** estatísticas avançadas com percentuais corrigidos.
+  - **B5** isolamento de partidas com erro permanente na fila outbox sem bloquear envios e fora das estatísticas.
+  - **Abrir o app sem rede (T-B6/B6b/B6c):** tela de perfil não bloqueia offline (`ProfileCheckResult.failed`), `HomePage` carrega grupos salvos em cache local com aviso, e ícone de pendências na AppBar.
+  - **B6** (não é bug de código): decisão de desenho; grupos legados foram apagados em 02/11 pelo Enzo; discussão volta após o app offline.
 
 ## Próximos passos (ordem)
 
-1. **Fase 1b**: B1 → B2/B3 → B5 → B6 (abrir sem rede). Decidido: só admin renomeia qualquer jogador e o dono do perfil renomeia o próprio. A arquitetura de grupos (quem pode criar grupo etc.) **ainda não é meu foco**; priorize só se achar necessário.
-2. **Fase 2 (site)**: T5 a T7b do `TASKS.md`. Detalhar os prompts quando a 1b terminar. Cuidado: `PlayerComparisonScreen` e o modal de adicionar jogadores dependem do snapshot `players_<groupId>`, que na web não existe.
-3. **Fase 3 (app público)**: T8 a T15.
-
-Peça para eu começar pela T-B1: escreva o prompt do AG e o de revisão do Claude Code.
+1. **Fase 2 (site somente leitura)**: T5 a T7b do `TASKS.md`. Cuidado: `PlayerComparisonScreen` e o modal de adicionar jogadores agora contam com fallback no repositório, facilitando a adaptação para a web.
+2. **Fase 3 (app público)**: T8 a T15.
 
 ## Lições do processo (para evitar repetir)
 
