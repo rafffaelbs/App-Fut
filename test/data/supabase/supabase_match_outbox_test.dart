@@ -15,6 +15,7 @@ class FakeMatchesRepository implements MatchesRepository {
   String errorMessage = 'Network error';
   Object? customException;
   Object? Function(String matchId, int callIndex)? onSave;
+  Future<void> Function(String matchId, int callIndex)? beforeSave;
 
   @override
   Future<void> savePendingMatch({
@@ -24,6 +25,9 @@ class FakeMatchesRepository implements MatchesRepository {
     required List<Map<String, dynamic>> events,
     bool isRetry = false,
   }) async {
+    if (beforeSave != null) {
+      await beforeSave!(matchId, savedCalls.length);
+    }
     if (onSave != null) {
       final exc = onSave!(matchId, savedCalls.length);
       if (exc != null) {
@@ -75,6 +79,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     fakeMatchesRepo = FakeMatchesRepository();
     outbox = SupabaseMatchOutbox(matchesRepository: fakeMatchesRepo);
+  });
+
+  tearDown(() {
+    outbox.retryTimer?.cancel();
   });
 
   group('SupabaseMatchOutbox', () {
@@ -497,6 +505,118 @@ void main() {
         // Nova chamada a flush não reenvia (não duplica)
         await outbox.flush();
         expect(fakeMatchesRepo.savedCalls.length, 1);
+      });
+
+      test('10. (a) Job com falha e attempts=0 chama retryFailed e depois flush: repository recebe isRetry == true', () async {
+        final failedJob = {
+          ...sampleJob,
+          'match_id': 'f-attempts-zero',
+          'status': 'failed',
+          'permanent_failures': 2,
+          'attempts': 0,
+          'error_code': '23503',
+          'error_message': 'FK error',
+          'failed_at': '2026-11-02T20:00:00.000Z',
+        };
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([failedJob]),
+        });
+
+        await outbox.retryFailed('f-attempts-zero');
+
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+        final call = fakeMatchesRepo.savedCalls.first;
+        expect(call['matchId'], 'f-attempts-zero');
+        expect(call['isRetry'], isTrue,
+            reason: 'retryFailed deve garantir attempts >= 1 para que isRetry seja true e limpe dados parciais no Supabase');
+      });
+
+      test('11. (b) retryFailed enquanto flush já está rodando deixa o job pendente e agenda retry sem duplicar timers', () async {
+        final jobNormal = {
+          ...sampleJob,
+          'match_id': 'in-flight-1',
+          'attempts': 0,
+          'permanent_failures': 0,
+        };
+        final jobFailed = {
+          ...sampleJob,
+          'match_id': 'failed-1',
+          'status': 'failed',
+          'permanent_failures': 2,
+          'attempts': 1,
+          'error_code': '23503',
+        };
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([jobNormal, jobFailed]),
+        });
+
+        final job1Started = Completer<void>();
+        final job1Continue = Completer<void>();
+
+        fakeMatchesRepo.beforeSave = (matchId, callIndex) async {
+          if (matchId == 'in-flight-1') {
+            if (!job1Started.isCompleted) {
+              job1Started.complete();
+            }
+            await job1Continue.future;
+          }
+        };
+
+        // Dispara flush para iniciar o envio do jobNormal
+        final flushFuture = outbox.flush();
+
+        // Espera jobNormal entrar no savePendingMatch
+        await job1Started.future;
+
+        // Com o flush em andamento (_flushing == true), chama retryFailed
+        await outbox.retryFailed('failed-1');
+
+        // Job deve voltar a ser pendente
+        expect(outbox.pending.value, 2,
+            reason: 'Ambos os jobs devem constar como pendentes');
+        expect(outbox.failed.value, 0,
+            reason: 'Nenhum job deve permanecer com status failed');
+
+        // Retry deve estar agendado
+        expect(outbox.retryTimer, isNotNull);
+        expect(outbox.retryTimer!.isActive, isTrue,
+            reason: 'Deve agendar nova tentativa sem esquecer o job');
+
+        final timerInstance = outbox.retryTimer;
+
+        // Chamada subsequente a retryFailed com flush ainda rodando não duplica timer
+        await outbox.retryFailed('failed-1');
+        expect(outbox.retryTimer, same(timerInstance),
+            reason: 'Não deve duplicar ou recriar timer se já houver um ativo');
+
+        // Libera o primeiro job para concluir
+        job1Continue.complete();
+        await flushFuture;
+
+        // Verifica que o segundo job também foi processado no mesmo flush ou com isRetry == true
+        expect(fakeMatchesRepo.savedCalls.length, 2);
+        expect(fakeMatchesRepo.savedCalls.last['matchId'], 'failed-1');
+        expect(fakeMatchesRepo.savedCalls.last['isRetry'], isTrue);
+      });
+
+      test('12. (c) Job que nunca falhou é enviado com isRetry == false na primeira tentativa', () async {
+        final freshJob = {
+          ...sampleJob,
+          'match_id': 'fresh-match-1',
+          'attempts': 0,
+          'permanent_failures': 0,
+        };
+        SharedPreferences.setMockInitialValues({
+          'pending_matches_v1': jsonEncode([freshJob]),
+        });
+
+        await outbox.flush();
+
+        expect(fakeMatchesRepo.savedCalls.length, 1);
+        final call = fakeMatchesRepo.savedCalls.first;
+        expect(call['matchId'], 'fresh-match-1');
+        expect(call['isRetry'], isFalse,
+            reason: 'Primeira tentativa de envio de um job novo deve ter isRetry == false');
       });
     });
   });
