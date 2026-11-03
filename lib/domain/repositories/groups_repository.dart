@@ -1,6 +1,8 @@
 import '../../models/group_model.dart';
 
 abstract class GroupsRepository {
+  bool get lastLoadFromCache;
+
   Future<List<GroupModel>> getMyGroups();
 
   Future<GroupModel> createGroup({

@@ -223,6 +223,9 @@ class StubCustomBadgesRepository implements CustomBadgesRepository {
 
 class StubGroupsRepository implements GroupsRepository {
   @override
+  bool get lastLoadFromCache => false;
+
+  @override
   Future<GroupModel> createGroup({required String name, String? adminPlayerName}) async => throw UnimplementedError();
 
   @override
@@ -349,6 +352,7 @@ class StubPlayerAccountRepository implements PlayerAccountRepository {
 }
 
 AppServices setupTestAppServices({
+  GroupsRepository? groups,
   PlayersRepository? players,
   PermissionService? permissions,
   AuthService? auth,
@@ -358,7 +362,7 @@ AppServices setupTestAppServices({
 }) {
   final services = AppServices(
     features: features ?? AppFeatures.personal(),
-    groups: StubGroupsRepository(),
+    groups: groups ?? StubGroupsRepository(),
     members: StubMembershipRepository(),
     seasons: StubSeasonsRepository(),
     players: players ?? StubPlayersRepository(),
