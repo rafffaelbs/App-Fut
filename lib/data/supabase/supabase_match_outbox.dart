@@ -52,6 +52,9 @@ class SupabaseMatchOutbox implements MatchOutbox {
   Timer? _retryTimer;
   int _retryDelaySeconds = 5;
 
+  @visibleForTesting
+  Timer? get retryTimer => _retryTimer;
+
   static List<Map<String, dynamic>> _readFromPrefs(SharedPreferences prefs) {
     final raw = prefs.getString(_prefsKey);
     if (raw == null || raw.isEmpty) return [];
@@ -236,7 +239,13 @@ class SupabaseMatchOutbox implements MatchOutbox {
     }
     if (found) {
       await _write(prefs, jobs);
-      await flush();
+      if (_flushing) {
+        if (_retryTimer == null || !_retryTimer!.isActive) {
+          _scheduleRetry();
+        }
+      } else {
+        await flush();
+      }
     }
   }
 
