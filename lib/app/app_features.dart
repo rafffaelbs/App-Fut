@@ -18,6 +18,9 @@ class AppFeatures {
   /// Configuração padrão do app personal (Blue Lock / Supabase).
   const factory AppFeatures.personal() = _PersonalAppFeatures;
 
+  /// Configuração do site web somente leitura (sem login, link secreto).
+  const factory AppFeatures.webReadonly() = _WebReadonlyAppFeatures;
+
   /// Autenticação com Supabase Auth (login / sign up).
   final bool hasAuth;
 
@@ -65,5 +68,21 @@ class _PersonalAppFeatures extends AppFeatures {
           hasAdminDebug: true,
           hasDbExportImport: false,
           isReadOnly: false,
+        );
+}
+
+class _WebReadonlyAppFeatures extends AppFeatures {
+  const _WebReadonlyAppFeatures()
+      : super(
+          hasAuth: false,
+          hasMembershipManagement: false,
+          hasCosmetics: true,
+          hasGoalSounds: false,
+          hasAuditLog: false,
+          hasSiteSync: false,
+          hasCloudDraftSync: false,
+          hasAdminDebug: false,
+          hasDbExportImport: false,
+          isReadOnly: true,
         );
 }

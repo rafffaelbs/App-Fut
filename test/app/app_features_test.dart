@@ -19,6 +19,29 @@ void main() {
     });
   });
 
+  group('AppFeatures.webReadonly()', () {
+    test('possui todos os valores esperados para o flavor web_readonly', () {
+      const features = AppFeatures.webReadonly();
+
+      expect(features.hasAuth, isFalse);
+      expect(features.hasMembershipManagement, isFalse);
+      expect(features.hasCosmetics, isTrue);
+      expect(features.hasGoalSounds, isFalse);
+      expect(features.hasAuditLog, isFalse);
+      expect(features.hasSiteSync, isFalse);
+      expect(features.hasCloudDraftSync, isFalse);
+      expect(features.hasAdminDebug, isFalse);
+      expect(features.hasDbExportImport, isFalse);
+      expect(features.isReadOnly, isTrue);
+    });
+
+    test('canAdminister sempre retorna false mesmo com isAdmin=true', () {
+      const features = AppFeatures.webReadonly();
+      expect(features.canAdminister(true), isFalse);
+      expect(features.canAdminister(false), isFalse);
+    });
+  });
+
   group('AppFeatures.canAdminister', () {
     test('isAdmin=true e isReadOnly=false retorna true', () {
       const features = AppFeatures(
