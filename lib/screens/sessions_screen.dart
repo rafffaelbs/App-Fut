@@ -220,12 +220,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
           : null,
     );
   }
-
-  void _denyPermission() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Apenas administradores podem alterar as peladas.')),
-    );
-  }
 }
 
 class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {

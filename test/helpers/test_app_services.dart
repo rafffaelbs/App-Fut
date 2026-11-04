@@ -311,14 +311,18 @@ class StubSessionsRepository implements SessionsRepository {
 }
 
 class StubMatchesRepository implements MatchesRepository {
+  final List<MatchModel> _matches;
+
+  StubMatchesRepository({List<MatchModel> matches = const []}) : _matches = matches;
+
   @override
   Future<void> deleteMatch(String matchId) async {}
 
   @override
-  Future<List<MatchModel>> getMatchesByGroup(String groupId) async => [];
+  Future<List<MatchModel>> getMatchesByGroup(String groupId) async => _matches;
 
   @override
-  Future<List<MatchModel>> getMatchesBySession(String sessionId) async => [];
+  Future<List<MatchModel>> getMatchesBySession(String sessionId) async => _matches;
 
   @override
   Future<void> savePendingMatch({required String matchId, required Map<String, dynamic> match, required List<Map<String, dynamic>> lineups, required List<Map<String, dynamic>> events, bool isRetry = false}) async {}
@@ -354,6 +358,7 @@ class StubPlayerAccountRepository implements PlayerAccountRepository {
 AppServices setupTestAppServices({
   GroupsRepository? groups,
   PlayersRepository? players,
+  MatchesRepository? matches,
   PermissionService? permissions,
   AuthService? auth,
   AppFeatures? features,
@@ -368,7 +373,7 @@ AppServices setupTestAppServices({
     players: players ?? StubPlayersRepository(),
     playerAccounts: playerAccounts ?? StubPlayerAccountRepository(),
     sessions: StubSessionsRepository(),
-    matches: StubMatchesRepository(),
+    matches: matches ?? StubMatchesRepository(),
     sessionArrivals: StubSessionArrivalsRepository(),
     actionLogs: StubActionLogsRepository(),
     auth: auth ?? StubAuthService(),

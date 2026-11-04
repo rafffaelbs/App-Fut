@@ -56,6 +56,32 @@ void main() {
       expect(find.text('Desconhecido'), findsNothing);
     });
 
+    testWidgets('com snapshot completamente VAZIO (sem chave), busca ambos em AppServices.instance.players', (tester) async {
+      // Sem nenhuma chave salva em SharedPreferences
+      final repoPlayers = [
+        const PlayerModel(id: 'p1', name: 'Ronaldo Fenômeno'),
+        const PlayerModel(id: 'p2', name: 'Rivaldo'),
+      ];
+      final fakeRepo = StubPlayersRepository(players: repoPlayers);
+      setupTestAppServices(players: fakeRepo);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: PlayerComparisonScreen(
+            groupId: groupId,
+            player1Id: 'p1',
+            player2Id: 'p2',
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ronaldo Fenômeno'), findsOneWidget);
+      expect(find.text('Rivaldo'), findsOneWidget);
+      expect(find.text('Desconhecido'), findsNothing);
+    });
+
     testWidgets('exibe "Desconhecido" se o jogador não existir nem no snapshot nem no repositório', (tester) async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('players_$groupId', jsonEncode([]));
