@@ -3,11 +3,10 @@ import 'dart:convert';
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:screenshot/screenshot.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import '../utils/share_helper.dart';
 import '../utils/player_identity.dart';
 import '../utils/rating_calculator.dart';
 import '../theme/app_theme.dart';
@@ -625,6 +624,7 @@ class _RankingScreenState extends State<RankingScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _shareRanking() async {
+    if (kIsWeb) return;
     setState(() => _isSharingScreenshot = true);
     await Future.delayed(const Duration(milliseconds: 80));
 
@@ -632,14 +632,7 @@ class _RankingScreenState extends State<RankingScreen> {
       final image = await _screenshotController.capture(pixelRatio: 2.5);
       if (image == null) return;
 
-      final dir = await getTemporaryDirectory();
-      final file = await File(
-        '${dir.path}/ranking_pelada.png',
-      ).writeAsBytes(image);
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Ranking da Pelada 🏆⚽');
+      await shareRankingImage(image);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1551,7 +1544,7 @@ class _RankingScreenState extends State<RankingScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
-          if (!isLoading && leaderboard.isNotEmpty)
+          if (!kIsWeb && !isLoading && leaderboard.isNotEmpty)
             _isSharingScreenshot
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),

@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:app_do_fut/app/app_services.dart';
+import '../utils/share_helper.dart';
 
 class HistoryScreen extends StatefulWidget {
   final String tournamentId;
@@ -143,6 +142,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
 
   Future<void> _exportHistory() async {
+    if (kIsWeb) return;
     if (history.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nada para exportar!")));
       return;
@@ -150,11 +150,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     try {
       String jsonString = const JsonEncoder.withIndent('  ').convert(history);
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/match_history_full.json');
-      await file.writeAsString(jsonString);
-
-      await Share.shareXFiles([XFile(file.path)], text: 'Backup Completo das Partidas');
+      await exportHistoryJson(jsonString);
     } catch (e) {
       debugPrint("Erro ao exportar: $e");
       if (!mounted) return;
@@ -255,11 +251,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         iconTheme: const IconThemeData(color: AppColors.textWhite),
         title: const Text("Histórico", style: TextStyle(color: AppColors.textWhite)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download, color: Colors.greenAccent),
-            onPressed: _exportHistory,
-            tooltip: "Exportar",
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.download, color: Colors.greenAccent),
+              onPressed: _exportHistory,
+              tooltip: "Exportar",
+            ),
           if (!AppServices.instance.features.isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
