@@ -398,3 +398,30 @@ Resolvido em fix/players-cache
      - Atualizados os tópicos "Onde estamos" e "Próximos passos" para refletir a conclusão da Fase 1b e apontar para a Fase 2 (site).
   6. `lib/main_personal.dart`:
      - Comentário com texto de instrução da tarefa em `_ProfileCheckState.initState` substituído por comentário normal de código.
+
+---
+
+### 32. Levantamento de compatibilidade com Web e modo somente leitura (Fase 2 / T5)
+- **Mapeamento de pacotes e APIs nativas (`grep -rn "dart:io|path_provider|screenshot|share_plus|file_picker|audioplayers" lib`):**
+  1. `dart:io` e `path_provider`:
+     - Ocorrência: `lib/utils/share_helper_io.dart:1,3`.
+     - Compatibilidade: Isolado em helper com compilação condicional (`share_helper.dart` exporta `share_helper_stub.dart` por padrão e `share_helper_io.dart` apenas se `dart.library.io` estiver disponível). Em `RankingScreen` e `HistoryScreen`, os botões de compartilhamento/exportação foram protegidos por `kIsWeb`, ficando invisíveis no navegador. Nenhuma tela de leitura acessa `dart:io` na web.
+  2. `share_plus`:
+     - Ocorrência: `lib/utils/share_helper_io.dart:4`.
+     - Compatibilidade: Isolado em `share_helper_io.dart` via compilação condicional.
+  3. `screenshot`:
+     - Ocorrências: `lib/screens/ranking_screen.dart:8, 41, 632, 1658, 2195`.
+     - Compatibilidade: O pacote opera capturando widgets na árvore de renderização do Flutter (`RenderRepaintBoundary`). É compatível com web, porém a ação de compartilhamento que o acionava via `_shareRanking()` foi desabilitada no web (`if (kIsWeb) return;` e botão oculto na AppBar).
+  4. `audioplayers`:
+     - Ocorrências:
+       - `lib/screens/match_screen.dart:5`: Tela de partida ao vivo omitida na web quando `isReadOnly = true` (`TournamentDashboardScreen` monta abas apenas para `RankingScreen` e `HistoryScreen`).
+       - `lib/screens/manage_badges_screen.dart:6`: Tela de gestão inacessível em modo somente leitura (`hasMembershipManagement=false`, `isReadOnly=true`).
+       - `lib/screens/player_detail.dart:9`: O pacote possui implementação web (`audioplayers_web`); adicionalmente, os controles de reprodução/atribuição de áudios de gol estão condicionados a `AppServices.instance.features.hasGoalSounds` (desativado na web: `false`).
+  5. `file_picker`:
+     - Nenhuma ocorrência em `lib/` (presente em `pubspec.yaml`, mas não utilizado no código Dart).
+- **Validação de fallback com snapshot local `players_<groupId>` vazio:**
+  - Verificado que telas como `PlayerComparisonScreen` e `RankingScreen` realizam fallback transparente para `AppServices.instance.players.getPlayersByGroup(groupId)` quando a chave `players_<groupId>` do `SharedPreferences` não existe.
+  - Cobertura assegurada por testes unitários dedicados em `test/screens/player_comparison_test.dart` e `test/screens/ranking_screen_fallback_test.dart`.
+- **Compilação Web:**
+  - Criado o entrypoint provisório `lib/main_web.dart` com `AppFeatures.webReadonly()`.
+  - Executado `flutter build web -t lib/main_web.dart` com sucesso (código de saída 0).
