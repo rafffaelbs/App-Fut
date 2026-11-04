@@ -149,6 +149,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     return SessionListTile(
       session: item,
       participants: _participants[item.id] ?? const [],
+      showActions: _canAdminister,
       onOpen: () {
         Navigator.push(
           context,
@@ -162,8 +163,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
           ),
         );
       },
-      onEdit: _canAdminister ? () => _openSessionForm(existing: item) : _denyPermission,
-      onDelete: _canAdminister ? () => _confirmDeleteSession(item) : _denyPermission,
+      onEdit: _canAdminister ? () => _openSessionForm(existing: item) : null,
+      onDelete: _canAdminister ? () => _confirmDeleteSession(item) : null,
     );
   }
 

@@ -111,11 +111,12 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle, color: Colors.white),
-            tooltip: 'Meu Perfil',
-            onPressed: _openMyProfile,
-          ),
+          if (AppServices.instance.features.hasAuth)
+            IconButton(
+              icon: const Icon(Icons.account_circle, color: Colors.white),
+              tooltip: 'Meu Perfil',
+              onPressed: _openMyProfile,
+            ),
           // Engrenagem (Peladas / Elenco / Estatísticas): só admin vê (se features permitir).
           if (!_checkingAdmin && AppServices.instance.features.canAdminister(_isAdmin))
             IconButton(

@@ -6,16 +6,18 @@ import 'stacked_avatars.dart';
 class SessionListTile extends StatelessWidget {
   final SessionModel session;
   final VoidCallback onOpen;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final bool showActions;
   final List<Map<String, dynamic>> participants;
 
   const SessionListTile({
     super.key,
     required this.session,
     required this.onOpen,
-    required this.onEdit,
-    required this.onDelete,
+    this.onEdit,
+    this.onDelete,
+    this.showActions = true,
     this.participants = const [],
   });
 
@@ -95,19 +97,20 @@ class SessionListTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: AppColors.textDim,
-                  ),
-                  color: AppColors.surfaceElevated,
-                  onSelected: (String value) {
-                    if (value == 'edit') {
-                      onEdit();
-                    } else if (value == 'delete') {
-                      onDelete();
-                    }
-                  },
+                if (showActions && (onEdit != null || onDelete != null))
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.more_vert,
+                      color: AppColors.textDim,
+                    ),
+                    color: AppColors.surfaceElevated,
+                    onSelected: (String value) {
+                      if (value == 'edit') {
+                        onEdit?.call();
+                      } else if (value == 'delete') {
+                        onDelete?.call();
+                      }
+                    },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
                     const PopupMenuItem<String>(

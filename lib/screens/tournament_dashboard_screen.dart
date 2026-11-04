@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:app_do_fut/app/app_services.dart';
 import '../constants/app_colors.dart';
 
 // --- IMPORT YOUR ACTUAL SCREENS ---
@@ -30,32 +31,49 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Map your real screens to the tabs!
-    final List<Widget> screens = [
-      // Tab 0: The Live Match
-      MatchScreen(
-        tournamentName: widget.tournamentName,
-        tournamentId: widget.tournamentId,
-        totalPlayers: widget.totalPlayers,
-        groupId:
-            widget.groupId, // We will update MatchScreen to accept this next!
-      ),
+    final isReadOnly = AppServices.instance.features.isReadOnly;
 
-      // Tab 1: Today's Ranking
+    final List<Widget> screens = [
+      // Tab 0: The Live Match (não existe na web/somente leitura)
+      if (!isReadOnly)
+        MatchScreen(
+          tournamentName: widget.tournamentName,
+          tournamentId: widget.tournamentId,
+          totalPlayers: widget.totalPlayers,
+          groupId: widget.groupId,
+        ),
+
+      // Today's Ranking
       RankingScreen(
         groupId: widget.groupId,
         tournamentId: widget.tournamentId,
       ),
 
-      // Tab 2: Today's Match History
+      // Today's Match History
       HistoryScreen(tournamentId: widget.tournamentId, groupId: widget.groupId),
     ];
-    // IMPORTANT: We remove the AppBar from here, because MatchScreen,
-    // RankingScreen, and HistoryScreen ALREADY have their own AppBars!
-    // We just show the active screen and the bottom nav.
+
+    final List<BottomNavigationBarItem> navItems = [
+      if (!isReadOnly)
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.sports_soccer),
+          label: "Campo",
+        ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.leaderboard),
+        label: "Ranking",
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.history),
+        label: "Histórico",
+      ),
+    ];
+
+    final safeIndex = _currentIndex.clamp(0, screens.length - 1);
+
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
-      body: screens[_currentIndex], // Shows the active screen
+      body: screens[safeIndex],
 
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -71,22 +89,9 @@ class _TournamentDashboardScreenState extends State<TournamentDashboardScreen> {
           unselectedItemColor: AppColors.textDim,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontSize: 12),
-          currentIndex: _currentIndex,
+          currentIndex: safeIndex,
           onTap: (index) => setState(() => _currentIndex = index),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.sports_soccer),
-              label: "Campo",
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.leaderboard),
-              label: "Ranking",
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history),
-              label: "Histórico",
-            ),
-          ],
+          items: navItems,
         ),
       ),
     );

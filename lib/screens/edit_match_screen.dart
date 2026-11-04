@@ -496,17 +496,18 @@ class _EditMatchScreenState extends State<EditMatchScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          TextButton(
-            onPressed: AppServices.instance.features.isReadOnly ? null : _saveChanges,
-            child: const Text(
-              "SALVAR",
-              style: TextStyle(
-                color: AppColors.accentBlue,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+          if (!AppServices.instance.features.isReadOnly)
+            TextButton(
+              onPressed: _saveChanges,
+              child: const Text(
+                "SALVAR",
+                style: TextStyle(
+                  color: AppColors.accentBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: SingleChildScrollView(

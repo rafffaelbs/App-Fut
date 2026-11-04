@@ -10,7 +10,6 @@ import 'package:audioplayers/audioplayers.dart';
 import '../models/season_model.dart';
 import '../models/player_badge_model.dart';
 import 'package:app_do_fut/app/app_services.dart';
-import '../data/supabase/supabase_config.dart';
 import '../utils/constants.dart';
 import '../utils/player_identity.dart';
 import '../utils/overall_calculator.dart';
@@ -61,7 +60,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   bool get _canEditProfile {
     if (_canAdminister) return true;
     if (AppServices.instance.features.isReadOnly) return false;
-    final currentUserId = SupabaseConfig.currentUserId;
+    final currentUserId = AppServices.instance.auth.currentUserId;
     return currentUserId != null && _creatorId != null && currentUserId == _creatorId;
   }
 
