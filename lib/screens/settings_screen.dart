@@ -83,29 +83,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderSubtle),
       ),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 22),
           ),
-          child: Icon(icon, color: iconColor, size: 22),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.textWhite,
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textWhite,
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
           ),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(color: AppColors.textDim, fontSize: 12),
+          ),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.textDim),
+          onTap: onTap,
         ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: AppColors.textDim, fontSize: 12),
-        ),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textDim),
-        onTap: onTap,
       ),
     );
   }
@@ -124,23 +127,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderSubtle),
       ),
-      child: SwitchListTile(
-        activeThumbColor: AppColors.accentBlue,
-        secondary: Icon(icon, color: AppColors.accentBlue, size: 22),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.textWhite,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
+      child: Material(
+        color: Colors.transparent,
+        child: SwitchListTile(
+          activeThumbColor: AppColors.accentBlue,
+          secondary: Icon(icon, color: AppColors.accentBlue, size: 22),
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textWhite,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
           ),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(color: AppColors.textDim, fontSize: 12),
+          ),
+          value: value,
+          onChanged: onChanged,
         ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: AppColors.textDim, fontSize: 12),
-        ),
-        value: value,
-        onChanged: onChanged,
       ),
     );
   }
