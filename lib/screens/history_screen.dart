@@ -311,7 +311,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final List<dynamic> whiteTeam = match['players']?['white'] ?? [];
 
                 return GestureDetector(
-                  onLongPress: () => _showDebugInfo(match),
+                  onLongPress: AppServices.instance.features.isReadOnly
+                      ? null
+                      : () => _showDebugInfo(match),
                   child: Card(
                   color: AppColors.headerBlue,
                   margin: const EdgeInsets.only(bottom: 12),
@@ -414,6 +416,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _showDebugInfo(Map<String, dynamic> match) {
+    if (AppServices.instance.features.isReadOnly) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0D1B2A),
