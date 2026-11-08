@@ -188,10 +188,10 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   6. `lib/screens/edit_match_screen.dart:498` (Botão `SALVAR` no `AppBar`): Condicionado a `!isReadOnly`.
   7. `lib/screens/match_screen.dart:1045` (Botão "Encerrar Partida" no diálogo de confirmação): Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
   8. `lib/screens/match_screen.dart:3361` (`_finishMatch`): Grava o encerramento da partida na fila outbox e no histórico local. Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
-  9. `lib/main_personal.dart:186` (`_showGroupDialog`): Criar novo grupo ou editar nome do grupo. Ação do dono da conta pessoal (sem papel admin por grupo). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
-  10. `lib/main_personal.dart:312` (`_deleteGroup`): Excluir grupo da conta. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
-  11. `lib/main_personal.dart:644` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`.
-  12. `lib/main_personal.dart:675` (FAB de criar grupo): Condicionado a `!isReadOnly`.
+  9. `lib/main_personal.dart:258` (`_showGroupDialog`): Criar novo grupo ou editar nome do grupo. Ação do dono da conta pessoal (sem papel admin por grupo). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  10. `lib/main_personal.dart:384` (`_deleteGroup`): Excluir grupo da conta. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  11. `lib/main_personal.dart:834` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`.
+  12. `lib/main_personal.dart:870` (FAB de criar grupo): Condicionado a `!isReadOnly`.
   13. `lib/screens/player_detail.dart:1004, 3101` (`_savePlayerIcon` / `_openIconPicker`): Atualização de foto/ícone de perfil. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly`.
   14. `lib/screens/player_detail.dart:1052, 1105, 3752` (`_saveGoalSound` / `_showAudioPickerModal`): Escolha de som de gol. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly` e `hasGoalSounds`.
   15. `lib/screens/manage_badges_screen.dart:1153, 1558, 1667, 1737` (`_saveBadges`, botões e FAB de troféus): Salvar e excluir insígnias e troféus personalizados. Não exigia admin na main. No modo read-only não deve existir. Condicionado a `!isReadOnly`.
@@ -425,3 +425,61 @@ Resolvido em fix/players-cache
 - **Compilação Web:**
   - Criado o entrypoint provisório `lib/main_web.dart` com `AppFeatures.webReadonly()`.
   - Executado `flutter build web -t lib/main_web.dart` com sucesso (código de saída 0).
+
+---
+
+### 33. Menu ⋮ de editar/excluir pelada oculto para não-admins (`sessions_screen.dart` e `session_list_tile.dart`)
+- **O que viu:**
+  - Em `lib/screens/sessions_screen.dart:152`, `SessionListTile` passou a receber `showActions: _canAdminister` (onde `_canAdminister = AppServices.instance.features.canAdminister(_isAdmin)`).
+  - Em `lib/widgets/session/session_list_tile.dart:100`, o `PopupMenuButton` só é instanciado se `showActions && (onEdit != null || onDelete != null)`.
+  - Antes desta alteração, no app personal (`isReadOnly = false`), o menu ⋮ aparecia para qualquer usuário e, ao tocar em "Editar" ou "Excluir", chamava `_denyPermission`, que exibia a SnackBar *"Apenas administradores podem alterar as peladas."*.
+- **Impacto / Alinhamento:**
+  - No app personal, o menu ⋮ passou a ficar completamente escondido para quem não é administrador do grupo.
+  - Esse comportamento está alinhado à regra geral descrita na Seção 5 do `ARCHITECTURE.md` (*"Regra: tela de admin/engrenagem/edição aparece se AppFeatures permitir e PermissionService.isAdmin for true"*) e ao item 2.4 do Plano de Ação (*"Esconder em vez de mostrar e recusar"*).
+
+---
+
+### 34. Auditoria das gravações em SharedPreferences em `lib/screens/player_detail.dart`
+- **Mapeamento das 5 ocorrências de `prefs.setString` e caminhos de execução:**
+  1. **Linha 1237 (`_savePlayerName`):**
+     - **Chave:** `'players_${widget.groupId}'` (atualiza nome do jogador no cache do elenco).
+     - **Botão / Fluxo:** Acionado pelo botão `OutlinedButton.icon` com rótulo `'Editar nome'` (linha 3930), que abre o diálogo `_showEditNameDialog` (linha 1883). Ao pressionar 'Salvar' (linha 1914), chama `_savePlayerName(newName)`.
+     - **Proteção:**
+       - Na UI: botão condicionado a `if (_canEditProfile)`.
+       - No diálogo: `_showEditNameDialog` inicia com guard `if (!_canEditProfile) return;`.
+       - No método de gravação: `_savePlayerName` inicia com guard `if (!_canEditProfile) return;`.
+       - O getter `_canEditProfile` (linhas 60-65) retorna `false` quando `isReadOnly == true` (pois `_canAdminister` é `false` e `if (AppServices.instance.features.isReadOnly) return false;`).
+       - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
+  2. **Linha 1282 (`_savePlayerIcon`):**
+     - **Chave:** `'players_${widget.groupId}'` (atualiza ícone/foto do jogador no cache do elenco).
+     - **Botão / Fluxo:** O usuário toca no card `FifaCard` (`onIconTap: _canEditProfile ? _openIconPicker : null`, linha 3870) ou no botão `OutlinedButton.icon` com rótulo `'Mudar foto'` (linha 3920, condicionado a `if (_canEditProfile && _pendingIcon == null)`). Após selecionar um ícone no picker, surge o botão `ElevatedButton.icon` `'Salvar Ícone'` (linha 3878), que chama `_savePlayerIcon(_pendingIcon!)`.
+     - **Proteção:**
+       - Na UI: tanto o toque no avatar quanto o botão 'Mudar foto' são restritos a `_canEditProfile`.
+       - No método de gravação: `_savePlayerIcon` inicia com guard `if (!_canEditProfile) return;`.
+       - Como `_canEditProfile` é `false` quando `isReadOnly = true`, o fluxo inteiro está protegido.
+       - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
+  3. **Linha 1336 (`_saveGoalSound`):**
+     - **Chave:** `'players_${widget.groupId}'` (atualiza URL/label de som de gol no cache do elenco).
+     - **Botão / Fluxo:** Acionado pelo container de som de gol (linha 3963, condicionado a `if (AppServices.instance.features.hasGoalSounds && _canEditProfile)`), que abre o modal `_showAudioPickerModal` (linha 1362). No modal, o botão "Salvar Som Selecionado" / "Usar Som Padrão" (linha 1585) chama `_saveGoalSound(...)`, e o botão "Redefinir para Padrão" (linha 1608) chama `_saveGoalSound(null)`.
+     - **Proteção:**
+       - Na UI: bloco visível apenas se `hasGoalSounds && _canEditProfile`. Na web, `hasGoalSounds = false` e `isReadOnly = true`.
+       - No modal: `_showAudioPickerModal` possui guard `if (!AppServices.instance.features.hasGoalSounds || !_canEditProfile) return;`.
+       - No método de gravação: `_saveGoalSound` possui guard `if (!AppServices.instance.features.hasGoalSounds || !_canEditProfile) return;`.
+       - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
+  4. **Linha 1653 (`_saveManualBadge`):**
+     - **Chave:** `'players_${widget.groupId}'` (adiciona troféu manual ao cache do elenco).
+     - **Botão / Fluxo:** Acionado pelo botão `IconButton` com tooltip `'Dar Prêmio Manual'` (linha 2879), que abre `_showAddManualBadgeDialog` (linha 2066). Ao tocar em um troféu disponível na lista (linha 2219), chama `_saveManualBadge(...)`.
+     - **Proteção:**
+       - Na UI: botão condicionado a `if (_canAdminister)`.
+       - No método de gravação: `_saveManualBadge` possui guard `if (!_canAdminister) return;`.
+       - O getter `_canAdminister` avalia `AppServices.instance.features.canAdminister(_isAdmin)`, que retorna `!isReadOnly && _isAdmin`. Em modo somente leitura, é estritamente `false`.
+       - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
+  5. **Linha 2314 (`_showRemoveManualBadgeDialog`):**
+     - **Chave:** `'players_${widget.groupId}'` (remove troféu manual do cache do elenco).
+     - **Botão / Fluxo:** Acionado por long-press em um card de insígnia manual no método `_buildBadgeCard` (linha 3014): `if (isManual && index != null && _canAdminister) { _showRemoveManualBadgeDialog(...); }`. No diálogo de confirmação "Remover Prêmio?", o botão "Remover" (linha 2259) remove o troféu e persiste na chave.
+     - **Proteção:**
+       - Na UI: o `onLongPress` é verificado com `_canAdminister`.
+       - No diálogo: `_showRemoveManualBadgeDialog` possui guard `if (!_canAdminister) return;`.
+       - Como `_canAdminister` é `false` quando `isReadOnly = true`, o fluxo é protegido.
+       - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
+- **Conclusão:** Todas as 5 gravações em `SharedPreferences` de `player_detail.dart` já estão protegidas por guards de nível de método e por condicionais na UI via `_canEditProfile`, `_canAdminister` e `hasGoalSounds`, todas bloqueadas quando `isReadOnly = true`. Nenhuma chave de `SharedPreferences` foi alterada.
