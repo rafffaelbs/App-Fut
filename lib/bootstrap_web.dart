@@ -14,61 +14,73 @@ import 'data/supabase/readonly/token_sessions_repository.dart';
 import 'data/supabase/supabase_config.dart';
 import 'models/group_model.dart';
 
+/// Status do resultado da inicialização web.
+enum BootstrapWebStatus {
+  success,
+  invalidLink,
+  connectionError,
+}
+
 /// Resultado da inicialização web via token.
 class BootstrapWebResult {
-  final bool isValid;
+  final BootstrapWebStatus status;
   final GroupModel? group;
   final SnapshotSource? snapshotSource;
 
   const BootstrapWebResult._({
-    required this.isValid,
+    required this.status,
     this.group,
     this.snapshotSource,
   });
+
+  bool get isSuccess => status == BootstrapWebStatus.success;
+  bool get isInvalidLink => status == BootstrapWebStatus.invalidLink;
+  bool get isConnectionError => status == BootstrapWebStatus.connectionError;
+
+  /// Compatibilidade com checagens booleanas legadas.
+  bool get isValid => isSuccess;
 
   factory BootstrapWebResult.success({
     required GroupModel group,
     required SnapshotSource snapshotSource,
   }) {
     return BootstrapWebResult._(
-      isValid: true,
+      status: BootstrapWebStatus.success,
       group: group,
       snapshotSource: snapshotSource,
     );
   }
 
   factory BootstrapWebResult.invalid() {
-    return const BootstrapWebResult._(isValid: false);
+    return const BootstrapWebResult._(status: BootstrapWebStatus.invalidLink);
+  }
+
+  factory BootstrapWebResult.connectionError() {
+    return const BootstrapWebResult._(
+      status: BootstrapWebStatus.connectionError,
+    );
   }
 }
 
 /// Extrai o token de compartilhamento a partir da URL.
 ///
-/// Formato preferencial: `https://<site>/#/g/<token>` (Uri.fragment: `/g/<token>` ou `g/<token>`).
-/// Fallback: rota direta `https://<site>/g/<token>` (Uri.pathSegments: `['g', '<token>']`).
+/// Aceita estritamente o fragmento `#/g/<token>`.
 String? extractTokenFromUrl(Uri uri) {
   final fragment = uri.fragment.trim();
-  if (fragment.isNotEmpty) {
-    var clean = fragment.startsWith('/') ? fragment.substring(1) : fragment;
-    if (clean.contains('?')) {
-      clean = clean.split('?').first;
-    }
-    final parts = clean.split('/');
-    if (parts.length >= 2 && parts[0] == 'g' && parts[1].isNotEmpty) {
-      return parts[1];
-    }
-  }
+  if (fragment.isEmpty) return null;
 
-  final segments = uri.pathSegments;
-  if (segments.length >= 2 && segments[0] == 'g' && segments[1].isNotEmpty) {
-    var token = segments[1];
-    if (token.contains('?')) {
-      token = token.split('?').first;
-    }
-    return token;
-  }
+  var clean = fragment.startsWith('/') ? fragment.substring(1) : fragment;
+  if (!clean.startsWith('g/')) return null;
 
-  return null;
+  var token = clean.substring(2);
+  if (token.contains('?')) {
+    token = token.split('?').first;
+  }
+  if (token.contains('/')) {
+    token = token.split('/').first;
+  }
+  token = token.trim();
+  return token.isNotEmpty ? token : null;
 }
 
 /// Inicializa o Supabase, lê o token, carrega o snapshot e monta o [AppServices].
@@ -83,8 +95,8 @@ Future<BootstrapWebResult> bootstrapWeb({
 
   try {
     await SupabaseConfig.initialize();
-  } catch (e) {
-    debugPrint('Aviso ao inicializar SupabaseConfig: $e');
+  } catch (_) {
+    debugPrint('Aviso ao inicializar SupabaseConfig.');
   }
 
   final token = tokenOverride ?? extractTokenFromUrl(Uri.base);
@@ -106,7 +118,7 @@ Future<BootstrapWebResult> bootstrapWeb({
       return BootstrapWebResult.invalid();
     }
 
-    final group = GroupModel.fromMap(groupData);
+    final group = source.cachedGroup ?? GroupModel.fromMap(groupData);
     final tokenPlayers = TokenPlayersRepository(source);
 
     AppServices.instance = AppServices(
@@ -133,8 +145,11 @@ Future<BootstrapWebResult> bootstrapWeb({
       group: group,
       snapshotSource: source,
     );
-  } catch (e) {
-    debugPrint('Erro ao inicializar bootstrapWeb com token: $e');
+  } on InvalidLinkException {
+    debugPrint('Token inválido ou link desativado.');
     return BootstrapWebResult.invalid();
+  } catch (_) {
+    debugPrint('Falha ao inicializar bootstrapWeb.');
+    return BootstrapWebResult.connectionError();
   }
 }

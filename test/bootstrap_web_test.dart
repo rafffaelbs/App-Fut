@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/bootstrap_web.dart';
 import 'package:app_do_fut/data/supabase/readonly/snapshot_source.dart';
@@ -28,9 +29,9 @@ void main() {
       expect(extractTokenFromUrl(uri), 'token-sem-barra');
     });
 
-    test('extrai token de pathSegments /g/<token>', () {
+    test('rejeita rotas de pathSegments /g/<token> (aceita apenas fragmento)', () {
       final uri = Uri.parse('https://app-fut.pages.dev/g/token-direto');
-      expect(extractTokenFromUrl(uri), 'token-direto');
+      expect(extractTokenFromUrl(uri), isNull);
     });
 
     test('retorna nulo quando não há rota de grupo', () {
@@ -47,20 +48,44 @@ void main() {
         tokenOverride: '',
         initializeFlutterBinding: false,
       );
+      expect(res.isInvalidLink, isTrue);
       expect(res.isValid, isFalse);
       expect(res.group, isNull);
     });
 
-    test('retorna invalid quando snapshot não possui grupo ou falha', () async {
+    test('retorna invalid quando ocorre InvalidLinkException', () async {
       final source = SnapshotSource(
         token: 'bad-token',
-        initialData: {'seasons': []}, // sem chave 'group'
+        rpcCaller: (token) async {
+          throw const PostgrestException(
+            message: 'invalid_link',
+            code: 'P0001',
+          );
+        },
       );
       final res = await bootstrapWeb(
         tokenOverride: 'bad-token',
         snapshotSourceOverride: source,
         initializeFlutterBinding: false,
       );
+      expect(res.isInvalidLink, isTrue);
+      expect(res.isValid, isFalse);
+    });
+
+    test('retorna connectionError quando ocorre erro de rede ou timeout', () async {
+      final source = SnapshotSource(
+        token: 'net-token',
+        rpcCaller: (token) async {
+          throw Exception('SocketException: Failed host lookup');
+        },
+      );
+      final res = await bootstrapWeb(
+        tokenOverride: 'net-token',
+        snapshotSourceOverride: source,
+        initializeFlutterBinding: false,
+      );
+      expect(res.isConnectionError, isTrue);
+      expect(res.isInvalidLink, isFalse);
       expect(res.isValid, isFalse);
     });
 
@@ -85,6 +110,7 @@ void main() {
         initializeFlutterBinding: false,
       );
 
+      expect(res.isSuccess, isTrue);
       expect(res.isValid, isTrue);
       expect(res.group, isNotNull);
       expect(res.group!.id, 'grp-valid');
@@ -102,7 +128,7 @@ void main() {
   });
 
   group('AppWeb Widgets', () {
-    testWidgets('exibe tela de link inválido quando result.isValid é false', (tester) async {
+    testWidgets('exibe tela de link inválido quando result.isInvalidLink é true', (tester) async {
       await tester.pumpWidget(
         AppWeb(result: BootstrapWebResult.invalid()),
       );
@@ -112,6 +138,32 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(InvalidLinkScreen), findsOneWidget);
+    });
+
+    testWidgets('exibe tela de erro de conexão com botão Tentar de novo', (tester) async {
+      int retryCount = 0;
+      await tester.pumpWidget(
+        AppWeb(
+          result: BootstrapWebResult.connectionError(),
+          bootstrapCaller: () async {
+            retryCount++;
+            return BootstrapWebResult.connectionError();
+          },
+        ),
+      );
+
+      expect(
+        find.text('Não foi possível carregar. Verifique a internet'),
+        findsOneWidget,
+      );
+      expect(find.byType(ConnectionErrorScreen), findsOneWidget);
+
+      final retryBtn = find.text('Tentar de novo');
+      expect(retryBtn, findsOneWidget);
+
+      await tester.tap(retryBtn);
+      await tester.pump();
+      expect(retryCount, 1);
     });
 
     testWidgets('abre painel do grupo quando result é válido', (tester) async {
