@@ -13,21 +13,14 @@ class TokenPlayersRepository implements PlayersRepository, PlayerAccountReposito
 
   @override
   Future<List<PlayerModel>> getPlayersByGroup(String groupId) async {
-    final list = _source.players;
-    return list
-        .whereType<Map>()
-        .map((m) => PlayerModel.fromMap(Map<String, dynamic>.from(m)))
-        .toList();
+    return _source.cachedPlayers;
   }
 
   @override
   Future<PlayerModel?> getPlayerById(String playerId) async {
-    final list = _source.players;
-    final raw = list.whereType<Map>().firstWhereOrNull(
-          (m) => m['id']?.toString() == playerId,
-        );
-    if (raw == null) return null;
-    return PlayerModel.fromMap(Map<String, dynamic>.from(raw));
+    return _source.cachedPlayers.firstWhereOrNull(
+      (p) => p.id == playerId,
+    );
   }
 
   // PlayerAccountRepository
