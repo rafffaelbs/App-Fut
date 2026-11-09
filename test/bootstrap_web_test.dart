@@ -29,6 +29,11 @@ void main() {
       expect(extractTokenFromUrl(uri), 'token-sem-barra');
     });
 
+    test('extrai token de rota interna /g/<token>', () {
+      final uri = Uri.parse('/g/token-rota');
+      expect(extractTokenFromUrl(uri), 'token-rota');
+    });
+
     test('rejeita rotas de pathSegments /g/<token> (aceita apenas fragmento)', () {
       final uri = Uri.parse('https://app-fut.pages.dev/g/token-direto');
       expect(extractTokenFromUrl(uri), isNull);
@@ -39,6 +44,8 @@ void main() {
       expect(extractTokenFromUrl(Uri.parse('https://app-fut.pages.dev/#/')), isNull);
       expect(extractTokenFromUrl(Uri.parse('https://app-fut.pages.dev/#/home')), isNull);
       expect(extractTokenFromUrl(Uri.parse('https://app-fut.pages.dev/#/g/')), isNull);
+      expect(extractTokenFromUrl(Uri.parse('/')), isNull);
+      expect(extractTokenFromUrl(Uri.parse('/g/')), isNull);
     });
   });
 
@@ -201,6 +208,30 @@ void main() {
       // Não exibe engrenagem de configurações nem botão de perfil
       expect(find.byIcon(Icons.settings), findsNothing);
       expect(find.byIcon(Icons.account_circle), findsNothing);
+
+      // Verifica que a rota inicial contém o token
+      final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(materialApp.initialRoute, '/g/token-ui');
+    });
+
+    testWidgets('define initialRoute com token quando há erro de conexão', (tester) async {
+      await tester.pumpWidget(
+        AppWeb(
+          result: BootstrapWebResult.connectionError(token: 'token-net-err'),
+        ),
+      );
+
+      final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(materialApp.initialRoute, '/g/token-net-err');
+    });
+
+    testWidgets('define initialRoute como "/" quando link é inválido', (tester) async {
+      await tester.pumpWidget(
+        AppWeb(result: BootstrapWebResult.invalid()),
+      );
+
+      final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(materialApp.initialRoute, '/');
     });
   });
 }
