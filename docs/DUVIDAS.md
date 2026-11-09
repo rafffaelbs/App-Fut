@@ -539,4 +539,31 @@ Resolvido em fix/players-cache
 - **Conclusão:**
   - Com `isReadOnly = true` (modo web somente leitura), a aba "Campo" e a tela `MatchScreen` não são construídas nem acessíveis de nenhum ponto da aplicação web. Nenhuma outra tela, rota ou botão abre `MatchScreen`.
 
+---
+
+### 38. Causa da perda do fragmento `#/g/<token>` na URL no Flutter Web e correção — Tarefa T6b (Correção 2)
+- **O que viu (`lib/main_web.dart:71-103` e `lib/bootstrap_web.dart:24-85`):**
+  1. **Investigação da perda do fragmento na barra de endereços:**
+     - Ao acessar `http://localhost:5000/#/g/<token>`, o `bootstrapWeb()` lia o token de `Uri.base.fragment` e carregava o snapshot com sucesso.
+     - Em seguida, `AppWeb` instanciava o `MaterialApp` utilizando apenas a propriedade `home: GroupDashboardScreen(...)`, sem definir `initialRoute`, `onGenerateInitialRoutes` ou `onGenerateRoute`.
+     - No framework do Flutter (`packages/flutter/lib/src/widgets/app.dart:1711`), o `Navigator` da `WidgetsApp` é construído com `reportsRouteUpdateToEngine: true`.
+     - Quando `initialRoute` não é explicitamente definida ou quando o gerador de rotas padrão do `Navigator` (`Navigator.defaultGenerateInitialRoutes`) não encontra rotas configuradas para `/g/<token>`, o `Navigator` gera a rota padrão `'/'` (`Navigator.defaultRouteName`).
+     - Em `NavigatorState._flushHistory` (`navigator.dart:4571-4576`), ao registrar uma rota nomeada diferente da última anunciada, o Flutter executa:
+       ```dart
+       SystemNavigator.routeInformationUpdated(uri: Uri.parse(routeName));
+       ```
+     - O canal de plataforma web do Flutter (`BrowserHistory` / `HashUrlStrategy`) repassa essa URI ao navegador via `window.history.replaceState`, reescrevendo a URL na barra de endereços para `http://localhost:5000/#/` (ou `http://localhost:5000/`).
+     - Foi verificado via grep que nenhuma tela ou componente utiliza `pushReplacement` ou `pushNamed`. A perda ocorria estritamente no reporte da rota inicial `'/'` do `Navigator` ao engine do Flutter Web.
+     - Consequentemente, ao teclar F5, o navegador recarregava a URL sem o fragmento hash, fazendo `extractTokenFromUrl(Uri.base)` retornar `null` e exibindo a mensagem "Link inválido ou desativado".
+  2. **Correção implementada:**
+     - Em `lib/main_web.dart`:
+       - Definida a rota inicial como `initialRoute: '/g/$token'`.
+       - Fornecidos `onGenerateInitialRoutes` e `onGenerateRoute` mapeando `/g/$token` para `GroupDashboardScreen` com `RouteSettings(name: initialRoute)`.
+       - Implementado o `_WebTokenRouteObserver` (estendendo `NavigatorObserver`) que monitora `didPush`, `didPop`, `didReplace` e `didRemove`, assegurando via `SystemNavigator.routeInformationUpdated` que a URL do navegador sempre contenha `/g/$token`.
+       - Em caso de falha de conexão (`ConnectionErrorScreen`), a rota inicial também preserva `/g/$token` (via `BootstrapWebResult.token`), permitindo que retentativas ou recargas (F5) não percam o token.
+     - Em `lib/bootstrap_web.dart`:
+       - `BootstrapWebResult` preserva o token em memória.
+       - `extractTokenFromUrl` aceita tanto o fragmento `#/g/<token>` quanto a rota interna `/g/<token>` (quando não houver domínio/scheme), mantendo a rejeição a URLs completas sem fragmento (como `https://.../g/<token>`).
+     - **Armazenamento:** O token é mantido estritamente em memória e na URL; nenhum dado é gravado em `localStorage`, `sessionStorage` ou `cookies`.
+
 

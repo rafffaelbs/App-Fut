@@ -8,10 +8,10 @@
 
 | # | Tarefa | Quem | Branch | Situação |
 |---|---|---|---|---|
-| T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | 🔎 feita pelo AG em 03/11; **aguardando revisão do Claude Code**, `flutter analyze`/`test` e teste manual antes do merge |
+| T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | ✅ na `main` em 08/11/2026 (revisada, 233 testes, testada no celular) |
 | T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (`docs/sql/`) | ✅ executada e testada em produção em 04/11/2026 (testes da API como visitante ok; falta só o teste de admin do passo 5, necessário antes da T6c) |
-| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ⏳ prompt pronto; começa quando a T5 estiver na `main` |
-| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ⏳ depende de T6b (**RASCUNHO**) |
+| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ feita e corrigida (282 testes). Teste local em release (08/11 e 09/11): carrega em ~2 s, snapshot 311 kB, sem localStorage, link inválido ok. Correção 2 (URL mantém o token em navegações e após múltiplos F5) concluída e testada. |
+| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ⏳ começa após o merge da T6b |
 | T6c | Tela do admin no app: ver, copiar e girar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏳ opcional, depois da T7 (**RASCUNHO**) |
 | T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **só no fim**, depois de validar (**RASCUNHO**) |
 
@@ -82,7 +82,7 @@ A política `players_select` (`auth.uid() is not null`) permite que **qualquer u
 
 ### Perguntas em aberto da Fase 2
 
-1. Guardar o token no navegador (localStorage) para abrir o site sem o link completo? Começa **não** (só lê da URL). Reavaliar depois de testar no iPhone ("Adicionar à tela de início").
+1. Guardar o token no navegador (localStorage) para abrir o site sem o link completo? Começa **não** (só lê da URL). Com o vazamento sendo aceitável, passa a ser aceitável como comodidade; mas não resolve o atalho da tela de início do iPhone (armazenamento separado do Safari). Reavaliar depois de testar no iPhone.
 2. Domínio próprio ou `*.pages.dev`? Decidir na T7.
 3. ~~`session_arrivals` no snapshot?~~ Entrou (chave `arrivals`). O AG confere na T6b se alguma tela usa e registra.
 4. A tabela `custom_badges` existe no banco (política `custom_badges_select`), mas os docs dizem que as insígnias personalizadas vivem só no aparelho. Confirmar se a tabela tem dados; se tiver, decidir se entra no snapshot.
@@ -316,14 +316,49 @@ main_personal. Não adicione pacotes.
 Aceite: analyze e test ok; git diff -M main --stat só com arquivos esperados; personal intacto.
 ```
 
+### Correção 2 da T6b: a URL perde o token (achada no teste local, 08/11/2026)
+
+Sintoma (build release servido em localhost:5000): abre em `#/g/<token>`, o painel carrega, mas a barra passa a mostrar só `localhost:5000`; F5 então cai em "Link inválido". Isso quebra recarregar a página e "Adicionar à tela de início" no iPhone (o atalho grava a URL que estiver na barra). Provável causa: o Flutter web reescreve o fragmento para `#/` ao montar o MaterialApp/Navigator.
+
+```
+[cabeçalho]
+Branch: feat/web-token-repos (continue nela). Não mexa no personal nem no Supabase.
+Problema: no web, depois que o painel abre, a URL deixa de ter '#/g/<token>' e F5 mostra
+"Link inválido". A URL do navegador DEVE continuar '#/g/<token>' durante todo o uso:
+ao abrir, ao navegar entre telas, ao voltar e após F5.
+1) Investigue por que o fragmento é perdido (rota inicial '/', reporte de rota ao engine do
+   Flutter web, pushReplacement etc.) e registre a causa em docs/DUVIDAS.md.
+2) Corrija só no caminho web (main_web.dart / bootstrap_web.dart): por exemplo, definir a
+   rota inicial como '/g/<token>' com onGenerateRoute que leva ao painel, e garantir que
+   navegar entre telas não troque a URL por outra sem o token. Se algum Navigator.push
+   alterar a URL, resolva no web sem mudar as telas compartilhadas com o personal.
+3) O token continua só em memória e na URL: nada em localStorage/sessionStorage/cookie.
+4) Teste (widget ou unit) para o que for testável: a rota inicial contém o token, e
+   extractTokenFromUrl lê o token da rota. Documente o teste manual abaixo.
+Aceite: analyze e test ok; personal intacto. Teste manual (build release):
+`flutter build web -t lib/main_web.dart --release`, `cd build/web`, `python3 -m http.server 5000`,
+abrir http://localhost:5000/#/g/<token>, abrir ranking, voltar, F5 várias vezes: a URL
+mantém o token e o painel recarrega.
+```
+
+**Resultado da validação do teste manual (09/11/2026):**
+- Build release gerado com sucesso: `flutter build web -t lib/main_web.dart --release`.
+- Servidor local executado: `python3 -m http.server 5000` em `build/web`.
+- Navegador Chromium headless automatizado via CDP abrindo `http://localhost:5000/#/g/<token>`.
+- Monitoramento da URL nos segundos 1s a 10s: a URL permaneceu estritamente `http://localhost:5000/#/g/<token>` durante toda a execução.
+- Disparados 3 recarregamentos consecutivos (`Page.reload` / F5): em todos os ciclos a URL manteve `#/g/<token>` e a aplicação recarregou o estado perfeitamente sem regredir para link inválido.
+- Acesso sem token (`http://localhost:5000/`): manteve `http://localhost:5000/` exibindo a tela amigável de link inválido.
+
 ## T7 · Build, deploy no Cloudflare Pages e teste no iPhone — AG + Enzo · **RASCUNHO**
 
-Branch: `feat/web-deploy` · Depende de T6b
+Branch: `feat/web-deploy` · Depende de T6b (merge na `main`)
+
+**Decisão (08/11/2026):** vazamento do link não é grave para o Enzo (nomes e notas já são públicos para o grupo; se vazar, gira-se o token). Por isso vale um **link curto amigável** por redirecionamento: `https://app-fut-site.pages.dev/fut` → `/#/g/<token>`. O token fica num secret do GitHub (`FUT_TOKEN`) e o workflow gera o `web/_redirects` na hora; assim não entra no repositório e girar o token = trocar o secret + rodar o deploy. **A confirmar na T7:** se o Cloudflare Pages aceita `#` no destino do `_redirects`; se não aceitar, usa-se o link completo. O link curto **não** dispensa a Correção 2 da T6b (URL manter `#/g/<token>`), porque o atalho da tela de início do iPhone grava a URL da barra.
 
 **O que o Enzo faz (uma vez, no painel):**
 1. Criar conta/projeto no Cloudflare Pages (modo *Direct Upload*, nome sugerido: `app-fut-site`).
 2. Criar um API Token (permissão *Cloudflare Pages: Edit*) e anotar o *Account ID*.
-3. No GitHub (repo → Settings → Secrets and variables → Actions): criar `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID`.
+3. No GitHub (repo → Settings → Secrets and variables → Actions): criar `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `FUT_TOKEN` (o token atual do Fut do INF; ao final, gire o token no banco e atualize este secret).
 
 ```
 [cabeçalho]
@@ -338,7 +373,12 @@ Tarefa: publicar o site Flutter Web no Cloudflare Pages via GitHub Actions.
 3) web/robots.txt com "User-agent: *" e "Disallow: /".
 4) web/_headers (Cloudflare Pages) com Referrer-Policy: no-referrer e X-Content-Type-Options: nosniff.
 5) Se o build web exigir ajuste de manifest/ícones, faça o mínimo e registre em DUVIDAS.md.
-Aceite: o workflow roda verde; o site abre em https://app-fut-site.pages.dev/#/g/<token>.
+6) Tela de carregamento: em web/index.html, um fundo escuro (#121620) com um texto/spinner simples
+   visível até o Flutter iniciar (hoje a página fica em branco por instantes).
+7) Link curto: no workflow, antes do deploy, gere build/web/_redirects com a linha
+   "/fut /#/g/${{ secrets.FUT_TOKEN }} 302" (nunca imprimir o secret nos logs).
+Aceite: o workflow roda verde; o site abre em https://app-fut-site.pages.dev/#/g/<token> e
+em https://app-fut-site.pages.dev/fut (se o Cloudflare aceitar o '#'; senão, registre).
 ```
 
 **Teste manual no iPhone (Safari) — checklist do Enzo:**
