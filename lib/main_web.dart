@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'bootstrap_web.dart';
 import 'constants/app_colors.dart';
@@ -48,7 +49,10 @@ class _AppWebState extends State<AppWeb> {
     setState(() => _isLoading = true);
     try {
       final caller = widget.bootstrapCaller ??
-          (() => bootstrapWeb(initializeFlutterBinding: false));
+          (() => bootstrapWeb(
+                tokenOverride: _currentResult.token,
+                initializeFlutterBinding: false,
+              ));
       final res = await caller();
       if (mounted) {
         setState(() {
@@ -59,7 +63,9 @@ class _AppWebState extends State<AppWeb> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _currentResult = BootstrapWebResult.connectionError();
+          _currentResult = BootstrapWebResult.connectionError(
+            token: _currentResult.token,
+          );
           _isLoading = false;
         });
       }
@@ -68,28 +74,74 @@ class _AppWebState extends State<AppWeb> {
 
   @override
   Widget build(BuildContext context) {
+    final token = _currentResult.token;
+
     if (_currentResult.isSuccess && _currentResult.group != null) {
       final group = _currentResult.group!;
+      final routeName = token != null && token.isNotEmpty ? '/g/$token' : '/';
+
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         title: group.name,
         theme: AppTheme.dark,
-        home: GroupDashboardScreen(
-          groupId: group.id,
-          groupName: group.name,
-        ),
+        initialRoute: routeName,
+        onGenerateInitialRoutes: (initialRoute) {
+          return [
+            MaterialPageRoute(
+              settings: RouteSettings(name: initialRoute),
+              builder: (context) => GroupDashboardScreen(
+                groupId: group.id,
+                groupName: group.name,
+              ),
+            ),
+          ];
+        },
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (context) => GroupDashboardScreen(
+              groupId: group.id,
+              groupName: group.name,
+            ),
+          );
+        },
+        navigatorObservers: [
+          if (token != null && token.isNotEmpty) _WebTokenRouteObserver(token),
+        ],
       );
     }
 
     if (_currentResult.isConnectionError) {
+      final routeName = token != null && token.isNotEmpty ? '/g/$token' : '/';
+
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'Pelada Manager',
         theme: AppTheme.dark,
-        home: ConnectionErrorScreen(
-          isLoading: _isLoading,
-          onRetry: _retry,
-        ),
+        initialRoute: routeName,
+        onGenerateInitialRoutes: (initialRoute) {
+          return [
+            MaterialPageRoute(
+              settings: RouteSettings(name: initialRoute),
+              builder: (context) => ConnectionErrorScreen(
+                isLoading: _isLoading,
+                onRetry: _retry,
+              ),
+            ),
+          ];
+        },
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (context) => ConnectionErrorScreen(
+              isLoading: _isLoading,
+              onRetry: _retry,
+            ),
+          );
+        },
+        navigatorObservers: [
+          if (token != null && token.isNotEmpty) _WebTokenRouteObserver(token),
+        ],
       );
     }
 
@@ -97,8 +149,60 @@ class _AppWebState extends State<AppWeb> {
       debugShowCheckedModeBanner: false,
       title: 'Pelada Manager',
       theme: AppTheme.dark,
-      home: const InvalidLinkScreen(),
+      initialRoute: '/',
+      onGenerateInitialRoutes: (initialRoute) {
+        return [
+          MaterialPageRoute(
+            settings: RouteSettings(name: initialRoute),
+            builder: (context) => const InvalidLinkScreen(),
+          ),
+        ];
+      },
+      onGenerateRoute: (settings) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (context) => const InvalidLinkScreen(),
+        );
+      },
     );
+  }
+}
+
+/// Garante que a URL do navegador mantenha o fragmento com o token durante
+/// toda a navegação (ao abrir, ao navegar entre telas, ao voltar e após F5).
+class _WebTokenRouteObserver extends NavigatorObserver {
+  final String token;
+
+  _WebTokenRouteObserver(this.token);
+
+  void _ensureTokenInUrl() {
+    if (token.isNotEmpty) {
+      SystemNavigator.routeInformationUpdated(uri: Uri.parse('/g/$token'));
+    }
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _ensureTokenInUrl();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _ensureTokenInUrl();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _ensureTokenInUrl();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+    _ensureTokenInUrl();
   }
 }
 

@@ -26,12 +26,16 @@ class BootstrapWebResult {
   final BootstrapWebStatus status;
   final GroupModel? group;
   final SnapshotSource? snapshotSource;
+  final String? _token;
 
   const BootstrapWebResult._({
     required this.status,
     this.group,
     this.snapshotSource,
-  });
+    String? token,
+  }) : _token = token;
+
+  String? get token => _token ?? snapshotSource?.token;
 
   bool get isSuccess => status == BootstrapWebStatus.success;
   bool get isInvalidLink => status == BootstrapWebStatus.invalidLink;
@@ -43,33 +47,50 @@ class BootstrapWebResult {
   factory BootstrapWebResult.success({
     required GroupModel group,
     required SnapshotSource snapshotSource,
+    String? token,
   }) {
     return BootstrapWebResult._(
       status: BootstrapWebStatus.success,
       group: group,
       snapshotSource: snapshotSource,
+      token: token ?? snapshotSource.token,
     );
   }
 
-  factory BootstrapWebResult.invalid() {
-    return const BootstrapWebResult._(status: BootstrapWebStatus.invalidLink);
+  factory BootstrapWebResult.invalid({String? token}) {
+    return BootstrapWebResult._(
+      status: BootstrapWebStatus.invalidLink,
+      token: token,
+    );
   }
 
-  factory BootstrapWebResult.connectionError() {
-    return const BootstrapWebResult._(
+  factory BootstrapWebResult.connectionError({String? token}) {
+    return BootstrapWebResult._(
       status: BootstrapWebStatus.connectionError,
+      token: token,
     );
   }
 }
 
-/// Extrai o token de compartilhamento a partir da URL.
+/// Extrai o token de compartilhamento a partir da URL ou rota.
 ///
-/// Aceita estritamente o fragmento `#/g/<token>`.
+/// Aceita estritamente o fragmento `#/g/<token>` ou a rota interna `/g/<token>`.
 String? extractTokenFromUrl(Uri uri) {
   final fragment = uri.fragment.trim();
-  if (fragment.isEmpty) return null;
+  if (fragment.isNotEmpty) {
+    return _parseTokenFromSegment(fragment);
+  }
 
-  var clean = fragment.startsWith('/') ? fragment.substring(1) : fragment;
+  // Permite ler de rota interna relativa /g/<token> (sem scheme nem host)
+  if (!uri.hasScheme && uri.host.isEmpty && uri.path.isNotEmpty) {
+    return _parseTokenFromSegment(uri.path.trim());
+  }
+
+  return null;
+}
+
+String? _parseTokenFromSegment(String segment) {
+  var clean = segment.startsWith('/') ? segment.substring(1) : segment;
   if (!clean.startsWith('g/')) return null;
 
   var token = clean.substring(2);
@@ -115,7 +136,7 @@ Future<BootstrapWebResult> bootstrapWeb({
 
     final groupData = source.group;
     if (groupData == null) {
-      return BootstrapWebResult.invalid();
+      return BootstrapWebResult.invalid(token: token.trim());
     }
 
     final group = source.cachedGroup ?? GroupModel.fromMap(groupData);
@@ -144,12 +165,13 @@ Future<BootstrapWebResult> bootstrapWeb({
     return BootstrapWebResult.success(
       group: group,
       snapshotSource: source,
+      token: token.trim(),
     );
   } on InvalidLinkException {
     debugPrint('Token inválido ou link desativado.');
-    return BootstrapWebResult.invalid();
+    return BootstrapWebResult.invalid(token: token.trim());
   } catch (_) {
     debugPrint('Falha ao inicializar bootstrapWeb.');
-    return BootstrapWebResult.connectionError();
+    return BootstrapWebResult.connectionError(token: token.trim());
   }
 }
