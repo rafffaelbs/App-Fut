@@ -483,3 +483,16 @@ Resolvido em fix/players-cache
        - Como `_canAdminister` é `false` quando `isReadOnly = true`, o fluxo é protegido.
        - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
 - **Conclusão:** Todas as 5 gravações em `SharedPreferences` de `player_detail.dart` já estão protegidas por guards de nível de método e por condicionais na UI via `_canEditProfile`, `_canAdminister` e `hasGoalSounds`, todas bloqueadas quando `isReadOnly = true`. Nenhuma chave de `SharedPreferences` foi alterada.
+
+---
+
+### 35. Telas que leem presentes (`SessionArrivalsRepository`) e resolução de repositórios em `getAllGroupMatches` — Tarefa T6b
+- **Mapeamento das telas que leem presentes (`AppServices.instance.sessionArrivals`):**
+  1. `lib/screens/sessions_screen.dart:61` (`getPlayerIdsBySessions`): busca a lista de IDs de jogadores confirmados para cada sessão exibida na lista de peladas, alimentando `_participants` para exibir avatares decorativos nos cards (`SessionListTile`). O comentário do código já prevê: *"Avatares dos confirmados são decorativos: falha (offline) não bloqueia a lista"*. No `TokenSessionArrivalsRepository`, o método devolve `{}` e a lista é renderizada sem avatares, de forma elegante e sem erros.
+  2. `lib/screens/match_screen.dart:310, 383` (`replaceArrivals` e `getArrivals`): sincronização do rascunho de pelada em andamento na nuvem. A tela `MatchScreen` não é alcançável em modo somente leitura (`isReadOnly = true`), conforme blindado na T5.
+  - Conclusão: `TokenSessionArrivalsRepository` devolvendo listas/mapas vazios atende perfeitamente ao modo web somente leitura.
+- **Resolução de repositórios em `getAllGroupMatches` (`lib/utils/stats_calculator.dart:24-25`):**
+  - **O que viu:** O método `getAllGroupMatches(groupId)` instanciava `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` como fallback quando os parâmetros opcionais nomeados `matchesRepository` e `playersRepository` eram nulos.
+  - **Impacto na Web:** Telas como `PlayerDetailScreen` (linha 209), `PlayersScreen` (linha 108), `PlayerComparisonScreen` (linha 94) e `GroupBootstrap` (linha 140) chamam `getAllGroupMatches(groupId)` sem passar os parâmetros nomeados. Na web, o cliente Supabase opera com a chave `anon` sem privilégio de `SELECT` direto nas tabelas, o que causaria erro de permissão ou retorno vazio.
+  - **Ação:** O fallback foi ajustado para verificar `AppServices.isInitialized ? AppServices.instance.matches : SupabaseMatchesRepository()` (e o mesmo para `players` e `matchHistory`), utilizando a injeção em memória do `AppServices` ativo quando inicializado e preservando a instanciação direta prévia apenas caso o serviço global não esteja ativo (ex.: testes unitários isolados). Nenhuma fórmula matemática foi alterada.
+
