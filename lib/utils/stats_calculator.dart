@@ -5,7 +5,6 @@ import 'player_identity.dart';
 import 'rating_calculator.dart';
 
 import '../app/app_services.dart';
-import '../data/prefs/prefs_match_history_store.dart';
 import '../domain/repositories/match_history_store.dart';
 import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
@@ -110,14 +109,12 @@ Future<List<dynamic>> getAllGroupMatches(
 
   // Fallback caso esteja offline ou local
   final historyStore = matchHistoryStore ??
-      (AppServices.isInitialized
-          ? AppServices.instance.matchHistory
-          : PrefsMatchHistoryStore());
+      (AppServices.isInitialized ? AppServices.instance.matchHistory : null);
   final prefs = await SharedPreferences.getInstance();
   final String sessionsKey = 'sessions_$groupId';
   final List<dynamic> allHistory = [];
 
-  if (prefs.containsKey(sessionsKey)) {
+  if (historyStore != null && prefs.containsKey(sessionsKey)) {
     final List<dynamic> sessions = jsonDecode(prefs.getString(sessionsKey)!);
     for (final session in sessions) {
       final String? tId = session['id'];
