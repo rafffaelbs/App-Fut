@@ -50,10 +50,23 @@ class GroupBootstrap {
     };
   }
 
+  final Map<String, List<Map<String, dynamic>>> _memorySnapshots = {};
+
+  /// Retorna o snapshot em memória se existir (usado em modo somente leitura ou testes).
+  List<Map<String, dynamic>>? getMemorySnapshot(String groupId) =>
+      _memorySnapshots[groupId];
+
+  @visibleForTesting
+  void clearMemorySnapshots() => _memorySnapshots.clear();
+
   /// Já existe snapshot local utilizável (elenco com notas E overall) deste
   /// grupo? Snapshots antigos (sem `overall`) contam como inexistentes, para
   /// forçar uma recarga e a tela da partida nunca cair na nota do app.
   static Future<bool> hasLocalSnapshot(String groupId) async {
+    if (AppServices.isInitialized && AppServices.instance.features.isReadOnly) {
+      return instance._memorySnapshots.containsKey(groupId) &&
+          (instance._memorySnapshots[groupId]?.isNotEmpty ?? false);
+    }
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('players_$groupId');
     if (raw == null) return false;
@@ -150,10 +163,14 @@ class GroupBootstrap {
         return playerSnapshotMap(p, nota);
       }).toList();
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('players_$groupId', jsonEncode(list));
-      await prefs.setString(
-          'ratings_snapshot_at_$groupId', DateTime.now().toIso8601String());
+      if (svc.features.isReadOnly) {
+        _memorySnapshots[groupId] = list;
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('players_$groupId', jsonEncode(list));
+        await prefs.setString(
+            'ratings_snapshot_at_$groupId', DateTime.now().toIso8601String());
+      }
 
       _lastRun[groupId] = DateTime.now();
       status.value = BootstrapStatus.ready;
