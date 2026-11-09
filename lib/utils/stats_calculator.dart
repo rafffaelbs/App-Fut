@@ -5,6 +5,7 @@ import 'player_identity.dart';
 import 'rating_calculator.dart';
 
 import '../app/app_services.dart';
+import '../data/prefs/prefs_match_history_store.dart';
 import '../domain/repositories/match_history_store.dart';
 import '../models/match_model.dart';
 import '../models/match_lineup_model.dart';
@@ -21,8 +22,14 @@ Future<List<dynamic>> getAllGroupMatches(
   MatchHistoryStore? matchHistoryStore,
 }) async {
   try {
-    final matchesRepo = matchesRepository ?? SupabaseMatchesRepository();
-    final playersRepo = playersRepository ?? SupabasePlayersRepository();
+    final matchesRepo = matchesRepository ??
+        (AppServices.isInitialized
+            ? AppServices.instance.matches
+            : SupabaseMatchesRepository());
+    final playersRepo = playersRepository ??
+        (AppServices.isInitialized
+            ? AppServices.instance.players
+            : SupabasePlayersRepository());
     // getMatchesByGroup não traz mais o objeto completo do jogador dentro de
     // cada escalação (isso duplicava um payload enorme). Por isso buscamos
     // os nomes aqui, à parte -- é uma consulta leve (1 linha por jogador do
@@ -102,7 +109,10 @@ Future<List<dynamic>> getAllGroupMatches(
   }
 
   // Fallback caso esteja offline ou local
-  final historyStore = matchHistoryStore ?? AppServices.instance.matchHistory;
+  final historyStore = matchHistoryStore ??
+      (AppServices.isInitialized
+          ? AppServices.instance.matchHistory
+          : PrefsMatchHistoryStore());
   final prefs = await SharedPreferences.getInstance();
   final String sessionsKey = 'sessions_$groupId';
   final List<dynamic> allHistory = [];
