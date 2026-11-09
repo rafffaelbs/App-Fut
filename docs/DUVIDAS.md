@@ -496,3 +496,47 @@ Resolvido em fix/players-cache
   - **Impacto na Web:** Telas como `PlayerDetailScreen` (linha 209), `PlayersScreen` (linha 108), `PlayerComparisonScreen` (linha 94) e `GroupBootstrap` (linha 140) chamam `getAllGroupMatches(groupId)` sem passar os parâmetros nomeados. Na web, o cliente Supabase opera com a chave `anon` sem privilégio de `SELECT` direto nas tabelas, o que causaria erro de permissão ou retorno vazio.
   - **Ação:** O fallback foi ajustado para verificar `AppServices.isInitialized ? AppServices.instance.matches : SupabaseMatchesRepository()` (e o mesmo para `players` e `matchHistory`), utilizando a injeção em memória do `AppServices` ativo quando inicializado e preservando a instanciação direta prévia apenas caso o serviço global não esteja ativo (ex.: testes unitários isolados). Nenhuma fórmula matemática foi alterada.
 
+---
+
+### 36. Confirmação do cliente Supabase em `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` — Tarefa T6b (Pós-Revisão)
+- **O que viu:**
+  - Em `lib/bootstrap_personal.dart:25-27`, a inicialização do app personal executa `await SupabaseConfig.initialize();` e obtém `final client = SupabaseConfig.client;`, passando essa instância explicitamente aos construtores `SupabaseMatchesRepository(client: client)` e `SupabasePlayersRepository(client: client)`.
+  - Em `lib/data/supabase/matches_repository.dart:18`, o construtor possui `_client = client ?? supabase`.
+  - Em `lib/data/supabase/players_repository.dart:93`, o construtor possui `_client = client ?? supabase`.
+  - Em `lib/data/supabase/supabase_config.dart:26`, o getter de conveniência está definido como `SupabaseClient get supabase => SupabaseConfig.client;`, que por sua vez aponta para `Supabase.instance.client`.
+- **Conclusão:**
+  - Fica confirmado que instanciar `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` sem argumentos utiliza exatamente a mesma instância de `SupabaseClient` (`SupabaseConfig.client` / `supabase`) configurada no `bootstrap_personal.dart`.
+
+---
+
+### 37. Auditoria de rotas e chamadas para `MatchScreen` na Web — Tarefa T6b (Pós-Revisão)
+- **O que viu:**
+  - Foi executado grep exaustivo em todo o projeto (`grep -rn "MatchScreen(" lib`).
+  - A única ocorrência em todo o código que instancia `MatchScreen` é `lib/screens/tournament_dashboard_screen.dart:39`.
+  - Em `TournamentDashboardScreen:34-45`:
+    ```dart
+    final isReadOnly = AppServices.instance.features.isReadOnly;
+    final List<Widget> screens = [
+      if (!isReadOnly)
+        MatchScreen(
+          tournamentName: widget.tournamentName,
+          tournamentId: widget.tournamentId,
+          totalPlayers: widget.totalPlayers,
+          groupId: widget.groupId,
+        ),
+      RankingScreen(...),
+      HistoryScreen(...),
+    ];
+    ```
+  - E na navegação inferior (`navItems`, linhas 57-61):
+    ```dart
+    if (!isReadOnly)
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.sports_soccer),
+        label: "Campo",
+      ),
+    ```
+- **Conclusão:**
+  - Com `isReadOnly = true` (modo web somente leitura), a aba "Campo" e a tela `MatchScreen` não são construídas nem acessíveis de nenhum ponto da aplicação web. Nenhuma outra tela, rota ou botão abre `MatchScreen`.
+
+
