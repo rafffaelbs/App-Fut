@@ -595,6 +595,25 @@ Resolvido em fix/players-cache
   - No caso do link curto `/fut`, o destino pretendido é `/#/g/<token>`.
   - Como o token fica após o `#` (fragmento do lado do cliente), o Cloudflare Pages repassa o header `Location: /#/g/<token>` com status HTTP `302`.
   - O navegador recebe o cabeçalho de redirecionamento e interpreta a navegação para o fragmento `#/g/<token>`, acionando o roteador web da aplicação.
-  - No workflow de deploy, a linha é gerada em tempo de execução via `printf "/fut /#/g/%s 302
-" "$FUT_TOKEN" > build/web/_redirects`, garantindo que o secret `FUT_TOKEN` permaneça estritamente nas variáveis de ambiente do runner e nunca seja impresso na saída padrão (stdout/stderr) dos logs do GitHub Actions.
+  - No workflow de deploy, a linha é gerada em tempo de execução via `printf "/fut /#/g/%s 302\n" "$FUT_TOKEN" > build/web/_redirects`, garantindo que o secret `FUT_TOKEN` permaneça estritamente nas variáveis de ambiente do runner e nunca seja impresso na saída padrão (stdout/stderr) dos logs do GitHub Actions.
+
+---
+
+### 42. Ajustes de segurança, supply chain e PWA no workflow e web — Tarefa T7 (Pós-Revisão)
+- **O que viu e o que mudou:**
+  1. `.github/workflows/deploy-web.yml`:
+     - **Fixação por commit SHA (Supply Chain Security):** Fixadas as GitHub Actions por SHA de commit: `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4`, `subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2` e `cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3`. Evita riscos de mutação de tags upstream e garante builds auditáveis e reproduzíveis.
+     - **Permissões mínimas:** Restringido `permissions` a `contents: read` (removido `deployments: write`, desnecessário para deploy Direct Upload no Cloudflare Pages via Wrangler).
+     - **Gatilho e execução restritos à `main`:** Adicionada condição `if: github.ref == 'refs/heads/main'` no job `deploy` e `paths-ignore: ['docs/**', '**.md']` no gatilho de `push`, evitando execuções redundantes ao alterar apenas documentação e garantindo que o deploy ocorra somente na branch principal.
+     - **Concorrência serializada:** Ajustado `cancel-in-progress: false` no grupo de concorrência, impedindo que um deploy ativo seja cancelado no meio do upload para o Cloudflare Pages, o que poderia corromper ou deixar inconsistente o estado de publicação.
+     - **Desativação de Service Worker:** Incluída a flag `--pwa-strategy=none` no comando `flutter build web --release -t lib/main_web.dart`, desabilitando o service worker gerado pelo Flutter para prevenir problemas de cache persistente e assegurar que novas versões sejam carregadas de imediato pelos navegadores (Safari/iOS em particular).
+     - **Versão do Flutter confirmada:** Fixada em `'3.44.2'` com `channel: 'stable'` e `cache: true`, exatamente idêntica à versão utilizada localmente no ambiente de desenvolvimento do projeto.
+     - **Remoção de passo redundante:** Removido o passo `Ensure Cloudflare headers and robots`, pois o comando `flutter build web` já copia automaticamente todos os arquivos da pasta `web/` (incluindo `robots.txt` e `_headers`) para o diretório de saída `build/web/`.
+  2. `web/manifest.json`:
+     - Atualizada a propriedade `"start_url"` de `"."` para `"/fut"`. Como no iPhone a ação "Adicionar à tela de início" grava a URL do manifest/barra de navegação, definir `/fut` garante que o atalho acione a regra de redirecionamento 302 do Cloudflare Pages para o link secreto `/#/g/<token>` mesmo se o token for rotacionado futuramente no secret `FUT_TOKEN`, sem necessidade de reinstalar o atalho.
+  3. `web/_headers`:
+     - Acrescentado o cabeçalho `X-Robots-Tag: noindex, nofollow` para o padrão `/*`. Reforça no nível de resposta HTTP que mecanismos de busca e rastreadores não devem indexar o site nem seguir links, complementando o `web/robots.txt` e a tag `<meta name="robots">` do `web/index.html`.
+  4. `docs/DUVIDAS.md` (item 41):
+     - Corrigida a quebra de linha acidental (`\n`) no trecho de documentação do comando `printf` do `_redirects`.
+
 
