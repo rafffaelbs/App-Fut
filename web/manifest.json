@@ -1,7 +1,7 @@
 {
     "name": "Pelada",
     "short_name": "Pelada",
-    "start_url": ".",
+    "start_url": "/fut",
     "display": "standalone",
     "background_color": "#121620",
     "theme_color": "#121620",
