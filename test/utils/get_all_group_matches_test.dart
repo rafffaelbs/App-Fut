@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/data/prefs/prefs_match_history_store.dart';
+import '../helpers/test_app_services.dart';
 import 'package:app_do_fut/domain/repositories/matches_repository.dart';
 import 'package:app_do_fut/domain/repositories/players_repository.dart';
 import 'package:app_do_fut/models/match_event_model.dart';
@@ -419,6 +421,43 @@ void main() {
       expect(players['white'], equals([
         {'id': 'line-w', 'name': 'Atacante White', 'icon': null}
       ]));
+    });
+
+    test('resolve repositórios via AppServices quando isInitialized == true', () async {
+      final matchesRepo = FakeMatchesRepository(
+        matches: [
+          MatchModel(
+            id: 'm-app-services',
+            sessionId: 'sess-1',
+            startTime: DateTime(2026, 11, 8, 20),
+            teamAScore: 2,
+            teamBScore: 1,
+            lineups: const [],
+            events: const [],
+          ),
+        ],
+      );
+
+      final playersRepo = FakePlayersRepository(
+        players: const [
+          PlayerModel(id: 'p-app', name: 'Jogador AppServices'),
+        ],
+      );
+
+      setupTestAppServices(
+        matches: matchesRepo,
+        players: playersRepo,
+      );
+
+      expect(AppServices.isInitialized, isTrue);
+
+      // Chamada sem argumentos nomeados de repositório
+      final result = await getAllGroupMatches('grp-app-services');
+      expect(result, hasLength(1));
+      final match = result.first as Map<String, dynamic>;
+      expect(match['id'], 'm-app-services');
+      expect(match['scoreRed'], 2);
+      expect(match['scoreWhite'], 1);
     });
   });
 }

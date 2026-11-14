@@ -8,10 +8,10 @@
 
 | # | Tarefa | Quem | Branch | Situação |
 |---|---|---|---|---|
-| T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | ⏳ pronta para começar |
-| T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (arquivo `docs/sql/`) | ⏳ pode rodar em paralelo à T5 |
-| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ⏳ depende de T5 e T6 (**RASCUNHO**) |
-| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ⏳ depende de T6b (**RASCUNHO**) |
+| T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | ✅ na `main` em 08/11/2026 (revisada, 233 testes, testada no celular) |
+| T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (`docs/sql/`) | ✅ executada e testada em produção em 04/11/2026 (testes da API como visitante ok; falta só o teste de admin do passo 5, necessário antes da T6c) |
+| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ feita e corrigida (282 testes). Teste local em release (08/11 e 09/11): carrega em ~2 s, snapshot 311 kB, sem localStorage, link inválido ok. Correção 2 (URL mantém o token em navegações e após múltiplos F5) concluída e testada. |
+| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ⏳ começa após o merge da T6b |
 | T6c | Tela do admin no app: ver, copiar e girar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏳ opcional, depois da T7 (**RASCUNHO**) |
 | T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **só no fim**, depois de validar (**RASCUNHO**) |
 
@@ -70,11 +70,22 @@ git push
 
 A regra 5 diz para não alterar tabelas, RLS e RPCs. A Fase 2 exige uma exceção **somente aditiva**: **1 tabela nova** (`group_share_tokens`) e **funções novas**. Nada existente é alterado. Quem executa é o Enzo no SQL Editor do Supabase, depois de um backup, com o SQL entregue pelo Claude. O token fica em tabela separada (e não em coluna de `groups`) para que a leitura normal de `groups` por qualquer membro nunca o exponha.
 
+### Achado de segurança fora do escopo da Fase 2 (S1) — decidir depois
+
+A política `players_select` (`auth.uid() is not null`) permite que **qualquer usuário logado**, de qualquer grupo, leia **todas** as linhas de `players`, que inclui a coluna `email`. Como o cadastro no app é aberto e a chave `anon` é pública, isso pode expor nomes e e-mails dos jogadores de todos os grupos (a confirmar pela consulta 0.3 do `F2_T6_testes.md`; pode haver proteção por coluna). **A Fase 2 não depende disso e não mexe nisso** (desenho e plano em `docs/S1-TASK.md`; o estágio 2 foi descartado: só 2 e-mails no banco) (o site novo nunca devolve `email`), mas vale uma tarefa própria depois da T6: restringir o `SELECT` a jogadores de grupos onde o usuário é membro (ou criados por ele), com cuidado para não quebrar `claim_ghost_profile`, convites e pedidos de entrada. Registrar no `BACKLOG.md` com prioridade alta.
+
+### Ideias para depois da validação do site
+
+- **Dashboard exclusivo do site:** tela inicial própria da web (destaques da temporada, última pelada), sem abas de admin, reaproveitando os mesmos repositórios.
+- **Login opcional** (camada extra por cima do link) e **notificações de eventos**, exclusivas do app.
+- **Peso do snapshot:** hoje ~1,7 MB de JSON. Se ficar lento no iPhone, carregar só a temporada atual.
+
 ### Perguntas em aberto da Fase 2
 
-1. Guardar o token no navegador (localStorage) para abrir o site sem o link completo? Começa **não** (só lê da URL). Reavaliar depois de testar no iPhone ("Adicionar à tela de início").
+1. Guardar o token no navegador (localStorage) para abrir o site sem o link completo? Começa **não** (só lê da URL). Com o vazamento sendo aceitável, passa a ser aceitável como comodidade; mas não resolve o atalho da tela de início do iPhone (armazenamento separado do Safari). Reavaliar depois de testar no iPhone.
 2. Domínio próprio ou `*.pages.dev`? Decidir na T7.
-3. `session_arrivals` (presentes da pelada) entra no snapshot? Depende de alguma tela de leitura precisar disso; o AG confere na T6b e registra.
+3. ~~`session_arrivals` no snapshot?~~ Entrou (chave `arrivals`). O AG confere na T6b se alguma tela usa e registra.
+4. A tabela `custom_badges` existe no banco (política `custom_badges_select`), mas os docs dizem que as insígnias personalizadas vivem só no aparelho. Confirmar se a tabela tem dados; se tiver, decidir se entra no snapshot.
 
 ---
 
@@ -159,65 +170,83 @@ Verifique e responda cada item com arquivo:linha:
 Liste riscos e regressões possíveis no app personal. Não corrija nada.
 ```
 
+### Correções pós-revisão (prompt do AG, 08/11/2026)
+
+Decisão do Enzo: o menu ⋮ das peladas fica **escondido para quem não é admin** no app personal (documentar). Itens 5 e 6 vieram da segunda revisão.
+
+```
+[cabeçalho]
+Branch: feat/web-readonly-screens (continue nela). Correções pós-revisão da T5:
+1) lib/widgets/session/session_list_tile.dart ~linhas 95-115: reindente o itemBuilder do
+   menu. Só formatação, sem mudar lógica.
+2) Registre em docs/DUVIDAS.md (item novo) que, no app personal, o menu ⋮ de editar/excluir
+   pelada passou a ficar escondido para quem não é admin (antes aparecia e mostrava
+   "Apenas administradores podem alterar as peladas."), alinhado à regra da seção 5 do
+   ARCHITECTURE e ao item 2.4 do Plano de Ação. Cite sessions_screen.dart e session_list_tile.dart.
+3) docs/DUVIDAS.md #19: as linhas de main_personal.dart citadas (186, 312, 644, 675) estão
+   desatualizadas; corrija para as atuais (258, 384, 834, 870).
+4) settings_screen.dart (~170-250): confirme que, com isReadOnly = true, NENHUMA entrada de
+   gestão aparece (ManageMembers, ManageSeasons, ManageJoinRequests, AdminDebug, ManageBadges).
+   Se algo aparecer, esconda com canAdminister e liste o que mudou.
+5) history_screen.dart ~linha 314: o toque longo que abre _showDebugInfo (mostra match_id e
+   session_id) não pode funcionar com isReadOnly = true. Desative-o nesse modo. No personal
+   (isReadOnly = false) fica igual.
+6) player_detail.dart: as gravações em SharedPreferences nas linhas ~1237, 1282, 1336, 1653 e
+   2314. Para cada uma, registre em docs/DUVIDAS.md de quais botões/fluxos ela é alcançada e
+   qual proteção (_canEditProfile, _canAdminister, isReadOnly) cobre o caminho. Se alguma for
+   alcançável com isReadOnly = true, proteja e avise. Não mude chaves de SharedPreferences.
+Aceite: analyze e test ok; git diff -M main --stat só com esses arquivos (mais o que a T5 já
+tinha); personal idêntico exceto o menu das peladas.
+```
+
+Antes do merge: `grep -rn "match_history_full" lib test tool docs` (o arquivo foi removido nesta branch). Teste manual no celular: menu das peladas como admin e como não admin, aba Campo, iniciar partida, **compartilhar ranking e exportar histórico** (código movido para `share_helper`).
+
 ---
 
 ## T6 · Token e funções no banco — CLAUDE (SQL), Enzo executa
 
 Sem branch. O Claude entrega `docs/sql/F2_T6_share_link.sql` (e um arquivo de testes). **O banco é de produção** (o grupo "Fut do INF" tem os dados reais do Enzo): tudo é aditivo e roda dentro de uma transação.
 
-### Passo 0 — consultas para o Claude desenhar o SQL (o Enzo roda e cola o resultado)
+### Arquivos (em `docs/sql/`)
 
-Rodar no SQL Editor do Supabase (somente leitura):
+- `F2_T6_share_link.sql` — cria a tabela `group_share_tokens` e as funções. Roda numa transação. Aditivo.
+- `F2_T6_testes.md` — roteiro de testes na ordem: backup, rodar, testes estruturais, criar o link do Fut do INF, testes pela API como visitante (`anon`), testes de admin, conferência do app.
 
-```sql
--- 1) colunas das tabelas envolvidas
-select table_name, column_name, data_type, is_nullable, column_default
-from information_schema.columns
-where table_schema = 'public'
-  and table_name in ('groups','players','group_members','seasons','sessions',
-                     'matches','match_lineups','match_events','session_arrivals')
-order by table_name, ordinal_position;
+**Validação:** a sintaxe SQL e PL/pgSQL foi conferida com o parser do Postgres, mas o script **não foi executado** num banco. Os testes do roteiro são obrigatórios.
 
--- 2) políticas RLS atuais
-select tablename, policyname, cmd, roles, qual, with_check
-from pg_policies where schemaname = 'public' order by tablename, policyname;
+### Desenho final (já refletido no SQL)
 
--- 3) funções que já existem em public
-select p.proname, pg_get_function_identity_arguments(p.oid) as args, p.prosecdef as security_definer
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public' order by 1;
-```
-
-### Desenho (resumo; o SQL final vem depois do passo 0)
-
-- **Tabela nova** `group_share_tokens(group_id pk → groups, token text unique not null, created_at, rotated_at)`. RLS ligado e **nenhuma policy**: ninguém lê direto, só pelas funções.
-- **Token:** 2 UUIDs v4 concatenados sem hífen (≈244 bits de aleatoriedade), gerados no banco; nunca no cliente.
-- **`get_group_snapshot(p_token text) returns jsonb`** — `SECURITY DEFINER`, `set search_path = public, pg_temp`. Token inexistente ou revogado devolve o mesmo erro genérico. Devolve, só do grupo do token: `group`, `seasons`, `sessions`, `players`, `members` (apenas `player_id` e `role`), `matches`, `lineups`, `events`. Os campos usam os **mesmos nomes de coluna das tabelas**, para os modelos atuais (`fromMap`) funcionarem sem adaptação. **Fora:** e-mail, `creator_id`, ids de usuário, logs, pedidos de entrada, código de convite, estado de execução da pelada.
-- **`get_group_share_token(p_group_id uuid)`**, **`rotate_group_share_token(p_group_id uuid)`**, **`revoke_group_share_token(p_group_id uuid)`** — só admin do grupo (mesma regra do app: criador do grupo OU `role = 'admin'`), usando `auth.uid()`.
-- **Permissões:** `revoke all on function ... from public`; `grant execute` de `get_group_snapshot` a `anon` e `authenticated`; as funções de admin só a `authenticated`.
-- **Antes de rodar:** backup (Supabase → Database → Backups, ou exportação). Rodar tudo em `begin; ... commit;`.
-
-### Testes que o Enzo roda depois (o Claude entrega os comandos exatos)
-
-1. Com a chave `anon`, `GET /rest/v1/players`, `/matches`, `/groups`, `/group_share_tokens` etc. devem **negar acesso ou voltar vazios**.
-2. `get_group_snapshot` com token inválido → erro genérico; com token do Fut do INF → JSON só desse grupo.
-3. Procurar no JSON as palavras `email`, `creator_id`, `user_id`, `invite` (não pode haver nenhuma).
-4. Girar o token e conferir que o antigo para de funcionar.
-5. O app personal (celular) continua funcionando normalmente.
+- **Tabela** `group_share_tokens(group_id text pk → groups, token text unique, created_at, rotated_at)`. RLS ligado, sem policy, sem privilégio para `anon`/`authenticated`. Ids de grupo são `text` neste banco.
+- **Token:** 2 UUIDs v4 sem hífen (64 hex, ≈244 bits), gerado no banco por `_new_share_token()` (interna, sem permissão para a API).
+- **`get_group_snapshot(p_token text) returns jsonb`** — `SECURITY DEFINER`, `search_path` fixo. Erro único `invalid_link` para token inexistente, curto ou revogado. Chaves do JSON: `group`, `seasons`, `sessions`, `members`, `players`, `matches`, `lineups`, `events`, `arrivals` (listas, exceto `group`), todas com os **mesmos nomes de coluna das tabelas**.
+  - `groups` e `players` usam **lista permitida de colunas**. Ficam de fora: `players.email`, `players.creator_id`, `players.goal_sound_url`, `groups.creator_id`, `groups.invite_code`, `groups.sync_code`.
+  - `players` inclui os do grupo **e** quem aparece no histórico do grupo (lineups/eventos/assistências), para não surgir "Desconhecido" para quem saiu do elenco.
+  - `sessions` vem completa (inclui campos de estado ao vivo; são inofensivos e evitam falha de parse nos modelos). `arrivals` entra no snapshot (responde a pergunta em aberto 3); o AG confirma na T6b se alguma tela usa.
+  - Não entram: logs de admin, pedidos de entrada, `rating_history`, `sync_data`.
+- **`get_group_share_token`, `rotate_group_share_token`, `revoke_group_share_token`** (`p_group_id text`): só `authenticated` e só quem passa em `public.is_group_admin(p_group_id)` (a mesma regra do RLS do app).
+- **Permissões:** `anon` só executa `get_group_snapshot`.
+- **Aviso à T6b:** os modelos (`PlayerModel` etc.) precisam aceitar a ausência de `email` e `creator_id`; o AG confere e, se algum modelo exigir, registra em DUVIDAS.md em vez de decidir sozinho.
 
 ---
 
-## T6b · Repositórios via token e `bootstrap_web` — AG, revisão CLAUDE · **RASCUNHO**
+## T6b · Repositórios via token e `bootstrap_web` — AG, revisão CLAUDE
 
-Branch: `feat/web-token-repos` · Depende de T5 e T6 · O Claude confirma este prompt (formato exato do JSON) quando a T6 estiver pronta.
+Branch: `feat/web-token-repos` · Depende da T5 (na `main`) · T6 já está no banco.
+
+**Formato real do snapshot** (testado em produção): objeto com `group` (objeto) e as listas `seasons`, `sessions`, `members`, `players`, `matches`, `lineups`, `events`, `arrivals`, todos com os nomes de coluna das tabelas. No Fut do INF: 543 partidas, 4709 escalações, 1676 eventos, 72 jogadores, ~1,7 MB de JSON. Token inválido/revogado → erro Postgrest com `code = P0001` e `message = invalid_link`. `players` **não** traz `email`, `creator_id` nem `goal_sound_url`; `groups` não traz `creator_id`, `invite_code` nem `sync_code`.
+
+**Regra de dados:** o repositório é público. Os testes usam **JSON sintético** (nomes inventados). Nunca commitar um snapshot real nem colar dados reais em fixtures.
 
 ```
 [cabeçalho]
 Tarefa: fazer o site ler os dados do grupo por token, sem login, reaproveitando as telas.
 
 1) lib/data/supabase/readonly/ (novo; fica dentro de lib/data/supabase/ porque usa o cliente
-   Supabase). Crie SnapshotSource: chama a RPC get_group_snapshot(p_token) UMA vez, guarda o
-   JSON em memória (sem SharedPreferences, sem CacheStore) e permite recarregar (pull-to-refresh).
+   Supabase). Crie SnapshotSource: chama client.rpc('get_group_snapshot', params: {'p_token': token})
+   UMA vez, guarda o JSON em memória (sem SharedPreferences, sem CacheStore) e permite recarregar
+   (pull-to-refresh). Erro P0001/invalid_link vira um tipo próprio (ex.: InvalidLinkException);
+   qualquer outro erro vira "sem conexão, tente de novo" com botão de tentar novamente.
+   O payload tem ~1,7 MB: mostre indicador de carregamento e decodifique sem travar a UI.
 2) Classes Token*Repository que implementam as interfaces de LEITURA de lib/domain/repositories/
    lendo do SnapshotSource e filtrando em memória: TokenGroupsRepository, TokenSeasonsRepository,
    TokenSessionsRepository, TokenMatchesRepository, TokenPlayersRepository,
@@ -237,7 +266,9 @@ Tarefa: fazer o site ler os dados do grupo por token, sem login, reaproveitando 
    administrador." (sem detalhes técnicos). Com token válido, abre direto o painel do grupo.
    Sem login, sem HomePage de grupos, sem convite.
 6) Mantenha o isolamento: só lib/data/supabase/ e os bootstraps importam supabase_flutter.
-7) Testes: repositórios com um JSON de exemplo; escrita lança UnsupportedError; token inválido.
+7) Testes: repositórios com JSON SINTÉTICO (dados inventados); escrita lança UnsupportedError;
+   token inválido; modelos aceitam ausência de email/creator_id (se algum modelo exigir, registre
+   em DUVIDAS.md em vez de alterar).
 Aceite: analyze/test ok; `flutter run -d chrome -t lib/main_web.dart` abre o link
 http://localhost:<porta>/#/g/<token> e mostra ranking e histórico do grupo; nenhuma tela de
 escrita aparece; personal idêntico.
@@ -247,14 +278,87 @@ Revisão CLAUDE: `lib/data/supabase/readonly/` completo, `bootstrap_web.dart` e 
 
 ---
 
+### Correções pós-revisão da T6b (prompt do AG, 08/11/2026)
+
+Revisão do Claude Code achou: erro de rede virando "link inválido", ausência de `InvalidLinkException` (previsto no prompt original), sem sanitização no app (o RPC já filtra; é segunda barreira), prefetch gravando no SharedPreferences (localStorage na web), `utils/` importando `data/prefs/`, conversão repetida do snapshot. `readonly/` está dentro de `data/supabase/`: não é exceção nova à regra 5.
+
+```
+[cabeçalho]
+Branch: feat/web-token-repos (continue nela). Não mexa em fórmulas de calculators,
+tabelas/colunas/RLS/RPCs do Supabase, chaves de SharedPreferences, bootstrap_personal nem
+main_personal. Não adicione pacotes.
+1) snapshot_source.dart: crie InvalidLinkException. Em load(), capture PostgrestException com
+   code 'P0001' ou mensagem contendo 'invalid_link' e lance InvalidLinkException. Qualquer outro
+   erro (rede, timeout, formato) passa como está, sem virar link inválido.
+2) bootstrap_web.dart e main_web.dart: BootstrapWebResult ganha estado "erro de conexão"
+   separado de "link inválido". Só InvalidLinkException (e token ausente) vira InvalidLinkScreen.
+   Outros erros mostram tela com "Não foi possível carregar. Verifique a internet" e botão
+   "Tentar de novo" que repete o bootstrap. No debugPrint, não imprima $e: mensagem fixa.
+3) Sanitização (segunda barreira; o RPC já filtra): em UM helper dentro do SnapshotSource, remova
+   email, creator_id, invite_code, sync_code e goal_sound_url antes de qualquer fromMap.
+4) SnapshotSource guarda em memória as listas já convertidas (PlayerModel, MatchModel) para não
+   reconverter a cada chamada.
+5) GroupBootstrap.prefetch: com AppServices.instance.features.isReadOnly, não grave no
+   SharedPreferences; só devolva os dados em memória.
+6) extractTokenFromUrl: aceite somente o fragmento '#/g/<token>'.
+7) stats_calculator.dart (getAllGroupMatches): (a) confirme que SupabaseMatchesRepository() e
+   SupabasePlayersRepository() sem argumentos usam o mesmo client do bootstrap_personal e
+   registre em docs/DUVIDAS.md; (b) remova o import de data/prefs/ em utils/ (a camada utils não
+   pode depender de data/prefs); use o que AppServices já expõe; (c) teste para o ramo
+   AppServices.isInitialized == true.
+8) Confirme (grep) que nada na web abre match_screen com isReadOnly = true; registre em DUVIDAS.
+9) Testes novos, dados sintéticos: P0001 vira InvalidLinkException; rede/timeout NÃO vira link
+   inválido (tela de erro com tentar de novo); JSON com campos faltando não quebra; email,
+   creator_id, invite_code, sync_code e goal_sound_url nunca chegam aos modelos; prefetch em
+   readonly não grava no SharedPreferences.
+10) docs/ARCHITECTURE.md: registre que lib/data/supabase/readonly/ faz parte de data/supabase/
+    (por isso pode importar supabase_flutter) e que bootstrap_web usa SupabaseConfig.client.
+Aceite: analyze e test ok; git diff -M main --stat só com arquivos esperados; personal intacto.
+```
+
+### Correção 2 da T6b: a URL perde o token (achada no teste local, 08/11/2026)
+
+Sintoma (build release servido em localhost:5000): abre em `#/g/<token>`, o painel carrega, mas a barra passa a mostrar só `localhost:5000`; F5 então cai em "Link inválido". Isso quebra recarregar a página e "Adicionar à tela de início" no iPhone (o atalho grava a URL que estiver na barra). Provável causa: o Flutter web reescreve o fragmento para `#/` ao montar o MaterialApp/Navigator.
+
+```
+[cabeçalho]
+Branch: feat/web-token-repos (continue nela). Não mexa no personal nem no Supabase.
+Problema: no web, depois que o painel abre, a URL deixa de ter '#/g/<token>' e F5 mostra
+"Link inválido". A URL do navegador DEVE continuar '#/g/<token>' durante todo o uso:
+ao abrir, ao navegar entre telas, ao voltar e após F5.
+1) Investigue por que o fragmento é perdido (rota inicial '/', reporte de rota ao engine do
+   Flutter web, pushReplacement etc.) e registre a causa em docs/DUVIDAS.md.
+2) Corrija só no caminho web (main_web.dart / bootstrap_web.dart): por exemplo, definir a
+   rota inicial como '/g/<token>' com onGenerateRoute que leva ao painel, e garantir que
+   navegar entre telas não troque a URL por outra sem o token. Se algum Navigator.push
+   alterar a URL, resolva no web sem mudar as telas compartilhadas com o personal.
+3) O token continua só em memória e na URL: nada em localStorage/sessionStorage/cookie.
+4) Teste (widget ou unit) para o que for testável: a rota inicial contém o token, e
+   extractTokenFromUrl lê o token da rota. Documente o teste manual abaixo.
+Aceite: analyze e test ok; personal intacto. Teste manual (build release):
+`flutter build web -t lib/main_web.dart --release`, `cd build/web`, `python3 -m http.server 5000`,
+abrir http://localhost:5000/#/g/<token>, abrir ranking, voltar, F5 várias vezes: a URL
+mantém o token e o painel recarrega.
+```
+
+**Resultado da validação do teste manual (09/11/2026):**
+- Build release gerado com sucesso: `flutter build web -t lib/main_web.dart --release`.
+- Servidor local executado: `python3 -m http.server 5000` em `build/web`.
+- Navegador Chromium headless automatizado via CDP abrindo `http://localhost:5000/#/g/<token>`.
+- Monitoramento da URL nos segundos 1s a 10s: a URL permaneceu estritamente `http://localhost:5000/#/g/<token>` durante toda a execução.
+- Disparados 3 recarregamentos consecutivos (`Page.reload` / F5): em todos os ciclos a URL manteve `#/g/<token>` e a aplicação recarregou o estado perfeitamente sem regredir para link inválido.
+- Acesso sem token (`http://localhost:5000/`): manteve `http://localhost:5000/` exibindo a tela amigável de link inválido.
+
 ## T7 · Build, deploy no Cloudflare Pages e teste no iPhone — AG + Enzo · **RASCUNHO**
 
-Branch: `feat/web-deploy` · Depende de T6b
+Branch: `feat/web-deploy` · Depende de T6b (merge na `main`)
+
+**Decisão (08/11/2026):** vazamento do link não é grave para o Enzo (nomes e notas já são públicos para o grupo; se vazar, gira-se o token). Por isso vale um **link curto amigável** por redirecionamento: `https://app-fut-site.pages.dev/fut` → `/#/g/<token>`. O token fica num secret do GitHub (`FUT_TOKEN`) e o workflow gera o `web/_redirects` na hora; assim não entra no repositório e girar o token = trocar o secret + rodar o deploy. **A confirmar na T7:** se o Cloudflare Pages aceita `#` no destino do `_redirects`; se não aceitar, usa-se o link completo. O link curto **não** dispensa a Correção 2 da T6b (URL manter `#/g/<token>`), porque o atalho da tela de início do iPhone grava a URL da barra.
 
 **O que o Enzo faz (uma vez, no painel):**
 1. Criar conta/projeto no Cloudflare Pages (modo *Direct Upload*, nome sugerido: `app-fut-site`).
 2. Criar um API Token (permissão *Cloudflare Pages: Edit*) e anotar o *Account ID*.
-3. No GitHub (repo → Settings → Secrets and variables → Actions): criar `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID`.
+3. No GitHub (repo → Settings → Secrets and variables → Actions): criar `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `FUT_TOKEN` (o token atual do Fut do INF; ao final, gire o token no banco e atualize este secret).
 
 ```
 [cabeçalho]
@@ -269,7 +373,12 @@ Tarefa: publicar o site Flutter Web no Cloudflare Pages via GitHub Actions.
 3) web/robots.txt com "User-agent: *" e "Disallow: /".
 4) web/_headers (Cloudflare Pages) com Referrer-Policy: no-referrer e X-Content-Type-Options: nosniff.
 5) Se o build web exigir ajuste de manifest/ícones, faça o mínimo e registre em DUVIDAS.md.
-Aceite: o workflow roda verde; o site abre em https://app-fut-site.pages.dev/#/g/<token>.
+6) Tela de carregamento: em web/index.html, um fundo escuro (#121620) com um texto/spinner simples
+   visível até o Flutter iniciar (hoje a página fica em branco por instantes).
+7) Link curto: no workflow, antes do deploy, gere build/web/_redirects com a linha
+   "/fut /#/g/${{ secrets.FUT_TOKEN }} 302" (nunca imprimir o secret nos logs).
+Aceite: o workflow roda verde; o site abre em https://app-fut-site.pages.dev/#/g/<token> e
+em https://app-fut-site.pages.dev/fut (se o Cloudflare aceitar o '#'; senão, registre).
 ```
 
 **Teste manual no iPhone (Safari) — checklist do Enzo:**

@@ -41,6 +41,8 @@ class AppServices {
 
   static AppServices? _instance;
 
+  static bool get isInitialized => _instance != null;
+
   static AppServices get instance {
     final i = _instance;
     if (i == null) {

@@ -20,7 +20,7 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
 ## 2. Regras de ouro
 
 1. **Fase 1 não muda comportamento.** O app personal deve continuar idêntico depois de cada tarefa.
-2. **Isolamento do Supabase:** só `lib/data/supabase/` e `lib/bootstrap_personal.dart` podem importar `supabase_flutter`. Verificação (deve imprimir **nada**):
+2. **Isolamento do Supabase:** só `lib/data/supabase/` e `lib/bootstrap_personal.dart` podem importar `supabase_flutter`. A subpasta `lib/data/supabase/readonly/` faz parte de `data/supabase/` (por isso pode importar `supabase_flutter` para o `SnapshotSource`), enquanto `bootstrap_web.dart` usa `SupabaseConfig.client` sem importar `supabase_flutter` diretamente. Verificação (deve imprimir **nada**):
    ```
    grep -rl "supabase_flutter" lib | grep -v "^lib/data/supabase/" | grep -v "^lib/bootstrap_personal.dart"
    ```
@@ -189,7 +189,7 @@ Problemas no código atual (só afetam o build web; no celular funcionam):
 - **Cache do elenco (achado de 02/11):** `PlayerComparisonScreen` lê **só** `players_<groupId>` no `SharedPreferences` e `match_screen` (adicionar jogadores) usa essa chave antes do Supabase. Na web não há `GroupBootstrap.prefetch` rodando como no celular, então essas telas ficariam vazias ou com "Desconhecido". A correção dos bugs B2/B3 (fase 1b) deve fazer essas telas buscarem pelo repositório quando o snapshot faltar, antes da Fase 2.
 - `SharedPreferences` na web é `localStorage` do navegador: nenhum dado de partida em andamento ou fila existe lá; telas que dependem disso precisam funcionar sem.
 
-Modelo de acesso: **link secreto sem login** (decidido; ver `TASKS.md`, Fase 2). A segurança real é por token + funções `SECURITY DEFINER` no banco (T6), não por esconder botão.
+Modelo de acesso: **link secreto sem login** (decidido; ver `TASKS.md`, Fase 2). A segurança real é por token + funções `SECURITY DEFINER` no banco (T6), não por esconder botão. Os repositórios da web vivem em `lib/data/supabase/readonly/` (parte integrante de `data/supabase/`, utilizando `SnapshotSource` que pode importar `supabase_flutter`), e a inicialização em `bootstrap_web.dart` consome `SupabaseConfig.client`.
 
 ## 8. Checklist manual de regressão (rodar no celular após cada merge na main)
 

@@ -483,3 +483,87 @@ Resolvido em fix/players-cache
        - Como `_canAdminister` é `false` quando `isReadOnly = true`, o fluxo é protegido.
        - **Situação:** Inalcançável em modo somente leitura (`isReadOnly = true`).
 - **Conclusão:** Todas as 5 gravações em `SharedPreferences` de `player_detail.dart` já estão protegidas por guards de nível de método e por condicionais na UI via `_canEditProfile`, `_canAdminister` e `hasGoalSounds`, todas bloqueadas quando `isReadOnly = true`. Nenhuma chave de `SharedPreferences` foi alterada.
+
+---
+
+### 35. Telas que leem presentes (`SessionArrivalsRepository`) e resolução de repositórios em `getAllGroupMatches` — Tarefa T6b
+- **Mapeamento das telas que leem presentes (`AppServices.instance.sessionArrivals`):**
+  1. `lib/screens/sessions_screen.dart:61` (`getPlayerIdsBySessions`): busca a lista de IDs de jogadores confirmados para cada sessão exibida na lista de peladas, alimentando `_participants` para exibir avatares decorativos nos cards (`SessionListTile`). O comentário do código já prevê: *"Avatares dos confirmados são decorativos: falha (offline) não bloqueia a lista"*. No `TokenSessionArrivalsRepository`, o método devolve `{}` e a lista é renderizada sem avatares, de forma elegante e sem erros.
+  2. `lib/screens/match_screen.dart:310, 383` (`replaceArrivals` e `getArrivals`): sincronização do rascunho de pelada em andamento na nuvem. A tela `MatchScreen` não é alcançável em modo somente leitura (`isReadOnly = true`), conforme blindado na T5.
+  - Conclusão: `TokenSessionArrivalsRepository` devolvendo listas/mapas vazios atende perfeitamente ao modo web somente leitura.
+- **Resolução de repositórios em `getAllGroupMatches` (`lib/utils/stats_calculator.dart:24-25`):**
+  - **O que viu:** O método `getAllGroupMatches(groupId)` instanciava `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` como fallback quando os parâmetros opcionais nomeados `matchesRepository` e `playersRepository` eram nulos.
+  - **Impacto na Web:** Telas como `PlayerDetailScreen` (linha 209), `PlayersScreen` (linha 108), `PlayerComparisonScreen` (linha 94) e `GroupBootstrap` (linha 140) chamam `getAllGroupMatches(groupId)` sem passar os parâmetros nomeados. Na web, o cliente Supabase opera com a chave `anon` sem privilégio de `SELECT` direto nas tabelas, o que causaria erro de permissão ou retorno vazio.
+  - **Ação:** O fallback foi ajustado para verificar `AppServices.isInitialized ? AppServices.instance.matches : SupabaseMatchesRepository()` (e o mesmo para `players` e `matchHistory`), utilizando a injeção em memória do `AppServices` ativo quando inicializado e preservando a instanciação direta prévia apenas caso o serviço global não esteja ativo (ex.: testes unitários isolados). Nenhuma fórmula matemática foi alterada.
+
+---
+
+### 36. Confirmação do cliente Supabase em `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` — Tarefa T6b (Pós-Revisão)
+- **O que viu:**
+  - Em `lib/bootstrap_personal.dart:25-27`, a inicialização do app personal executa `await SupabaseConfig.initialize();` e obtém `final client = SupabaseConfig.client;`, passando essa instância explicitamente aos construtores `SupabaseMatchesRepository(client: client)` e `SupabasePlayersRepository(client: client)`.
+  - Em `lib/data/supabase/matches_repository.dart:18`, o construtor possui `_client = client ?? supabase`.
+  - Em `lib/data/supabase/players_repository.dart:93`, o construtor possui `_client = client ?? supabase`.
+  - Em `lib/data/supabase/supabase_config.dart:26`, o getter de conveniência está definido como `SupabaseClient get supabase => SupabaseConfig.client;`, que por sua vez aponta para `Supabase.instance.client`.
+- **Conclusão:**
+  - Fica confirmado que instanciar `SupabaseMatchesRepository()` e `SupabasePlayersRepository()` sem argumentos utiliza exatamente a mesma instância de `SupabaseClient` (`SupabaseConfig.client` / `supabase`) configurada no `bootstrap_personal.dart`.
+
+---
+
+### 37. Auditoria de rotas e chamadas para `MatchScreen` na Web — Tarefa T6b (Pós-Revisão)
+- **O que viu:**
+  - Foi executado grep exaustivo em todo o projeto (`grep -rn "MatchScreen(" lib`).
+  - A única ocorrência em todo o código que instancia `MatchScreen` é `lib/screens/tournament_dashboard_screen.dart:39`.
+  - Em `TournamentDashboardScreen:34-45`:
+    ```dart
+    final isReadOnly = AppServices.instance.features.isReadOnly;
+    final List<Widget> screens = [
+      if (!isReadOnly)
+        MatchScreen(
+          tournamentName: widget.tournamentName,
+          tournamentId: widget.tournamentId,
+          totalPlayers: widget.totalPlayers,
+          groupId: widget.groupId,
+        ),
+      RankingScreen(...),
+      HistoryScreen(...),
+    ];
+    ```
+  - E na navegação inferior (`navItems`, linhas 57-61):
+    ```dart
+    if (!isReadOnly)
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.sports_soccer),
+        label: "Campo",
+      ),
+    ```
+- **Conclusão:**
+  - Com `isReadOnly = true` (modo web somente leitura), a aba "Campo" e a tela `MatchScreen` não são construídas nem acessíveis de nenhum ponto da aplicação web. Nenhuma outra tela, rota ou botão abre `MatchScreen`.
+
+---
+
+### 38. Causa da perda do fragmento `#/g/<token>` na URL no Flutter Web e correção — Tarefa T6b (Correção 2)
+- **O que viu (`lib/main_web.dart:71-103` e `lib/bootstrap_web.dart:24-85`):**
+  1. **Investigação da perda do fragmento na barra de endereços:**
+     - Ao acessar `http://localhost:5000/#/g/<token>`, o `bootstrapWeb()` lia o token de `Uri.base.fragment` e carregava o snapshot com sucesso.
+     - Em seguida, `AppWeb` instanciava o `MaterialApp` utilizando apenas a propriedade `home: GroupDashboardScreen(...)`, sem definir `initialRoute`, `onGenerateInitialRoutes` ou `onGenerateRoute`.
+     - No framework do Flutter (`packages/flutter/lib/src/widgets/app.dart:1711`), o `Navigator` da `WidgetsApp` é construído com `reportsRouteUpdateToEngine: true`.
+     - Quando `initialRoute` não é explicitamente definida ou quando o gerador de rotas padrão do `Navigator` (`Navigator.defaultGenerateInitialRoutes`) não encontra rotas configuradas para `/g/<token>`, o `Navigator` gera a rota padrão `'/'` (`Navigator.defaultRouteName`).
+     - Em `NavigatorState._flushHistory` (`navigator.dart:4571-4576`), ao registrar uma rota nomeada diferente da última anunciada, o Flutter executa:
+       ```dart
+       SystemNavigator.routeInformationUpdated(uri: Uri.parse(routeName));
+       ```
+     - O canal de plataforma web do Flutter (`BrowserHistory` / `HashUrlStrategy`) repassa essa URI ao navegador via `window.history.replaceState`, reescrevendo a URL na barra de endereços para `http://localhost:5000/#/` (ou `http://localhost:5000/`).
+     - Foi verificado via grep que nenhuma tela ou componente utiliza `pushReplacement` ou `pushNamed`. A perda ocorria estritamente no reporte da rota inicial `'/'` do `Navigator` ao engine do Flutter Web.
+     - Consequentemente, ao teclar F5, o navegador recarregava a URL sem o fragmento hash, fazendo `extractTokenFromUrl(Uri.base)` retornar `null` e exibindo a mensagem "Link inválido ou desativado".
+  2. **Correção implementada:**
+     - Em `lib/main_web.dart`:
+       - Definida a rota inicial como `initialRoute: '/g/$token'`.
+       - Fornecidos `onGenerateInitialRoutes` e `onGenerateRoute` mapeando `/g/$token` para `GroupDashboardScreen` com `RouteSettings(name: initialRoute)`.
+       - Implementado o `_WebTokenRouteObserver` (estendendo `NavigatorObserver`) que monitora `didPush`, `didPop`, `didReplace` e `didRemove`, assegurando via `SystemNavigator.routeInformationUpdated` que a URL do navegador sempre contenha `/g/$token`.
+       - Em caso de falha de conexão (`ConnectionErrorScreen`), a rota inicial também preserva `/g/$token` (via `BootstrapWebResult.token`), permitindo que retentativas ou recargas (F5) não percam o token.
+     - Em `lib/bootstrap_web.dart`:
+       - `BootstrapWebResult` preserva o token em memória.
+       - `extractTokenFromUrl` aceita tanto o fragmento `#/g/<token>` quanto a rota interna `/g/<token>` (quando não houver domínio/scheme), mantendo a rejeição a URLs completas sem fragmento (como `https://.../g/<token>`).
+     - **Armazenamento:** O token é mantido estritamente em memória e na URL; nenhum dado é gravado em `localStorage`, `sessionStorage` ou `cookies`.
+
+
