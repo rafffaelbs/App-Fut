@@ -18,21 +18,89 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Pelada">
+  <meta name="theme-color" content="#121620">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="app_do_fut">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pelada">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>app_do_fut</title>
+  <title>Pelada</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #121620;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #loading-container {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #121620;
+      z-index: 99999;
+      transition: opacity 0.2s ease-out;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-top: 3px solid #3884FF;
+      border-radius: 50%;
+      animation: spin 0.9s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+    }
+    .loading-text {
+      margin-top: 18px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #8E99A8;
+      letter-spacing: 0.3px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+  <div id="loading-container">
+    <div class="spinner"></div>
+    <div class="loading-text">Carregando...</div>
+  </div>
+  <script>
+    function removeLoader() {
+      var loader = document.getElementById('loading-container');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(function() {
+          if (loader && loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+          }
+        }, 200);
+      }
+    }
+    window.addEventListener('flutter-first-frame', removeLoader);
+    var observer = new MutationObserver(function() {
+      if (document.querySelector('flutter-view')) {
+        removeLoader();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

@@ -1,0 +1,56 @@
+name: Deploy Web to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.44.2'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Web
+        run: flutter build web --release -t lib/main_web.dart --pwa-strategy=none
+
+      - name: Generate Cloudflare redirects
+        env:
+          FUT_TOKEN: ${{ secrets.FUT_TOKEN }}
+        run: |
+          printf "/fut /#/g/%s 302\n" "$FUT_TOKEN" > build/web/_redirects
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/web --project-name=app-fut-site --branch=main
