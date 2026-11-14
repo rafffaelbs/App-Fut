@@ -566,4 +566,35 @@ Resolvido em fix/players-cache
        - `extractTokenFromUrl` aceita tanto o fragmento `#/g/<token>` quanto a rota interna `/g/<token>` (quando não houver domínio/scheme), mantendo a rejeição a URLs completas sem fragmento (como `https://.../g/<token>`).
      - **Armazenamento:** O token é mantido estritamente em memória e na URL; nenhum dado é gravado em `localStorage`, `sessionStorage` ou `cookies`.
 
+---
+
+### 39. Comportamento das flags do `flutter analyze` no Flutter 3.44.2 e execução no CI — Tarefa T7
+- **O que viu (`.github/workflows/deploy-web.yml`):**
+  - Na versão 3.44.2 do Flutter (Dart 3.12.2), o comando `flutter analyze` ativa por padrão `--fatal-infos` e `--fatal-warnings` (`defaults to on`).
+  - Como o projeto possui 250 avisos de informação de lint pré-existentes (principalmente `curly_braces_in_flow_control_structures` mantidos para não alterar o código original) e 14 warnings legados, a execução crua de `flutter analyze` retorna código de saída `1`, o que faria o passo do GitHub Actions falhar.
+  - O projeto possui rigorosamente **0 erros** de compilação/análise (`0 errors`), preservando a regra de ouro das Fases 1 e 2.
+- **Ação no workflow:**
+  - O passo de análise do workflow foi configurado como `flutter analyze --no-fatal-infos --no-fatal-warnings`. Dessa forma, qualquer erro real de compilação ou tipagem causará a falha imediata da pipeline, enquanto as convenções de estilo e avisos pré-existentes não quebram o deploy automatizado.
+
+---
+
+### 40. Ajustes em `web/manifest.json` para tema neutro e escuro — Tarefa T7
+- **O que viu (`web/manifest.json`):**
+  - O manifest continha valores gerados pelo template inicial do Flutter: `"name": "app_do_fut"`, `"short_name": "app_do_fut"`, `"description": "A new Flutter project."`, e cores `"background_color": "#0175C2"` e `"theme_color": "#0175C2"` (azul padrão do Flutter).
+- **Ajuste mínimo realizado:**
+  - `name` e `short_name` alterados para `"Pelada"`, mantendo neutralidade em relação ao nome do grupo (que é dinâmico e obtido via snapshot no app).
+  - `description` ajustada para `"Pelada"`.
+  - `background_color` e `theme_color` ajustados para `"#121620"`, harmonizando com o fundo escuro da tela de carregamento (`web/index.html`) e o tema visual do aplicativo web, evitando qualquer flash claro durante a inicialização como PWA no celular.
+  - A lista de ícones e demais configurações foram preservadas intactas.
+
+---
+
+### 41. Link curto no Cloudflare Pages via `_redirects` com fragmento `#` — Tarefa T7
+- **O que viu (`.github/workflows/deploy-web.yml` e `build/web/_redirects`):**
+  - A especificação do Cloudflare Pages permite regras de redirecionamento no formato `<origem> <destino> <status>`.
+  - No caso do link curto `/fut`, o destino pretendido é `/#/g/<token>`.
+  - Como o token fica após o `#` (fragmento do lado do cliente), o Cloudflare Pages repassa o header `Location: /#/g/<token>` com status HTTP `302`.
+  - O navegador recebe o cabeçalho de redirecionamento e interpreta a navegação para o fragmento `#/g/<token>`, acionando o roteador web da aplicação.
+  - No workflow de deploy, a linha é gerada em tempo de execução via `printf "/fut /#/g/%s 302
+" "$FUT_TOKEN" > build/web/_redirects`, garantindo que o secret `FUT_TOKEN` permaneça estritamente nas variáveis de ambiente do runner e nunca seja impresso na saída padrão (stdout/stderr) dos logs do GitHub Actions.
 
