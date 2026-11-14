@@ -1,11 +1,11 @@
 {
-    "name": "app_do_fut",
-    "short_name": "app_do_fut",
+    "name": "Pelada",
+    "short_name": "Pelada",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#121620",
+    "theme_color": "#121620",
+    "description": "Pelada",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
