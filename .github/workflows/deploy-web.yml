@@ -4,26 +4,27 @@ on:
   push:
     branches:
       - main
+    paths-ignore: ['docs/**', '**.md']
   workflow_dispatch:
 
 concurrency:
   group: deploy-cloudflare-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
-      deployments: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: 'stable'
           flutter-version: '3.44.2'
@@ -39,7 +40,7 @@ jobs:
         run: flutter test
 
       - name: Build Web
-        run: flutter build web --release -t lib/main_web.dart
+        run: flutter build web --release -t lib/main_web.dart --pwa-strategy=none
 
       - name: Generate Cloudflare redirects
         env:
@@ -47,13 +48,8 @@ jobs:
         run: |
           printf "/fut /#/g/%s 302\n" "$FUT_TOKEN" > build/web/_redirects
 
-      - name: Ensure Cloudflare headers and robots
-        run: |
-          cp web/robots.txt build/web/robots.txt
-          cp web/_headers build/web/_headers
-
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
