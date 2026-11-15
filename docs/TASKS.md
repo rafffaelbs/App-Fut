@@ -1,4 +1,4 @@
-# TASKS.md — Índice das tarefas (v5, atualizado em 03/11/2026)
+# TASKS.md — Índice das tarefas (v6, atualizado em 15/11/2026)
 
 > Este arquivo é só o **índice**. As tarefas, prompts, branches e prompts de revisão ficam em um arquivo por fase. O agente (AG ou Claude Code) lê `docs/ARCHITECTURE.md` e **apenas o arquivo da fase atual**.
 
@@ -8,8 +8,9 @@
 |---|---|---|
 | Fase 0 (T0, T0b, T0c, T0d, T0e, T0g) | `docs/F0-TASK.md` | ✅ concluída e integrada na `main` (histórico) |
 | Fase 1 (T1, T2, T3a a T3e, T4) e Fase 1b (T-B1 a T-B6c) | `docs/F1-TASK.md` | ✅ concluídas e integradas na `main`. 222 testes passando (histórico) |
-| **Fase 2 (site somente leitura, T5 a T7b)** | **`docs/F2-TASK.md`** | **⏳ fase atual** |
-| Fase 3 (app público offline, T8 a T15) | `docs/F3-TASK.md` | ⏳ depois da Fase 2 (prompts ainda não escritos) |
+| Fase 2 (site somente leitura, T5 a T7b, E1) | `docs/F2-TASK.md` | ✅ **encerrada em 15/11/2026**: site no ar em `app-fut-site.pages.dev/fut`. E1 (E1a, E1b, E1c e E1d) concluída (320 testes passando). Pendências no fim do arquivo: teste no iPhone, T7b (remover site antigo), T6c (backlog) |
+| Fase 3 (app público offline, T8 a T15) | `docs/F3-TASK.md` | ⏳ **próxima fase** (prompts ainda não escritos). Nota: a estética do site na Fase 2 chama-se **E1**, para não colidir com T8 a T15 |
+| **S1 — Segurança do RLS de `players`** (fora das fases) | `docs/S1-TASK.md` | ⏳ desenho concluído; próximo: S1b (app, AG) → instalar nos admins → S1a (SQL). Prioridade alta, não urgente |
 
 Ponto de partida oficial: a `main` atual. A tag `pre-refactor` fica só como referência de comparação.
 
@@ -23,8 +24,8 @@ Ponto de partida oficial: a `main` atual. A tag `pre-refactor` fica só como ref
 
 ## Decisões já tomadas (resumo; o detalhe de cada fase está no arquivo dela)
 
-- **Site antigo (React/Vercel)** não é mais usado e será removido no **fim da Fase 2** (T7b), junto do envio do pacote do site, `my_sync_code` e a tabela `sync_data` (que fica por último).
-- **Web somente leitura:** link secreto sem login (token por grupo + funções `SECURITY DEFINER`). Login pode ser acrescentado depois sem refazer a arquitetura. Hospedagem: Cloudflare Pages com build no GitHub Actions.
+- **Site antigo (React/Vercel)** não é mais usado e será removido na **T7b** (última tarefa da Fase 2, só depois de o site novo estar em uso), junto do envio do pacote do site, `my_sync_code` e a tabela `sync_data` (que fica por último).
+- **Web somente leitura:** link secreto sem login (token por grupo + funções `SECURITY DEFINER`). Login pode ser acrescentado depois sem refazer a arquitetura. Hospedagem: Cloudflare Pages com build no GitHub Actions (projeto `app-fut-site`; link curto `/fut` gerado no deploy a partir do secret `FUT_TOKEN`).
 - **Web sem `match_screen`.** Partida ao vivo e notificações de eventos ficam exclusivas do app.
 - `data_migration_service` e `fix_event_times_service`: movidos para `tool/legacy/` (T0b).
 - **App público:** um grupo só por enquanto; migrar para vários depois.

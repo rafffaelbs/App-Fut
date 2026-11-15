@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:app_do_fut/app/app_services.dart';
+import 'package:app_do_fut/models/milestone_update.dart';
 import 'package:app_do_fut/models/player_model.dart';
+import 'package:app_do_fut/models/season_model.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
 import 'package:app_do_fut/utils/dashboard_highlights.dart';
+import 'package:app_do_fut/utils/group_milestones_calculator.dart';
 import 'package:app_do_fut/utils/rating_calculator.dart';
 import 'package:app_do_fut/utils/stats_calculator.dart';
 
@@ -29,6 +32,9 @@ class DashboardData {
   /// Mapa de jogador (formato do ranking) por id, para avatar com moldura.
   final Map<String, Map<String, dynamic>> playerMaps;
 
+  /// Atualizações e conquistas históricas do grupo ordenadas do mais recente para o menos recente.
+  final List<MilestoneUpdate> updates;
+
   const DashboardData({
     required this.groupId,
     required this.currentMonth,
@@ -44,6 +50,7 @@ class DashboardData {
     required this.lastSession,
     required this.officialCraques,
     required this.playerMaps,
+    this.updates = const [],
   });
 }
 
@@ -90,6 +97,18 @@ class DashboardStore {
       final cur = monthKeyOf(DateTime.now());
       final prev = previousMonthKey(cur);
 
+      SeasonModel? currentSeason;
+      try {
+        currentSeason = await svc.seasons.getCurrentSeason(groupId);
+      } catch (_) {}
+
+      final milestones = computeGroupMilestones(
+        allHistory: history,
+        sessions: sessions,
+        players: players,
+        currentSeason: currentSeason,
+      );
+
       final result = DashboardData(
         groupId: groupId,
         currentMonth: cur,
@@ -108,6 +127,7 @@ class DashboardStore {
           for (final p in players)
             p.id: GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase),
         },
+        updates: milestones,
       );
       // O grupo pode ter mudado durante o cálculo.
       if (_groupId != groupId) return;

@@ -1,5 +1,7 @@
 # F2-TASK.md — Fase 2: site somente leitura (iPhone), link secreto sem login
 
+> **FASE 2 ENCERRADA em 15/11/2026** (site no ar em `https://app-fut-site.pages.dev/fut`). O que sobrou está em "Encerramento da Fase 2", no fim deste arquivo. A tarefa nova de estética do site (E1) segue em outra conversa. As tarefas T8 a T15 do `F3-TASK.md` são da Fase 3; por isso a estética do site passou a se chamar **E1**.
+
 > **Fase atual.** O agente lê este arquivo e `docs/ARCHITECTURE.md` (seções 2, 4, 5, 7 e 9). Não precisa ler as outras fases.
 > Ponto de partida: `main` com Fases 0, 1 e 1b concluídas (222 testes, 0 erros no analyze).
 > Prompts marcados **RASCUNHO** serão revisados pelo Claude antes de serem usados (dependem do resultado de tarefas anteriores). Sempre que um prompt mudar, o Claude atualiza este arquivo.
@@ -13,10 +15,10 @@
 | T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ na `main` em 14/11/2026 (URL mantém o token no F5; teste do erro de conexão a repetir no site publicado) |
 | T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ✅ no ar em 14/11/2026: `https://app-fut-site.pages.dev/fut` (302 para o link com token ok; 281 testes). **Falta:** teste no iPhone por um amigo (atalho da tela de início) |
 | T6c | Tela do admin **no app** (não no site): ver, copiar, girar e desativar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏸️ **adiada (backlog)** por decisão de 14/11. Enquanto isso, o token é girado pelo SQL Editor. Ao retomar: rodar antes o passo 5 de `sql/F2_T6_testes.md` |
-| T8 | Dashboard do site e carta do jogador (aba Peladas) | CLAUDE (desenho) + AG, revisão CLAUDE | por etapa | ⏳ **próxima**: T8.0 ✅; T8a (aba Peladas) e T8b (dashboard "Início") com prompt pronto |
-| T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **por último**, depois da T8 (**RASCUNHO**) |
+| E1 | Estética e conteúdo do site e da carta: aba Peladas na carta (E1a), dashboard "Início" (E1b), melhorias no dashboard e estatísticas (E1c) | CLAUDE (desenho) + AG, revisão CLAUDE | por etapa | ✅ E1a, E1b e E1c concluídas em 15/11/2026 (308 testes passando) |
+| T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **por último**, depois da E1 (**RASCUNHO**) |
 
-Ordem: T5, T6, T6b e T7 ✅ → **T8** (dashboard/legibilidade do site) → **T7b** (remover o site antigo). A **T6c** (tela de admin no app) está adiada no backlog. A T7b fica por último porque mexe no `match_screen` (proteção offline) e para não gerar conflito.
+Ordem: T5, T6, T6b e T7 ✅ → **E1** (dashboard/legibilidade do site) → **T7b** (remover o site antigo). A **T6c** (tela de admin no app) está adiada no backlog. A T7b fica por último porque mexe no `match_screen` (proteção offline) e para não gerar conflito.
 O site continua **somente leitura**; nenhuma função de admin é chamada por ele.
 
 ## Cabeçalho a colar no INÍCIO de todo prompt do AG desta fase
@@ -78,7 +80,7 @@ A política `players_select` (`auth.uid() is not null`) permite que **qualquer u
 
 ### Ideias para depois da validação do site
 
-- ~~**Dashboard exclusivo do site**~~ → virou a **T8**.
+- ~~**Dashboard exclusivo do site**~~ → virou a **E1**.
 - **Login opcional** (camada extra por cima do link) e **notificações de eventos**, exclusivas do app.
 - **Peso do snapshot:** hoje ~1,7 MB de JSON. Se ficar lento no iPhone, carregar só a temporada atual.
 
@@ -467,20 +469,20 @@ Revisão CLAUDE: o item some para não admin; erros tratados; token fora de logs
 
 ---
 
-## T8 · Dashboard do site e carta do jogador mais completa — CLAUDE (desenho) + AG, revisão CLAUDE
+## E1 · Dashboard do site e carta do jogador mais completa — CLAUDE (desenho) + AG, revisão CLAUDE
 
 Branch por etapa · Próxima tarefa. Respostas do Enzo (15/11/2026): (1) a carta do jogador deveria mostrar o histórico das peladas em que ele jogou; (2) dashboard com resumo das peladas, **craque do mês atual e do mês passado** e outros destaques; (3) sem pedidos específicos dos amigos por enquanto: aceita sugestões, que o Claude Code levanta lendo o código e o Claude valida.
 
-**Princípio:** sem escrita, sem tabelas novas, sem alterar fórmulas existentes (funções novas vão em arquivos novos). Telas exclusivas do site ficam em `lib/screens/web/`, ligadas só pelo `main_web`. A aba da T8a é aditiva e de leitura, então aparece no app e no site (se o Enzo preferir só no site, esconder com `isReadOnly`).
+**Princípio:** sem escrita, sem tabelas novas, sem alterar fórmulas existentes (funções novas vão em arquivos novos). Telas exclusivas do site ficam em `lib/screens/web/`, ligadas só pelo `main_web`. A aba da E1a é aditiva e de leitura, então aparece no app e no site (se o Enzo preferir só no site, esconder com `isReadOnly`).
 
 | Etapa | O que | Quem | Situação |
 |---|---|---|---|
-| T8.0 | Levantamento das telas do site, definição de "craque" no app e ideias de destaques | Claude Code (somente leitura) | ✅ feito em 15/11 (decisões abaixo) |
-| T8a | Aba "Peladas" na carta do jogador | AG, revisão CLAUDE | ⏳ prompt pronto, independe da T8.0 |
-| T8b | Dashboard "Início" do site | AG, revisão CLAUDE | ⏳ prompt pronto |
-| T8c | Histórico mais legível (só se o Enzo ainda quiser depois da T8a) | AG, revisão CLAUDE | ⏳ a decidir |
+| E1.0 | Levantamento das telas do site, definição de "craque" no app e ideias de destaques | Claude Code (somente leitura) | ✅ feito em 15/11 (decisões abaixo) |
+| E1a | Aba "Peladas" na carta do jogador | AG, revisão CLAUDE | ✅ concluída em 15/11 |
+| E1b | Dashboard "Início" do site | AG, revisão CLAUDE | ✅ concluída em 15/11 |
+| E1c | Melhorias no Dashboard e reformulação da tela de Estatísticas | AG | ✅ concluída em 15/11 (308 testes passando) |
 
-### T8.0 · Levantamento e ideias (colar no Claude Code, somente leitura)
+### E1.0 · Levantamento e ideias (colar no Claude Code, somente leitura)
 
 ```
 SOMENTE LEITURA: não edite arquivos; não rode git checkout, switch nem stash; para a versão
@@ -503,7 +505,7 @@ Queremos um dashboard (tela inicial do site) com destaques. Responda:
 Entregue um relatório curto, com tabela nos itens 1 e 3. Não escreva código.
 ```
 
-### T8a · Aba "Peladas" na carta do jogador (AG)
+### E1a · Aba "Peladas" na carta do jogador (AG)
 
 Branch: `feat/player-recent-sessions` (a partir da `main`).
 
@@ -531,7 +533,7 @@ Aceite: analyze e test ok; git diff -M main --stat só com player_detail.dart, a
 
 Revisão CLAUDE (Claude Code, somente leitura): consistência dos totais, filtro de período, proteções de escrita de `player_detail.dart` intactas, app e site sem regressão.
 
-### T8.0 · Resultado (15/11/2026) e decisões do Enzo
+### E1.0 · Resultado (15/11/2026) e decisões do Enzo
 
 Relatório do Claude Code (resumo): o site só mostra telas do app; não existe "craque" calculado em lugar nenhum (o "Craque do Mês" é um selo manual: `monthly_highlight`, `monthly_star_count`, `craque_mes_count`); o ranking da pelada ordena por G+A, depois gols, depois nota, sem mínimo; G+A = gols + assistências (gol contra não conta; assistência só em evento de gol); goleiros são tratados de 3 jeitos nas telas; não há função pública para filtrar por mês/período; riscos: duas fórmulas de nota (base 6,0 e 7,0), fuso horário (`MatchModel.fromMap` sem `.toLocal()`), partida sem data vira "agora", `arrivals` vem vazio no snapshot, a tela do dashboard recria a aba a cada troca e o cálculo no Safari trava a thread principal.
 
@@ -542,9 +544,9 @@ Decisões do Enzo:
 4. **Escopo da v1:** destaque do mês atual e do passado, resumo da última pelada, artilheiro e garçom do mês. Fica para depois: sequência de vitórias, melhor dupla, mais assíduo, goleiro do mês.
 5. Escolhas técnicas da Claude: mês pela **data da pelada** (não pelo horário de cada partida); partidas sem data ignoradas; desempate **G+A, gols, vitórias, nome** (sem nota, para não depender das fórmulas divergentes); o resumo da última pelada **não recalcula o craque da pelada**: o toque abre o Ranking da pelada, que já existe; dashboard como **nova primeira aba "Início" só no site**, resultados calculados uma vez e guardados fora do `State`.
 
-### T8b · Dashboard "Início" do site (AG)
+### E1b · Dashboard "Início" do site (AG)
 
-Branch: `feat/web-dashboard` (a partir da `main`). Independe da T8a (arquivos diferentes).
+Branch: `feat/web-dashboard` (a partir da `main`). Independe da E1a (arquivos diferentes).
 
 ```
 [cabeçalho]
@@ -600,10 +602,80 @@ Revisão CLAUDE (Claude Code, somente leitura): mês pela data da pelada e fuso;
 
 ---
 
+### E1c · Melhorias no Dashboard e Reformulação das Estatísticas (AG)
+
+✅ **Concluída em 15/11/2026** (308 testes passando, 0 erros no `dart analyze`).
+
+**O que foi feito:**
+1. **Dashboard (`lib/screens/web/home_dashboard_screen.dart`):**
+   - Saudação personalizada no topo: `"Bem-vindo ao $groupTitle, $_myPlayerName!"` no app mobile quando o perfil do usuário logado é identificado via `AppServices.instance.members.getMyMembership`. No site (web) ou para visitante/anônimo, exibe `"Bem-vindo ao $groupTitle!"`.
+   - Hero card com gradiente escuro refinado e chips de resumo rápido para a data da última pelada e jogador #1 do mês.
+   - Ícones dos jogadores atualizados para usar bordas de tier baseadas no Overall (`showTierBorder: true`).
+   - Badges de tier integrados nos cartões de Artilheiros e Garçons do mês.
+2. **Tela de Estatísticas (`lib/screens/season_stats_screen.dart`):**
+   - **Remoção do cabeçalho duplicado:** Retirada a `AppBar` interna redundante que gerava 2 setas de voltar sobrepostas com o `GroupDashboardScreen`. Substituída por título discreto no corpo com botão de recarregar e `RefreshIndicator` nativo.
+   - **Rankings no topo:** A classificação geral agora é a primeira seção após os seletores de período da temporada.
+   - **Padrão do ranking de pelada:**
+     - Pódio Top 3 com pedestais proporcionais (2º, 1º e 3º), medalhas de ouro/prata/bronze, avatares com borda de tier (`showTierBorder: true`), estrelas cosméticas (`StarsBadge`), `GoalsAssistsText`, resumo de cartões (`🟨/🟥`), Hat-Tricks (`🎩 HT`), Nota Média (`RatingPill`), partidas e W/D/L (`WdlText`).
+     - Top 4 a 8 exibido em cartões com layout e métricas idênticas às do ranking da pelada.
+     - Filtro de ordenação interativo (G+A, Nota Média, Gols, Assistências, Vitórias, Partidas, Cartões, Hat Tricks) e alternância crescente/decrescente.
+     - Alternador de abas entre Linha e Goleiros (com Clean Sheets, vitórias e média de gols sofridos).
+     - Modal de tabela completa ("Ver todos"): substituídas as colunas de "Rating" e "Forma" por **"Nota Média"** (com `RatingPill`), e incluídas as colunas de **Cartões** (com detalhe de amarelos/vermelhos) e **Hat Tricks**.
+   - **Reposicionamento dos quadros e evolução:** O gráfico de evolução (`EvolutionChartCard`) e os quadros de gols contra, nota média, taxa de vitórias e duplas dinâmicas (`_buildBoards()`) foram movidos para baixo do ranking geral, seguidos pelos pódios por categoria.
+3. **Componente de Avatar (`lib/widgets/shared/ranking_player_bits.dart`):**
+   - Adicionado o parâmetro `showTierBorder: bool = false` em `RankAvatar`, calculando o overall via `playerOverallOf(player)` e aplicando as cores e espessuras de borda de acordo com o tier (`overallColor`): Lendária ($\ge 85$), Platina ($80-84$) e Ouro ($< 80$).
+
+---
+
+### E1d · Estilos de Avatares (Fundo vs Auréola), Atualizações Recentes do Grupo e Notificações (AG)
+
+✅ **Concluída em 15/11/2026** (320 testes passando, 0 erros no `dart analyze`).
+
+**O que foi feito:**
+1. **Personalização do Estilo Visual de Rating dos Avatares:**
+   - **Gerenciador Centralizado (`lib/services/avatar_style_manager.dart`):** Singleton com `AvatarRatingStyle` (`off`, `halo`, `background`) e contextos por tela (`ranking`, `dashboard`, `stats`, `match`). Persistência em `SharedPreferences` (`avatar_style_*`) e reatividade via `ValueNotifier`. Padrão: Fundo no ranking, dashboard e estatísticas, e Auréola na partida.
+   - **Painel em Configurações (`lib/screens/settings_screen.dart`):** Seletor segmentado (`Desligado`, `Auréola`, `Fundo`) para cada tela, além de 4 botões de presets rápidos (*Fundo no Ranking, Auréola na Partida*; *Tudo Fundo*; *Tudo Auréola*; *Desligar Tudo*).
+   - **Adaptação dos Componentes:**
+     - `RankAvatar` (`lib/widgets/shared/ranking_player_bits.dart`): Quando em modo `background`, preenche o círculo com o gradiente do tier do rating (`LinearGradient(palette.gradient)`), centraliza a foto recortada dentro de `ClipOval` e omite a borda/halo externo. Quando `halo`, aplica a borda/halo de tier com glow. Em `off`, mantém fundo neutro sem destaque.
+     - `FifaCard` / `_SmallChip` (`lib/widgets/player/fifa_card.dart`): Respeita a preferência de partida (`AvatarContext.match`).
+     - `SeasonStatsScreen` (`lib/screens/season_stats_screen.dart`): Conectado a `AvatarContext.stats`.
+2. **Seção de Atualizações Recentes no Dashboard:**
+   - **Modelo (`lib/models/milestone_update.dart`):** Estrutura de dados para marcos históricos (`MilestoneType`: jogos no total/temporada, gols no total/temporada, assistências no total/temporada, vitórias acumuladas, hat-trick e clean sheet de goleiro).
+   - **Cálculo Cronológico (`lib/utils/group_milestones_calculator.dart`):** Analisa as partidas da mais antiga para a mais recente acumulando totais e detectando passagens de limites (10, 25, 50, 75, 100, 150, 200...). Ordena o resultado do mais recente para o menos recente.
+   - **Store (`lib/services/dashboard_store.dart`):** Adicionado campo `updates` no `DashboardData`, calculado durante a carga dos dados do grupo.
+   - **Exibição (`lib/screens/web/home_dashboard_screen.dart`):** Card de atualizações com badges, datas, navegação para a tela do jogador e abas de alternância (*Todas do Grupo* / *Minhas Notificações*).
+3. **Central de Notificações Exclusiva do App Móvel:**
+   - **Botão na AppBar (`lib/screens/group_dashboard_screen.dart`):** Ícone de sino com badge de não lidas, restrito ao app móvel autenticado (`!kIsWeb && hasAuth && _myPlayerId != null`). Oculto na versão web somente leitura.
+   - **Modal de Notificações (`lib/widgets/shared/notifications_sheet.dart`):** Apresenta as atualizações filtradas para o jogador logado em 1ª pessoa (*"Você alcançou 100 jogos na temporada"*), com persistência do timestamp de leitura (`last_seen_notif_${groupId}_${playerId}`).
+4. **Testes Criados (12 novos testes):**
+   - `test/utils/group_milestones_calculator_test.dart` (6 testes).
+   - `test/services/avatar_style_manager_test.dart` (4 testes).
+   - `test/widgets/notifications_sheet_test.dart` (2 testes).
+
+---
+
 ## T7b · Aposentar o site antigo — AG + Enzo · **RASCUNHO, por último**
 
-Branch: `chore/remove-old-site` · Só depois de a T8 estar na `main` e o site novo em uso pelos amigos. Faça com a `main` limpa, sem outras branches abertas que mexam em `match_screen`.
+Branch: `chore/remove-old-site` · Só depois de a E1 estar na `main` e o site novo em uso pelos amigos. Faça com a `main` limpa, sem outras branches abertas que mexam em `match_screen`.
 
 **Enzo (nesta ordem):** 1) confirmar que o site novo funciona para os amigos; 2) apagar o projeto do site React na Vercel; 3) conferir no Supabase se mais alguma coisa usa `sync_data` / `my_sync_code`; 4) por último, `drop table sync_data` (SQL entregue pelo Claude, com backup antes).
 
 **AG (código):** remover `SiteSyncService`, `SupabaseSiteSyncService`, `SiteDataGenerator`, a flag `hasSiteSync`, `_scheduleSiteSync` e `_triggerBackgroundSync` do `match_screen`, o campo `siteSync` do `AppServices`, o uso de `my_sync_code` e os trechos do painel de debug que dependem disso; remover do repositório qualquer pasta ou arquivo do site React antigo (se existir); atualizar `ARCHITECTURE.md`, `BACKLOG.md` e `DUVIDAS.md`. **Atenção:** mexe em `match_screen`, onde fica a proteção offline. Exige revisão do Claude Code (prompt com a proibição de `git checkout`/`switch`/`stash`) e o **teste do modo avião (item 9 do checklist)**. Não alterar a chave `pending_matches_v1` nem as outras chaves protegidas. A coluna `groups.sync_code` fica (não apagar sem decisão separada). O prompt completo será escrito quando chegar a hora.
+
+---
+
+## Encerramento da Fase 2 (15/11/2026)
+
+**Entregue:** link secreto por grupo sem login (T6); site Flutter Web somente leitura lendo um snapshot por token (T5, T6b); URL mantém o token; build e deploy automático no Cloudflare Pages via GitHub Actions, com link curto `/fut` e `start_url` do atalho (T7); dashboard "Início" e aba "Peladas" na carta do jogador (E1a, E1b); melhorias visuais no dashboard e reformulação completa da tela de estatísticas da temporada no padrão do ranking de pelada com pódio, top 4-8, cartões, HT e bordas de tier (E1c); personalização de estilo de avatar (fundo vs auréola por tela), seção de atualizações recentes e notificações exclusivas para o perfil logado no app (E1d). 320 testes passando na suíte.
+
+**Pendências que não bloqueiam o encerramento:**
+1. **Merge** de E1a (`feat/player-recent-sessions`), E1b (`feat/web-dashboard`), E1c e E1d na `main`. Recomendado: revisão do Claude Code em sessão nova, somente leitura. Conferir que o app personal não teve quebras.
+2. **Teste no iPhone** por um amigo (Safari → Adicionar à Tela de Início → abrir pelo ícone). Se o atalho abrir "Link inválido", o `start_url: "/fut"` não valeu no iOS.
+3. **Teste do erro de conexão no site publicado** (DevTools → Network request blocking → `*supabase.co*` → recarregar → "Tentar de novo").
+4. Conferir `curl -s https://app-fut-site.pages.dev/_redirects | grep -c <início do token>` = 0.
+5. **T7b** (remover o site antigo): só quando o site novo estiver em uso pelos amigos; mexe no `match_screen`, então precisa de revisão e do teste de modo avião.
+6. **T6c** (tela de admin no app para ver/girar o link): adiada (backlog). Antes, rodar o passo 5 de `sql/F2_T6_testes.md`.
+7. **E1c e E1d concluídas em 15/11**; eventuais novos refinamentos estéticos pontuais no futuro podem ser feitos conforme feedback.
+8. Antes de divulgar o link: decidir se gira o token (o atual passou por prints e chat); se girar, atualizar o secret `FUT_TOKEN` no GitHub e rodar o workflow.
+9. Registrar no `BACKLOG.md`: tela de admin do link (T6c); sequência de vitórias, melhor dupla, mais assíduo e goleiro do mês no dashboard; `/fut` resolver o token atual em tempo de execução (hoje exige atualizar `FUT_TOKEN` após girar); `--no-web-resources-cdn` se o Network mostrar chamadas ao Google; selo "Craque do mês" não guarda o mês (só o portador atual).
+10. Ajustes de documentação listados em `TASKS.md` (regra 5 do `ARCHITECTURE.md` com as exceções aditivas da T6 e da S1, seção 7, Fut do INF não apagado, contagem de testes atualizada para 320).

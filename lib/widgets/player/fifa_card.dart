@@ -7,6 +7,7 @@ import '../shared/cosmetic_frame.dart';
 import '../shared/player_name_text.dart';
 import '../shared/player_avatar_frame.dart';
 import '../shared/stars_badge.dart';
+import '../../services/avatar_style_manager.dart';
 
 /// Densidades da carta (docs/design/06 e 03 §4.4).
 ///
@@ -530,6 +531,10 @@ class _SmallChip extends StatelessWidget {
     final short = name.trim().toUpperCase();
     final shortName = short.length <= 10 ? short : short.substring(0, 10);
 
+    final style = AvatarStyleManager.instance.getStyle(AvatarContext.match);
+    final isBackground = style == AvatarRatingStyle.background;
+    final isHalo = style == AvatarRatingStyle.halo;
+
     final Widget photo = CosmeticFrame(
       cosmetic: cosmetic,
       thickness: 1.5,
@@ -540,20 +545,37 @@ class _SmallChip extends StatelessWidget {
         height: 46,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: palette.gradient,
-          ),
-          border: palette.border == null
-              ? null
-              : Border.all(color: palette.border!, width: 1.5),
+          color: isBackground ? null : AppColors.headerBlue,
+          gradient: isBackground
+              ? LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: palette.gradient,
+                )
+              : null,
+          border: isHalo
+              ? Border.all(
+                  color: palette.border ?? palette.text,
+                  width: 2.0,
+                )
+              : (palette.border == null || !isBackground
+                  ? null
+                  : Border.all(color: palette.border!, width: 1.5)),
+          boxShadow: isHalo
+              ? [
+                  BoxShadow(
+                    color: (palette.border ?? palette.text).withValues(alpha: 0.4),
+                    blurRadius: 4,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
         ),
         child: ClipOval(
           child: _PlayerPhoto(
             name: name,
             iconPath: iconPath,
-            color: palette.text,
+            color: isBackground ? palette.text : AppColors.textWhite,
             fontSize: 22,
             onTap: null,
             showEdit: false,

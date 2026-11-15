@@ -57,6 +57,8 @@ Conforme especificação da tarefa, cada chave ou prefixo está categorizado em:
 | `seasons_$groupId`<br>*(prefixo `seasons_`)* | **(e)** / legada | *Nenhum escritor no código* | `lib/screens/group_ranking_screen.dart:116`<br>`lib/utils/stats_calculator.dart:124`<br>`lib/utils/site_data_generator.dart:46`<br>`tool/legacy/data_migration_service.dart:290` | — | Lista JSON de temporadas legadas do grupo (`id`, `name`, `startDate`, `endDate`). |
 | `app_groups` | **(e)** / legada | *Nenhum escritor no código* | `lib/utils/site_data_generator.dart:16`<br>`tool/legacy/data_migration_service.dart:112` | — | Lista JSON de grupos locais legados pré-Supabase. |
 | `players_grupo_` | **(e)** / legada | *Nenhum escritor no código* | `lib/utils/site_data_generator.dart:27` | — | Variação legada de chave de grupo pré-Supabase. |
+| `avatar_style_ranking`<br>`avatar_style_dashboard`<br>`avatar_style_stats`<br>`avatar_style_match` | **(d)** | `lib/services/avatar_style_manager.dart:98, 126` | `lib/services/avatar_style_manager.dart:56-69` | — | `String`: Preferência do estilo visual de rating nos avatares (`off`, `halo`, `background`) por tela/contexto. |
+| `last_seen_notif_${groupId}_${playerId}` | **(e)** | `lib/widgets/shared/notifications_sheet.dart:58` | `lib/screens/group_dashboard_screen.dart:82` | — | String ISO 8601 da data/hora em que o jogador logado visualizou suas notificações no grupo pela última vez (usado no cálculo do badge de não lidas). |
 
 ---
 

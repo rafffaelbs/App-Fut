@@ -6,6 +6,18 @@
 
 ---
 
+## Atualização de 15/11/2026 (Fase 2 e Tarefas Estéticas E1 concluídas)
+
+> **Situação:** A Fase 2 (site somente leitura no Cloudflare Pages) foi finalizada e publicada em `https://app-fut-site.pages.dev/fut`. A suíte conta agora com **320 testes passando** e zero erros no `flutter analyze`.
+> 
+> As tarefas estéticas e funcionais de leitura da **E1** foram implementadas:
+> - **E1a:** Nova aba "Peladas" na carta do jogador (`player_detail.dart`), exibindo o histórico recente de peladas e resumo de participações.
+> - **E1b:** Aba inicial do grupo ("Início" / Dashboard em `home_dashboard_screen.dart`), com destaques mensais calculados, último resumo de pelada e destaques oficiais.
+> - **E1c:** Refinamentos no Dashboard (saudação personalizada por perfil/web e hero card) e reformulação completa da tela de Estatísticas da Temporada (`season_stats_screen.dart`), alinhando o layout ao padrão do ranking de pelada (pódio top 3, top 4-8, cartões, Hat Tricks, Nota Média e bordas de tier nos avatares via `overallColor`).
+> - **E1d:** Estilos visuais de rating nos avatares (Desligado, Auréola e Fundo com gradiente do rating) configuráveis por tela via `AvatarStyleManager` e painel em `SettingsScreen`; nova seção de **Atualizações Recentes** no Dashboard com cálculo cronológico de marcos (`computeGroupMilestones`); e **Central de Notificações** no topo do app móvel com contador e filtro exclusivo para o perfil logado (`NotificationsSheet`).
+
+---
+
 ## Atualização de 03/11/2026 (Fase 1b concluída)
 
 > **Aviso:** O restante deste documento descreve o estado de 02/11/2026 (ao término da Fase 1, com 162 testes). A suíte agora conta com **217 testes passando** e zero erros no `flutter analyze`.

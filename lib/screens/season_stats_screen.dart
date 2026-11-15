@@ -5,7 +5,11 @@ import 'package:app_do_fut/models/season_model.dart';
 import 'package:app_do_fut/app/app_services.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
 import 'package:app_do_fut/services/group_bootstrap.dart';
+import 'package:app_do_fut/theme/app_theme.dart';
 import 'package:app_do_fut/utils/rating_calculator.dart';
+import 'package:app_do_fut/services/avatar_style_manager.dart';
+import 'package:app_do_fut/widgets/shared/ranking_player_bits.dart';
+import 'package:app_do_fut/widgets/shared/stars_badge.dart';
 import 'package:app_do_fut/widgets/stats/duos_donut.dart';
 import 'package:app_do_fut/widgets/stats/evolution_chart.dart';
 import 'package:app_do_fut/widgets/stats/full_ranking_sheet.dart';
@@ -38,6 +42,7 @@ class _Vs {
 }
 
 enum StatKey {
+  notaMedia,
   ga,
   matches,
   goals,
@@ -61,6 +66,7 @@ class _ColDef {
 }
 
 const List<_ColDef> _cols = [
+  _ColDef(StatKey.notaMedia, 'Nota Média', 'Média das notas das partidas no período'),
   _ColDef(StatKey.ga, 'G+A', 'Gols + Assistências'),
   _ColDef(StatKey.matches, 'PJ', 'Partidas Jogadas'),
   _ColDef(StatKey.goals, 'G', 'Gols'),
@@ -68,7 +74,6 @@ const List<_ColDef> _cols = [
   _ColDef(StatKey.ved, 'V/E/D', 'Vitórias / Empates / Derrotas (Ordena por vitórias)'),
   _ColDef(StatKey.cards, 'C', 'Cartões (Amarelos + Vermelhos)'),
   _ColDef(StatKey.hatTricks, 'HT', 'Hat Tricks'),
-  _ColDef(StatKey.formLast10, 'Forma', 'Média das últimas 10 partidas'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -143,6 +148,8 @@ class PlayerStatsAgg {
         return gkGoalsConcededAvg;
       case StatKey.gkRating:
         return gkRating;
+      case StatKey.notaMedia:
+        return overallRating;
       case StatKey.formLast10:
         return formLast10;
     }
@@ -182,6 +189,32 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   Map<String, Map<String, dynamic>> _playerMaps = {};
   List<Map<String, dynamic>> _playerMapList = [];
   DateTime _now = DateTime.now();
+
+  // Ranking Geral
+  bool _showGkRanking = false;
+  String _rankSortKey = 'ga';
+  bool _rankSortDescending = true;
+  String _gkRankSortKey = 'nota';
+  bool _gkRankSortDescending = true;
+
+  static const List<Map<String, String>> _fieldSortOptions = [
+    {'value': 'ga', 'label': 'G+A (Gols + Assistências)'},
+    {'value': 'nota', 'label': 'Nota Média'},
+    {'value': 'goals', 'label': 'Gols'},
+    {'value': 'assists', 'label': 'Assistências'},
+    {'value': 'wins', 'label': 'Vitórias'},
+    {'value': 'matches', 'label': 'Partidas Jogadas'},
+    {'value': 'cards', 'label': 'Cartões'},
+    {'value': 'hatTricks', 'label': 'Hat Tricks'},
+  ];
+
+  static const List<Map<String, String>> _gkSortOptions = [
+    {'value': 'nota', 'label': 'Nota Média'},
+    {'value': 'clean_sheets', 'label': 'Clean Sheets'},
+    {'value': 'wins', 'label': 'Vitórias'},
+    {'value': 'matches', 'label': 'Jogos'},
+    {'value': 'conceded', 'label': 'Média Gols Sofridos'},
+  ];
 
   @override
   void initState() {
@@ -343,7 +376,11 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           final isRed = p.lineups.any((l) => l.playerId == ev.playerId && l.isTeamA) ||
               (ev.team?.toLowerCase().contains('red') ?? false);
           final tied = runningRed == runningWhite;
-          if (isRed) runningRed++; else runningWhite++;
+          if (isRed) {
+            runningRed++;
+          } else {
+            runningWhite++;
+          }
 
           if (tied && ev.minute != null && ev.minute!.isNotEmpty) {
             final minStr = ev.minute!.split(':').first;
@@ -490,6 +527,36 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Estatísticas dos Jogadores',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Classificação geral, pódios e histórico',
+                    style: TextStyle(color: _Vs.textMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: _Vs.accentLight),
+              tooltip: 'Recarregar',
+              onPressed: _loadData,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -633,6 +700,612 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
 
   // ─────────────────────────────────────────────────────────────────────────
+  // RANKING GERAL (TOP 3 PÓDIO + TOP 4-8 + MODAL COMPLETO)
+  // ─────────────────────────────────────────────────────────────────────────
+  List<PlayerStatsAgg> _getSortedStats({required bool isGk}) {
+    final list = stats.where((s) => isGk ? s.gkGames > 0 : s.matches > 0).toList();
+    final sortKey = isGk ? _gkRankSortKey : _rankSortKey;
+    final descending = isGk ? _gkRankSortDescending : _rankSortDescending;
+
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (sortKey) {
+        case 'ga':
+          cmp = a.ga.compareTo(b.ga);
+          if (cmp == 0) cmp = a.overallRating.compareTo(b.overallRating);
+          break;
+        case 'nota':
+          final rA = isGk ? (a.gkRating > 0 ? a.gkRating : a.overallRating) : a.overallRating;
+          final rB = isGk ? (b.gkRating > 0 ? b.gkRating : b.overallRating) : b.overallRating;
+          cmp = rA.compareTo(rB);
+          if (cmp == 0) cmp = a.wins.compareTo(b.wins);
+          break;
+        case 'goals':
+          cmp = a.goals.compareTo(b.goals);
+          if (cmp == 0) cmp = a.assists.compareTo(b.assists);
+          break;
+        case 'assists':
+          cmp = a.assists.compareTo(b.assists);
+          if (cmp == 0) cmp = a.goals.compareTo(b.goals);
+          break;
+        case 'wins':
+          final wA = isGk ? a.gkWins : a.wins;
+          final wB = isGk ? b.gkWins : b.wins;
+          cmp = wA.compareTo(wB);
+          break;
+        case 'matches':
+          final mA = isGk ? a.gkGames : a.matches;
+          final mB = isGk ? b.gkGames : b.matches;
+          cmp = mA.compareTo(mB);
+          break;
+        case 'cards':
+          cmp = a.cards.compareTo(b.cards);
+          break;
+        case 'hatTricks':
+          cmp = a.hatTricks.compareTo(b.hatTricks);
+          break;
+        case 'clean_sheets':
+          cmp = a.gkCleanSheets.compareTo(b.gkCleanSheets);
+          break;
+        case 'conceded':
+          cmp = a.gkGoalsConcededAvg.compareTo(b.gkGoalsConcededAvg);
+          return descending ? cmp : -cmp; // Menos gols sofridos é melhor
+      }
+      return descending ? -cmp : cmp;
+    });
+
+    return list;
+  }
+
+  String _getPrimaryMetricValue(PlayerStatsAgg s, bool isGk) {
+    final sortKey = isGk ? _gkRankSortKey : _rankSortKey;
+    switch (sortKey) {
+      case 'ga':
+        return '${s.ga}';
+      case 'nota':
+        final r = isGk ? (s.gkRating > 0 ? s.gkRating : s.overallRating) : s.overallRating;
+        return r.toStringAsFixed(1);
+      case 'goals':
+        return '${s.goals}';
+      case 'assists':
+        return '${s.assists}';
+      case 'wins':
+        return '${isGk ? s.gkWins : s.wins}';
+      case 'matches':
+        return '${isGk ? s.gkGames : s.matches}';
+      case 'cards':
+        return '${s.cards}';
+      case 'hatTricks':
+        return '${s.hatTricks}';
+      case 'clean_sheets':
+        return '${s.gkCleanSheets}';
+      case 'conceded':
+        return s.gkGoalsConcededAvg.toStringAsFixed(2);
+      default:
+        return '${s.ga}';
+    }
+  }
+
+  String _getPrimaryMetricLabel(bool isGk) {
+    final sortKey = isGk ? _gkRankSortKey : _rankSortKey;
+    switch (sortKey) {
+      case 'ga':
+        return 'G+A';
+      case 'nota':
+        return 'Nota Média';
+      case 'goals':
+        return 'Gols';
+      case 'assists':
+        return 'Assist.';
+      case 'wins':
+        return 'Vitórias';
+      case 'matches':
+        return 'Partidas';
+      case 'cards':
+        return 'Cartões';
+      case 'hatTricks':
+        return 'Hat Tricks';
+      case 'clean_sheets':
+        return 'Clean Sheets';
+      case 'conceded':
+        return 'Gols Sofridos';
+      default:
+        return 'G+A';
+    }
+  }
+
+  Widget _buildGeneralRankingSection() {
+    final hasGk = stats.any((s) => s.gkGames > 0);
+    final sorted = _getSortedStats(isGk: _showGkRanking);
+    final top3 = sorted.take(3).toList();
+    final top4to8 = sorted.length > 3 ? sorted.sublist(3, sorted.length.clamp(3, 8)) : <PlayerStatsAgg>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Cabeçalho da seção com título e alternador de goleiros
+        Row(
+          children: [
+            const Text(
+              '🏆',
+              style: TextStyle(fontSize: 22),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Classificação Geral',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            if (hasGk)
+              Container(
+                decoration: BoxDecoration(
+                  color: _Vs.panel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _Vs.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                      onTap: () => setState(() => _showGkRanking = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        color: !_showGkRanking ? _Vs.accent : Colors.transparent,
+                        child: Text(
+                          'Linha',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: !_showGkRanking ? FontWeight.bold : FontWeight.normal,
+                            color: !_showGkRanking ? Colors.white : _Vs.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                      onTap: () => setState(() => _showGkRanking = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        color: _showGkRanking ? _Vs.accent : Colors.transparent,
+                        child: Text(
+                          'Goleiros',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: _showGkRanking ? FontWeight.bold : FontWeight.normal,
+                            color: _showGkRanking ? Colors.white : _Vs.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        // Filtro de ordenação
+        Row(
+          children: [
+            const Text(
+              'ORDENAR POR:',
+              style: TextStyle(
+                color: _Vs.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _Vs.panel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _Vs.border),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _showGkRanking ? _gkRankSortKey : _rankSortKey,
+                    dropdownColor: _Vs.panel,
+                    isDense: true,
+                    style: const TextStyle(color: _Vs.text, fontSize: 12),
+                    icon: const Icon(Icons.arrow_drop_down, color: _Vs.accentLight, size: 20),
+                    items: (_showGkRanking ? _gkSortOptions : _fieldSortOptions).map((opt) {
+                      return DropdownMenuItem<String>(
+                        value: opt['value'],
+                        child: Text(opt['label']!),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          if (_showGkRanking) {
+                            _gkRankSortKey = val;
+                          } else {
+                            _rankSortKey = val;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  if (_showGkRanking) {
+                    _gkRankSortDescending = !_gkRankSortDescending;
+                  } else {
+                    _rankSortDescending = !_rankSortDescending;
+                  }
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _Vs.panel,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _Vs.border),
+                ),
+                child: Icon(
+                  (_showGkRanking ? _gkRankSortDescending : _rankSortDescending)
+                      ? Icons.arrow_downward
+                      : Icons.arrow_upward,
+                  size: 16,
+                  color: _Vs.accentLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Pódio Top 3
+        if (sorted.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: _Vs.panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _Vs.border),
+            ),
+            child: const Center(
+              child: Text(
+                'Nenhum dado encontrado para o período selecionado.',
+                style: TextStyle(color: _Vs.textMuted, fontSize: 13),
+              ),
+            ),
+          )
+        else ...[
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+            decoration: BoxDecoration(
+              color: _Vs.panel,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _Vs.border),
+            ),
+            child: _buildGeneralPodium(top3, isGk: _showGkRanking),
+          ),
+
+          // Top 4 a 8
+          if (top4to8.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildGeneralTop4To8(top4to8, isGk: _showGkRanking),
+          ],
+
+          // Botão "Ver Ranking Completo"
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _Vs.accentLight,
+              side: const BorderSide(color: _Vs.accentLight),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => _showFullRankingModal(isGk: _showGkRanking),
+            icon: const Icon(Icons.format_list_numbered, size: 18),
+            label: Text(
+              'Ver Ranking Completo (${sorted.length} jogadores)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildGeneralPodium(List<PlayerStatsAgg> top, {bool isGk = false}) {
+    PlayerStatsAgg? at(int i) => top.length > i ? top[i] : null;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(child: _generalPodiumSlot(at(1), 2, 72, _Vs.silver, isGk)),
+        Expanded(child: _generalPodiumSlot(at(0), 1, 104, _Vs.gold, isGk)),
+        Expanded(child: _generalPodiumSlot(at(2), 3, 52, _Vs.bronze, isGk)),
+      ],
+    );
+  }
+
+  Widget _generalPodiumSlot(
+    PlayerStatsAgg? s,
+    int position,
+    double barHeight,
+    Color medal,
+    bool isGk,
+  ) {
+    if (s == null) return const SizedBox.shrink();
+
+    final bool first = position == 1;
+    final playerMap = _mapFor(s.player);
+    final cosmetic = cosmeticOfMap(playerMap);
+    final nota = isGk ? (s.gkRating > 0 ? s.gkRating : s.overallRating) : s.overallRating;
+    final metric = _getPrimaryMetricValue(s, isGk);
+    final metricLabel = _getPrimaryMetricLabel(isGk);
+
+    return GestureDetector(
+      onTap: () => _openPlayer(s),
+      onLongPress: () => showPlayerCardPeek(context, playerMap),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          RankAvatar(
+            player: playerMap,
+            size: first ? 56 : 44,
+            glow: first,
+            contextType: AvatarContext.stats,
+          ),
+          if (cosmetic.stars > 0) ...[
+            const SizedBox(height: 2),
+            StarsBadge(stars: cosmetic.stars, compact: true, size: 12),
+          ],
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: RankName(
+              player: playerMap,
+              showStars: false,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: first ? 13 : 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(metric, style: AppTheme.number(fontSize: first ? 20 : 18)),
+          Text(
+            metricLabel,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _Vs.textMuted, fontSize: 10),
+          ),
+          if (!isGk) ...[
+            const SizedBox(height: 4),
+            GoalsAssistsText(goals: s.goals, assists: s.assists),
+          ],
+          if (s.cards > 0 || s.hatTricks > 0) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 4,
+              children: [
+                if (s.yellowCards > 0)
+                  Text('🟨${s.yellowCards}', style: const TextStyle(fontSize: 10, color: _Vs.textMuted)),
+                if (s.redCards > 0)
+                  Text('🟥${s.redCards}', style: const TextStyle(fontSize: 10, color: _Vs.textMuted)),
+                if (s.hatTricks > 0)
+                  Text('🎩${s.hatTricks}', style: const TextStyle(fontSize: 10, color: _Vs.accentLight, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ],
+          const SizedBox(height: 6),
+          RatingPill(rating: nota, fontSize: first ? 13 : 11),
+          const SizedBox(height: 6),
+          Text(
+            '${isGk ? s.gkGames : s.matches} ${isGk ? 'jogos' : 'partidas'}',
+            style: const TextStyle(color: _Vs.textMuted, fontSize: 10),
+          ),
+          WdlText(
+            wins: isGk ? s.gkWins : s.wins,
+            draws: isGk ? 0 : s.draws,
+            losses: isGk ? 0 : s.losses,
+            fontSize: 10,
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: barHeight,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [medal.withValues(alpha: 0.22), medal.withValues(alpha: 0.0)],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              border: Border(top: BorderSide(color: medal, width: 2)),
+            ),
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('$positionº', style: AppTheme.number(fontSize: 20, color: medal)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGeneralTop4To8(List<PlayerStatsAgg> items, {bool isGk = false}) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: List.generate(items.length, (i) {
+        final s = items[i];
+        final playerMap = _mapFor(s.player);
+        final int games = isGk ? s.gkGames : s.matches;
+        final String metric = _getPrimaryMetricValue(s, isGk);
+        final String metricLabel = _getPrimaryMetricLabel(isGk);
+        final double nota = isGk ? (s.gkRating > 0 ? s.gkRating : s.overallRating) : s.overallRating;
+
+        return GestureDetector(
+          onTap: () => _openPlayer(s),
+          onLongPress: () => showPlayerCardPeek(context, playerMap),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _Vs.panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _Vs.border),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '${i + 4}º',
+                    style: AppTheme.number(fontSize: 14, color: _Vs.textMuted),
+                  ),
+                ),
+                RankAvatar(
+                  player: playerMap,
+                  size: 40,
+                  contextType: AvatarContext.stats,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RankName(player: playerMap),
+                      const SizedBox(height: 3),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (!isGk)
+                            Text(
+                              '⚽ ${s.goals} · 👟 ${s.assists} · ',
+                              style: const TextStyle(
+                                color: _Vs.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          if (s.yellowCards > 0)
+                            Text(
+                              '🟨 ${s.yellowCards} · ',
+                              style: const TextStyle(
+                                color: _Vs.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          if (s.redCards > 0)
+                            Text(
+                              '🟥 ${s.redCards} · ',
+                              style: const TextStyle(
+                                color: _Vs.textMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          if (s.hatTricks > 0)
+                            Text(
+                              '🎩 ${s.hatTricks} HT · ',
+                              style: const TextStyle(
+                                color: _Vs.accentLight,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          Text(
+                            '$games ${games == 1 ? 'partida' : 'partidas'} · ',
+                            style: const TextStyle(
+                              color: _Vs.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                          WdlText(
+                            wins: isGk ? s.gkWins : s.wins,
+                            draws: isGk ? 0 : s.draws,
+                            losses: isGk ? 0 : s.losses,
+                            fontSize: 11,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(metric, style: AppTheme.number(fontSize: 18)),
+                    Text(
+                      metricLabel,
+                      style: const TextStyle(color: _Vs.textMuted, fontSize: 10),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                RatingPill(rating: nota, fontSize: 12),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  void _showFullRankingModal({bool isGk = false}) {
+    final sortKey = isGk ? _gkRankSortKey : _rankSortKey;
+    StatKey statKey;
+    switch (sortKey) {
+      case 'ga':
+        statKey = StatKey.ga;
+        break;
+      case 'nota':
+        statKey = StatKey.notaMedia;
+        break;
+      case 'goals':
+        statKey = StatKey.goals;
+        break;
+      case 'assists':
+        statKey = StatKey.assists;
+        break;
+      case 'wins':
+        statKey = StatKey.ved;
+        break;
+      case 'matches':
+        statKey = StatKey.matches;
+        break;
+      case 'cards':
+        statKey = StatKey.cards;
+        break;
+      case 'hatTricks':
+        statKey = StatKey.hatTricks;
+        break;
+      case 'clean_sheets':
+        statKey = StatKey.gkCleanSheets;
+        break;
+      case 'conceded':
+        statKey = StatKey.gkGoalsConcededAvg;
+        break;
+      default:
+        statKey = isGk ? StatKey.gkRating : StatKey.ga;
+    }
+    _showFullTable(
+      initialSort: statKey,
+      title: isGk ? 'Ranking de Goleiros' : 'Ranking Geral da Temporada',
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PÓDIOS
   // ─────────────────────────────────────────────────────────────────────────
   Widget _buildPodiumSection({
@@ -757,23 +1430,11 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                     clipBehavior: Clip.none,
                     alignment: Alignment.center,
                     children: [
-                      Container(
-                        width: avatarSizes[idx],
-                        height: avatarSizes[idx],
-                        decoration: BoxDecoration(
-                          color: _Vs.bg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: color, width: 2),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          _initials(s.player.name),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
+                      RankAvatar(
+                        player: _mapFor(s.player),
+                        size: avatarSizes[idx],
+                        glow: place == 1,
+                        contextType: AvatarContext.stats,
                       ),
                       Positioned(
                         top: place == 1 ? -22 : -8,
@@ -787,12 +1448,14 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    s.player.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: RankName(
+                      player: _mapFor(s.player),
+                      showStars: false,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                   Text(
                     label,
@@ -818,7 +1481,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [color.withOpacity(0.18), Colors.transparent],
+                        colors: [color.withValues(alpha: 0.18), Colors.transparent],
                       ),
                     ),
                     alignment: Alignment.topCenter,
@@ -1003,13 +1666,6 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     );
   }
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
-  }
-
   void _showFullTable({required StatKey initialSort, required String title}) {
     showDialog(
       context: context,
@@ -1017,6 +1673,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
         title: title,
         stats: stats,
         initialSort: initialSort,
+        playerMaps: _playerMaps,
         onSelectPlayer: (s) {
           Navigator.pop(ctx);
           _openPlayer(s);
@@ -1035,40 +1692,69 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
 
     return Scaffold(
       backgroundColor: _Vs.bg,
-      appBar: AppBar(
+      body: RefreshIndicator(
+        color: _Vs.accent,
         backgroundColor: _Vs.panel,
-        elevation: 0,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        onRefresh: _loadData,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            Text('Estatísticas dos Jogadores', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('Classificação geral, pódios e desempenho da turma', style: TextStyle(color: _Vs.textMuted, fontSize: 11)),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: _Vs.accentLight),
-            onPressed: _loadData,
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildFilterBar(),
-          const SizedBox(height: 20),
+            _buildFilterBar(),
+            const SizedBox(height: 16),
 
-          // Evolução de Desempenho (6 meses fixos, ignora o filtro de período)
-          EvolutionChartCard(
-            players: _playerMapList,
-            matches: _allMatches,
-            now: _now,
-          ),
-          const SizedBox(height: 16),
+            // 1. Rankings (General Ranking com Pódio Top 3, Top 4-8 e Ver Todos)
+            _buildGeneralRankingSection(),
+            const SizedBox(height: 24),
 
-          // Quadros: Gols Contra, Nota Média, Taxa de Vitórias, Duplas
-          _buildBoards(),
-          const SizedBox(height: 20),
+            // Divisor: Desempenho Geral & Quadros
+            const Divider(color: _Vs.border),
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Icon(Icons.insights, color: _Vs.accentLight, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Desempenho Geral & Quadros',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Evolução de Desempenho (6 meses fixos, ignora o filtro de período)
+            EvolutionChartCard(
+              players: _playerMapList,
+              matches: _allMatches,
+              now: _now,
+            ),
+            const SizedBox(height: 16),
+
+            // Quadros: Gols Contra, Nota Média, Taxa de Vitórias, Duplas
+            _buildBoards(),
+            const SizedBox(height: 24),
+
+            // Divisor: Pódios por Categoria
+            const Divider(color: _Vs.border),
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Icon(Icons.military_tech, color: _Vs.accentLight, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Pódios por Categoria',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
           // 7 Pódios Principais
           _buildPodiumSection(
@@ -1155,6 +1841,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           const SizedBox(height: 32),
         ],
       ),
+      ),
     );
   }
 }
@@ -1166,12 +1853,14 @@ class _FullStatsTableDialog extends StatefulWidget {
   final String title;
   final List<PlayerStatsAgg> stats;
   final StatKey initialSort;
+  final Map<String, Map<String, dynamic>> playerMaps;
   final void Function(PlayerStatsAgg) onSelectPlayer;
 
   const _FullStatsTableDialog({
     required this.title,
     required this.stats,
     required this.initialSort,
+    required this.playerMaps,
     required this.onSelectPlayer,
   });
 
@@ -1212,10 +1901,10 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
       insetPadding: const EdgeInsets.all(12),
       shape: RoundedRectangleBorder(
         side: const BorderSide(color: _Vs.border),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 680),
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1223,6 +1912,8 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
+                  const Icon(Icons.table_chart, color: _Vs.accentLight, size: 20),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Tabela: ${widget.title}',
@@ -1248,7 +1939,7 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                   child: DataTable(
                     headingRowColor: WidgetStateProperty.all(_Vs.header),
                     dataRowColor: WidgetStateProperty.all(_Vs.panel),
-                    columnSpacing: 18,
+                    columnSpacing: 16,
                     columns: [
                       const DataColumn(
                         label: Text('#', style: TextStyle(color: _Vs.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -1284,13 +1975,16 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                           ),
                         ),
                       ),
-                      const DataColumn(
-                        label: Text('Rating', style: TextStyle(color: _Vs.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
                     ],
                     rows: sorted.asMap().entries.map((entry) {
                       final i = entry.key;
                       final s = entry.value;
+                      final playerMap = widget.playerMaps[s.player.id] ?? {
+                        'id': s.player.id,
+                        'name': s.player.name,
+                        'icon': s.player.avatarUrl,
+                        'rating': s.overallRating,
+                      };
                       return DataRow(
                         onSelectChanged: (_) => widget.onSelectPlayer(s),
                         cells: [
@@ -1299,28 +1993,22 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: _Vs.bg,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: _Vs.border),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    s.player.name.isNotEmpty
-                                        ? s.player.name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
+                                RankAvatar(
+                                  player: playerMap,
+                                  size: 26,
+                                  contextType: AvatarContext.stats,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(s.player.name, style: const TextStyle(color: _Vs.text, fontSize: 12)),
+                                Text(s.player.name, style: const TextStyle(color: _Vs.text, fontSize: 12, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
                           ..._cols.map((c) {
+                            if (c.key == StatKey.notaMedia) {
+                              return DataCell(
+                                RatingPill(rating: s.overallRating, fontSize: 11),
+                              );
+                            }
                             if (c.key == StatKey.ved) {
                               return DataCell(
                                 Row(
@@ -1335,13 +2023,36 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                                 ),
                               );
                             }
+                            if (c.key == StatKey.cards) {
+                              return DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('${s.cards}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                    if (s.cards > 0) ...[
+                                      const SizedBox(width: 4),
+                                      Text('(🟨${s.yellowCards} 🟥${s.redCards})', style: const TextStyle(color: _Vs.textMuted, fontSize: 10)),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }
+                            if (c.key == StatKey.hatTricks) {
+                              return DataCell(
+                                Text(
+                                  '${s.hatTricks}',
+                                  style: TextStyle(
+                                    color: s.hatTricks > 0 ? Colors.amber : _Vs.textStrong,
+                                    fontWeight: s.hatTricks > 0 ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              );
+                            }
                             final v = s.statValue(c.key);
-                            final display = c.key == StatKey.formLast10
-                                ? v.toStringAsFixed(2)
-                                : v.toStringAsFixed(0);
                             return DataCell(
                               Text(
-                                display,
+                                v.toStringAsFixed(0),
                                 style: TextStyle(
                                   color: _sortKey == c.key ? Colors.white : _Vs.textStrong,
                                   fontSize: 12,
@@ -1349,20 +2060,6 @@ class _FullStatsTableDialogState extends State<_FullStatsTableDialog> {
                               ),
                             );
                           }),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _Vs.bg,
-                                border: Border.all(color: _Vs.border),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                s.overallRating.toStringAsFixed(2),
-                                style: const TextStyle(color: _Vs.good, fontWeight: FontWeight.bold, fontSize: 12),
-                              ),
-                            ),
-                          ),
                         ],
                       );
                     }).toList(),

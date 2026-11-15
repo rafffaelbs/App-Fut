@@ -641,3 +641,44 @@ Resolvido em fix/players-cache
   - **Última pelada:** a mais recente com status finalizada e ao menos uma partida. Maior goleada = maior diferença de gols (desempate: mais gols no total).
 - **O que `monthly_highlight` guarda de fato:** é só um booleano na tabela `players` (coluna `monthly_highlight`), ou seja, **só quem é o portador atual**; não há mês nem data junto. Quem liga/desliga é o admin (`setMonthlyHighlight`). O número de estrelas vem de `monthly_star_count`/`craque_mes_count`. O snapshot do elenco já traz o campo (`GroupBootstrap.playerSnapshotMap` → `monthly_highlight`), então a aba não precisa de chamada nova de rede. Por isso o cartão "Craque do mês" não diz de qual mês é o selo.
 - **Observação:** `GroupBootstrap.prefetch` ainda usa `compute()` quando há histórico (já era assim; no web roda inline). A aba Início não usa `compute()`.
+
+---
+
+### 45. Melhorias no Dashboard e Reformulação da Tela de Estatísticas da Temporada — Tarefa E1c
+- **O que foi feito:**
+  1. **Dashboard (`lib/screens/web/home_dashboard_screen.dart`):**
+     - Saudação personalizada no topo: `"Bem-vindo ao $groupTitle, $_myPlayerName!"` no app mobile quando o perfil do usuário logado é identificado via `AppServices.instance.members.getMyMembership`. No site (web) ou para visitante/anônimo, exibe `"Bem-vindo ao $groupTitle!"`.
+     - Hero card com gradiente escuro refinado e chips de resumo rápido para a data da última pelada e jogador #1 do mês.
+     - Ícones dos jogadores atualizados para usar bordas de tier baseadas no Overall (`showTierBorder: true`).
+     - Badges de tier integrados nos cartões de Artilheiros e Garçons do mês.
+  2. **Tela de Estatísticas (`lib/screens/season_stats_screen.dart`):**
+     - **Remoção do cabeçalho duplicado:** A tela continha uma `AppBar` interna redundante com a do `GroupDashboardScreen`, gerando duas setas de voltar sobrepostas. A `AppBar` interna foi removida da tela e substituída por um título limpo no corpo com botão de recarregar e `RefreshIndicator` nativo.
+     - **Rankings no topo:** A classificação geral foi promovida para a primeira posição logo abaixo dos seletores de período da temporada.
+     - **Padrão do ranking de pelada:**
+       - Pódio Top 3 com pedestais proporcionais (2º, 1º e 3º), medalhas de ouro/prata/bronze, avatares com borda de tier (`showTierBorder: true`), estrelas cosméticas (`StarsBadge`), `GoalsAssistsText`, resumo de cartões (`🟨/🟥`), Hat-Tricks (`🎩 HT`), Nota Média (`RatingPill`), partidas e W/D/L (`WdlText`).
+       - Top 4 a 8 exibido em cartões com layout e métricas idênticas às do ranking da pelada.
+       - Filtro de ordenação interativo (G+A, Nota Média, Gols, Assistências, Vitórias, Partidas, Cartões, Hat Tricks) e alternância crescente/decrescente.
+       - Alternador de abas entre Linha e Goleiros (com Clean Sheets, vitórias e média de gols sofridos).
+       - Modal de tabela completa ("Ver todos"): substituídas as colunas de "Rating" e "Forma" por **"Nota Média"** (com `RatingPill`), e incluídas as colunas de **Cartões** (com detalhe de amarelos/vermelhos) e **Hat Tricks**.
+     - **Reposicionamento dos quadros e evolução:** O gráfico de evolução (`EvolutionChartCard`) e os quadros de gols contra, nota média, taxa de vitórias e duplas dinâmicas (`_buildBoards()`) foram movidos para baixo do ranking geral, seguidos pelos pódios por categoria.
+  3. **Componente de Avatar (`lib/widgets/shared/ranking_player_bits.dart`):**
+     - Adicionado o parâmetro `showTierBorder: bool = false` em `RankAvatar`, calculando o overall via `playerOverallOf(player)` e aplicando as cores e espessuras de borda de acordo com o tier (`overallColor`): Lendária ($\ge 85$), Platina ($80-84$) e Ouro ($< 80$).
+
+---
+
+### 46. Estilos de Avatar (Fundo vs Auréola), Atualizações Recentes do Grupo e Notificações — Tarefa E1d
+- **O que foi feito:**
+  1. **Personalização do estilo visual de rating nos avatares:**
+     - Criado `AvatarStyleManager` (`lib/services/avatar_style_manager.dart`) com suporte a três estilos: `off` (desligado, fundo neutro), `halo` (auréola/borda luminosa) e `background` (círculo preenchido com gradiente do tier).
+     - Configuração por tela (`ranking`, `dashboard`, `stats`, `match`) e presets na tela de configurações (`SettingsScreen`).
+     - Integração reativa em `RankAvatar` (`ranking_player_bits.dart`), `_SmallChip` (`fifa_card.dart`) e `SeasonStatsScreen`.
+  2. **Seção de atualizações recentes no dashboard:**
+     - Criada a função pura `computeGroupMilestones` (`lib/utils/group_milestones_calculator.dart`) acumulando jogos, gols, assistências, vitórias, hat-tricks e clean sheets cronologicamente e identificando limites atingidos.
+     - Ordenação do mais recente para o menos recente.
+     - Card de atualizações adicionado em `HomeDashboardScreen` com abas para alternar entre atualizações do grupo e notificações pessoais.
+  3. **Central de notificações no app móvel:**
+     - Botão de sino na AppBar de `GroupDashboardScreen` exclusivo do app móvel com usuário autenticado (`!kIsWeb && hasAuth && _myPlayerId != null`).
+     - Modal `NotificationsSheet` com lista personalizada ("Você alcançou ...") e marcação automática como lida em `SharedPreferences` (`last_seen_notif_${groupId}_${playerId}`).
+  4. **Testes unitários e de widgets:**
+     - 12 novos testes adicionados (`group_milestones_calculator_test.dart`, `avatar_style_manager_test.dart`, `notifications_sheet_test.dart`), totalizando 320 testes passando na suíte.
+

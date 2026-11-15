@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../utils/constants.dart';
 import 'package:app_do_fut/app/app_services.dart';
+import '../services/avatar_style_manager.dart';
 import 'manage_badges_screen.dart';
 import 'admin_debug_screen.dart';
 import 'manage_members_screen.dart';
@@ -35,6 +36,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _requireGk = true;
   bool _useCards = false;
 
+  // Estilos de rating no avatar
+  AvatarRatingStyle _rankingStyle = AvatarRatingStyle.background;
+  AvatarRatingStyle _dashboardStyle = AvatarRatingStyle.background;
+  AvatarRatingStyle _statsStyle = AvatarRatingStyle.background;
+  AvatarRatingStyle _matchStyle = AvatarRatingStyle.halo;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
+    await AvatarStyleManager.instance.load();
     setState(() {
       _showRadar = prefs.getBool('show_radar_chart') ?? true;
       _confirmTimerEnabled = prefs.getBool(kPrefConfirmTimerEnabled) ?? true;
@@ -50,6 +58,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _requireGk = prefs.getBool('require_gk') ?? true;
       _useCards = prefs.getBool('pitch_use_cards') ??
           (!(prefs.getBool('pitch_use_chips') ?? true));
+
+      _rankingStyle = AvatarStyleManager.instance.rankingStyle;
+      _dashboardStyle = AvatarStyleManager.instance.dashboardStyle;
+      _statsStyle = AvatarStyleManager.instance.statsStyle;
+      _matchStyle = AvatarStyleManager.instance.matchStyle;
+
       _isLoading = false;
     });
   }
@@ -147,6 +161,239 @@ class _SettingsScreenState extends State<SettingsScreen> {
           value: value,
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarStyleSelector(
+    String label,
+    AvatarRatingStyle current,
+    ValueChanged<AvatarRatingStyle> onChanged,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          SegmentedButton<AvatarRatingStyle>(
+            segments: const [
+              ButtonSegment(
+                value: AvatarRatingStyle.off,
+                label: Text('Off', style: TextStyle(fontSize: 11)),
+              ),
+              ButtonSegment(
+                value: AvatarRatingStyle.halo,
+                label: Text('Auréola', style: TextStyle(fontSize: 11)),
+              ),
+              ButtonSegment(
+                value: AvatarRatingStyle.background,
+                label: Text('Fundo', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+            selected: {current},
+            onSelectionChanged: (set) {
+              if (set.isNotEmpty) onChanged(set.first);
+            },
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.accentBlue;
+                }
+                return AppColors.deepBlue;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return Colors.white;
+                }
+                return AppColors.textDim;
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatarStyleSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.accentBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.palette_outlined, color: AppColors.accentBlue, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Destaque de Rating nos Ícones',
+                      style: TextStyle(
+                        color: AppColors.textWhite,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Escolha se os avatares usam auréola externa, fundo colorido pelo rating ou sem destaque.',
+                      style: TextStyle(color: AppColors.textDim, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: AppColors.borderSubtle, height: 1),
+          const SizedBox(height: 10),
+          _buildAvatarStyleSelector(
+            'Ranking & Elenco',
+            _rankingStyle,
+            (val) async {
+              setState(() => _rankingStyle = val);
+              await AvatarStyleManager.instance.setStyle(AvatarContext.ranking, val);
+            },
+          ),
+          _buildAvatarStyleSelector(
+            'Dashboard (Início)',
+            _dashboardStyle,
+            (val) async {
+              setState(() => _dashboardStyle = val);
+              await AvatarStyleManager.instance.setStyle(AvatarContext.dashboard, val);
+            },
+          ),
+          _buildAvatarStyleSelector(
+            'Estatísticas',
+            _statsStyle,
+            (val) async {
+              setState(() => _statsStyle = val);
+              await AvatarStyleManager.instance.setStyle(AvatarContext.stats, val);
+            },
+          ),
+          _buildAvatarStyleSelector(
+            'Partida (Campo Tático)',
+            _matchStyle,
+            (val) async {
+              setState(() => _matchStyle = val);
+              await AvatarStyleManager.instance.setStyle(AvatarContext.match, val);
+            },
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Atalhos rápidos:',
+            style: TextStyle(color: AppColors.textDim, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              ActionChip(
+                label: const Text('Fundo no Ranking, Auréola na Partida', style: TextStyle(fontSize: 11)),
+                backgroundColor: AppColors.deepBlue,
+                side: const BorderSide(color: AppColors.borderSubtle),
+                onPressed: () async {
+                  await AvatarStyleManager.instance.applyPreset(
+                    ranking: AvatarRatingStyle.background,
+                    dashboard: AvatarRatingStyle.background,
+                    stats: AvatarRatingStyle.background,
+                    match: AvatarRatingStyle.halo,
+                  );
+                  setState(() {
+                    _rankingStyle = AvatarRatingStyle.background;
+                    _dashboardStyle = AvatarRatingStyle.background;
+                    _statsStyle = AvatarRatingStyle.background;
+                    _matchStyle = AvatarRatingStyle.halo;
+                  });
+                },
+              ),
+              ActionChip(
+                label: const Text('Tudo Fundo', style: TextStyle(fontSize: 11)),
+                backgroundColor: AppColors.deepBlue,
+                side: const BorderSide(color: AppColors.borderSubtle),
+                onPressed: () async {
+                  await AvatarStyleManager.instance.applyPreset(
+                    ranking: AvatarRatingStyle.background,
+                    dashboard: AvatarRatingStyle.background,
+                    stats: AvatarRatingStyle.background,
+                    match: AvatarRatingStyle.background,
+                  );
+                  setState(() {
+                    _rankingStyle = AvatarRatingStyle.background;
+                    _dashboardStyle = AvatarRatingStyle.background;
+                    _statsStyle = AvatarRatingStyle.background;
+                    _matchStyle = AvatarRatingStyle.background;
+                  });
+                },
+              ),
+              ActionChip(
+                label: const Text('Tudo Auréola', style: TextStyle(fontSize: 11)),
+                backgroundColor: AppColors.deepBlue,
+                side: const BorderSide(color: AppColors.borderSubtle),
+                onPressed: () async {
+                  await AvatarStyleManager.instance.applyPreset(
+                    ranking: AvatarRatingStyle.halo,
+                    dashboard: AvatarRatingStyle.halo,
+                    stats: AvatarRatingStyle.halo,
+                    match: AvatarRatingStyle.halo,
+                  );
+                  setState(() {
+                    _rankingStyle = AvatarRatingStyle.halo;
+                    _dashboardStyle = AvatarRatingStyle.halo;
+                    _statsStyle = AvatarRatingStyle.halo;
+                    _matchStyle = AvatarRatingStyle.halo;
+                  });
+                },
+              ),
+              ActionChip(
+                label: const Text('Desligar Tudo', style: TextStyle(fontSize: 11)),
+                backgroundColor: AppColors.deepBlue,
+                side: const BorderSide(color: AppColors.borderSubtle),
+                onPressed: () async {
+                  await AvatarStyleManager.instance.applyPreset(
+                    ranking: AvatarRatingStyle.off,
+                    dashboard: AvatarRatingStyle.off,
+                    stats: AvatarRatingStyle.off,
+                    match: AvatarRatingStyle.off,
+                  );
+                  setState(() {
+                    _rankingStyle = AvatarRatingStyle.off;
+                    _dashboardStyle = AvatarRatingStyle.off;
+                    _statsStyle = AvatarRatingStyle.off;
+                    _matchStyle = AvatarRatingStyle.off;
+                  });
+                },
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -256,6 +503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
 
                 _buildSectionHeader('Preferências do Aplicativo'),
+                _buildAvatarStyleSection(),
                 _buildSwitchCard(
                   icon: Icons.radar,
                   title: 'Exibir Gráfico Radar',

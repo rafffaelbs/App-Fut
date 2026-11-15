@@ -3,7 +3,7 @@
 > Documento de referência para quem executa as tarefas (Antigravity / Claude Code).
 > Base: `docs/INVENTARIO_SUPABASE.md`. Em caso de conflito entre este documento e o código, **pare e registre em `docs/DUVIDAS.md`** em vez de decidir sozinho.
 >
-> **Status (03/11/2026): Fase 1 e Fase 1b concluídas.** T0 a T4 e correções da Fase 1b (T-B1 a T-B6c) estão integradas na `main` (interfaces, `AppServices`, `AppFeatures`, camada `lib/data/`, proteção offline com fila outbox tolerante a erros e cache de grupos). 217 testes passando, 0 erros novos no analyze, isolamento do Supabase verificado. A tag `pre-refactor` marca o app antes da refatoração. Bugs resolvidos e pendências: seção 11 e `docs/BACKLOG.md`.
+> **Status (15/11/2026): Fase 1, Fase 1b e Fase 2 concluídas.** T0 a T7 e tarefas estéticas/funcionais da Fase 2 (E1a, E1b, E1c, E1d) estão concluídas (site somente leitura no Cloudflare Pages, link por token, dashboard web/app, estatísticas da temporada no padrão do ranking, personalização de estilos de avatar fundo vs auréola, atualizações e notificações pessoais). 320 testes passando, 0 erros no analyze. Bugs resolvidos e pendências: seção 11, `docs/F2-TASK.md` e `docs/BACKLOG.md`.
 
 ## 1. Objetivo
 
@@ -226,7 +226,7 @@ O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envi
 | Elenco com campos calculados | `players_<grupo>` | Cache do Supabase, recriado pelo `GroupBootstrap`. | Continua como cache nos dois apps. Depois de importar um `.db`, apagar esses snapshots e `cache:*` (T11). |
 | Cache de leitura | `cache:*` | Só repositórios Supabase. | Fica em `lib/data/supabase/`; não existe no public. |
 | Estado da partida em andamento | `present_players_*`, `team_*`, `score_*`, `is_running_*`... | Temporário. | Continua em SharedPreferences nos dois apps; **não** vai para o `.db`. Avisar na tela que exportar/importar deve ser feito entre partidas. |
-| Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
+| Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`, `avatar_style_*`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
 | Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`; ninguém grava, mas o aparelho do Enzo pode ainda ter dados antigos nessas chaves. | **Não remover na T3e** (poderia mudar números no aparelho dele). Continuam como leitura legada; decidir depois da Fase 1. No app public ficam vazias e inofensivas. |
 | Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
 
