@@ -10,12 +10,14 @@
 |---|---|---|---|---|
 | T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | ✅ na `main` em 08/11/2026 (revisada, 233 testes, testada no celular) |
 | T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (`docs/sql/`) | ✅ executada e testada em produção em 04/11/2026 (testes da API como visitante ok; falta só o teste de admin do passo 5, necessário antes da T6c) |
-| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ feita e corrigida (282 testes). Teste local em release (08/11 e 09/11): carrega em ~2 s, snapshot 311 kB, sem localStorage, link inválido ok. Correção 2 (URL mantém o token em navegações e após múltiplos F5) concluída e testada. |
-| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ⏳ começa após o merge da T6b |
-| T6c | Tela do admin no app: ver, copiar e girar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏳ opcional, depois da T7 (**RASCUNHO**) |
-| T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **só no fim**, depois de validar (**RASCUNHO**) |
+| T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ na `main` em 14/11/2026 (URL mantém o token no F5; teste do erro de conexão a repetir no site publicado) |
+| T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ✅ no ar em 14/11/2026: `https://app-fut-site.pages.dev/fut` (302 para o link com token ok; 281 testes). **Falta:** teste no iPhone por um amigo (atalho da tela de início) |
+| T6c | Tela do admin **no app** (não no site): ver, copiar, girar e desativar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏸️ **adiada (backlog)** por decisão de 14/11. Enquanto isso, o token é girado pelo SQL Editor. Ao retomar: rodar antes o passo 5 de `sql/F2_T6_testes.md` |
+| T8 | Dashboard do site e carta do jogador (aba Peladas) | CLAUDE (desenho) + AG, revisão CLAUDE | por etapa | ⏳ **próxima**: T8.0 ✅; T8a (aba Peladas) e T8b (dashboard "Início") com prompt pronto |
+| T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **por último**, depois da T8 (**RASCUNHO**) |
 
-Ordem: **T5 e T6 em paralelo** → T6b → T7 → uso real por algumas semanas → (T6c quando quiser) → T7b.
+Ordem: T5, T6, T6b e T7 ✅ → **T8** (dashboard/legibilidade do site) → **T7b** (remover o site antigo). A **T6c** (tela de admin no app) está adiada no backlog. A T7b fica por último porque mexe no `match_screen` (proteção offline) e para não gerar conflito.
+O site continua **somente leitura**; nenhuma função de admin é chamada por ele.
 
 ## Cabeçalho a colar no INÍCIO de todo prompt do AG desta fase
 
@@ -76,7 +78,7 @@ A política `players_select` (`auth.uid() is not null`) permite que **qualquer u
 
 ### Ideias para depois da validação do site
 
-- **Dashboard exclusivo do site:** tela inicial própria da web (destaques da temporada, última pelada), sem abas de admin, reaproveitando os mesmos repositórios.
+- ~~**Dashboard exclusivo do site**~~ → virou a **T8**.
 - **Login opcional** (camada extra por cima do link) e **notificações de eventos**, exclusivas do app.
 - **Peso do snapshot:** hoje ~1,7 MB de JSON. Se ficar lento no iPhone, carregar só a temporada atual.
 
@@ -341,14 +343,6 @@ abrir http://localhost:5000/#/g/<token>, abrir ranking, voltar, F5 várias vezes
 mantém o token e o painel recarrega.
 ```
 
-**Resultado da validação do teste manual (09/11/2026):**
-- Build release gerado com sucesso: `flutter build web -t lib/main_web.dart --release`.
-- Servidor local executado: `python3 -m http.server 5000` em `build/web`.
-- Navegador Chromium headless automatizado via CDP abrindo `http://localhost:5000/#/g/<token>`.
-- Monitoramento da URL nos segundos 1s a 10s: a URL permaneceu estritamente `http://localhost:5000/#/g/<token>` durante toda a execução.
-- Disparados 3 recarregamentos consecutivos (`Page.reload` / F5): em todos os ciclos a URL manteve `#/g/<token>` e a aplicação recarregou o estado perfeitamente sem regredir para link inválido.
-- Acesso sem token (`http://localhost:5000/`): manteve `http://localhost:5000/` exibindo a tela amigável de link inválido.
-
 ## T7 · Build, deploy no Cloudflare Pages e teste no iPhone — AG + Enzo · **RASCUNHO**
 
 Branch: `feat/web-deploy` · Depende de T6b (merge na `main`)
@@ -381,6 +375,38 @@ Aceite: o workflow roda verde; o site abre em https://app-fut-site.pages.dev/#/g
 em https://app-fut-site.pages.dev/fut (se o Cloudflare aceitar o '#'; senão, registre).
 ```
 
+### Correções pós-revisão da T7 (prompt do AG, 14/11/2026)
+
+Revisão do Claude Code: workflow seguro quanto a gatilhos e vazamento do token; ajustes: permissões, actions por SHA, travar na `main`, `paths-ignore`, service worker (`--pwa-strategy=none`), `start_url` do manifest (o atalho do iPhone grava a URL; `/fut` redireciona ao link com token). **Fora de escopo por decisão:** `--no-web-resources-cdn` (decidir depois de ver o Network) e cabeçalhos de cache (o Pages já revalida).
+
+```
+[cabeçalho]
+Branch: feat/web-deploy (continue nela). Mexa SOMENTE em .github/workflows/deploy-web.yml,
+web/ e docs/DUVIDAS.md. Não adicione pacotes. Nunca imprima nem escreva o FUT_TOKEN.
+1) deploy-web.yml:
+   - build: flutter build web --release -t lib/main_web.dart --pwa-strategy=none
+   - permissions: só contents: read (remova deployments: write)
+   - fixe actions/checkout, subosito/flutter-action e cloudflare/wrangler-action por SHA de
+     commit, com comentário "# v4" etc. Se não conseguir obter os SHAs, mantenha as tags e
+     registre em DUVIDAS.md que ficou pendente.
+   - no job: if: github.ref == 'refs/heads/main'
+   - gatilho push: paths-ignore: ['docs/**', '**.md']
+   - concurrency: mantenha o grupo, cancel-in-progress: false
+   - flutter-version: fixe na versão que o Enzo usa (ele informa ao rodar flutter --version);
+     enquanto não souber, deixe "# TODO versão" e avise.
+   - remova o passo redundante que copia robots.txt/_headers (o Flutter já copia web/ para build/web).
+2) web/manifest.json: "start_url": "/fut" (sem token: /fut redireciona para /#/g/<token>).
+3) web/_headers: mantenha as linhas atuais e acrescente "X-Robots-Tag: noindex, nofollow" em /*.
+4) docs/DUVIDAS.md: registre o que mudou e por quê; corrija o item 41 (o \n aparece quebrado).
+Ao terminar: flutter analyze e flutter test; git diff main --stat; resumo em 5 linhas.
+```
+
+**Depois do primeiro deploy (Enzo):**
+- `curl -sI https://app-fut-site.pages.dev/_redirects` não pode devolver o token.
+- `curl -sI https://app-fut-site.pages.dev/fut` deve dar 302 com `Location: /#/g/...` (confirmar que o `#` chegou).
+- DevTools → Network: ver se há chamadas a `gstatic.com`/`googleapis.com` (decidir `--no-web-resources-cdn` só se incomodar).
+- Para trocar o `FUT_TOKEN`: atualizar o secret e rodar o workflow manualmente (workflow_dispatch).
+
 **Teste manual no iPhone (Safari) — checklist do Enzo:**
 1. Abrir o link: carrega ranking e estatísticas? Quanto demora a primeira vez?
 2. Navegar: temporada, histórico de uma pelada, carta do jogador, comparação.
@@ -393,18 +419,191 @@ em https://app-fut-site.pages.dev/fut (se o Cloudflare aceitar o '#'; senão, re
 
 ---
 
-## T6c · Tela do admin: ver, copiar e girar o link — AG, revisão CLAUDE · **RASCUNHO, opcional**
+## T6c · Tela do admin NO APP: ver, copiar, girar e desativar o link — AG, revisão CLAUDE · **ADIADA (backlog)**
 
-Branch: `feat/share-link-admin` · Depois da T7. Até lá, o Enzo pega o token pelo SQL Editor.
+> Decisão de 14/11/2026: não é prioridade (o link já funciona; o token é girado pelo SQL Editor). A tela é do **app do celular** (configurações, só para admin), nunca do site. O prompt abaixo fica guardado e pronto para quando for retomada.
 
-Escopo previsto: interface `ShareLinkRepository` (`getShareLink(groupId)`, `rotate(groupId)`, `revoke(groupId)`) implementada em `lib/data/supabase/` chamando as funções `get_/rotate_/revoke_group_share_token`; item "Link do site" na tela de configurações, visível só com `canAdminister` (e `hasMembershipManagement`); botões Copiar, Girar (com confirmação: "o link antigo deixará de funcionar") e Desativar. O prompt completo será escrito quando a T7 estiver validada.
+Branch: `feat/share-link-admin` · Parte da `main` atual · **Pré-requisito:** teste de admin (passo 5 de `docs/sql/F2_T6_testes.md`: `get_/rotate_/revoke_group_share_token` com usuário admin, com JWT simulado e rollback). Se esse teste não passou, não comece.
+
+**Funções do banco (já existem, assinaturas reais):** `get_group_share_token(p_group_id text) returns text` (null = link desativado/inexistente), `rotate_group_share_token(p_group_id text) returns text` (cria ou troca e devolve o token), `revoke_group_share_token(p_group_id text) returns void`. Só `authenticated` e só admin do grupo; não-admin recebe erro "Acesso negado".
+
+**Aviso de desenho (importante):** o link curto `/fut` é gerado no deploy a partir do secret `FUT_TOKEN`. Se o admin girar o token no app, o link completo novo funciona na hora, mas `/fut` e o atalho da tela de início (`start_url: "/fut"`) ficam apontando para o token antigo **até** o Enzo atualizar o secret `FUT_TOKEN` no GitHub e rodar o workflow (workflow_dispatch). A tela deve avisar isso em texto simples ao girar. (Melhoria futura possível: `/fut` resolver o token atual em tempo de execução.)
+
+```
+[cabeçalho]
+Tarefa: tela de admin no app para ver, copiar, girar e desativar o link do site.
+Branch: feat/share-link-admin. Não mexa em match_screen, bootstrap_web, lib/data/supabase/readonly/,
+chaves de SharedPreferences, nem em tabelas/RLS/RPCs do Supabase.
+1) lib/domain/repositories/share_link_repository.dart: interface ShareLinkRepository com
+   Future<String?> getToken(String groupId), Future<String> rotate(String groupId) e
+   Future<void> revoke(String groupId). Registre em AppServices (campo shareLinks) e nos
+   test helpers.
+2) lib/data/supabase/supabase_share_link_repository.dart: implementa chamando
+   client.rpc('get_group_share_token' | 'rotate_group_share_token' | 'revoke_group_share_token',
+   params: {'p_group_id': groupId}). Erro de acesso negado vira uma exceção própria
+   (ShareLinkAccessDenied); outros erros passam como estão. Só lib/data/supabase/ importa supabase_flutter.
+   Ligue em bootstrap_personal (apenas a linha do novo repositório).
+3) Constante com a base do site: lib/config/web_site_config.dart com
+   `const kWebSiteBaseUrl = 'https://app-fut-site.pages.dev';`. Link completo =
+   '$kWebSiteBaseUrl/#/g/<token>'. (O app web NÃO usa esta tela.)
+4) Tela lib/screens/share_link_screen.dart e item "Link do site" em settings_screen.dart,
+   visível SOMENTE com canAdminister e !isReadOnly. Estados: carregando; sem link
+   ("Link desativado" + botão "Gerar link"); com link (mostra o link, botão Copiar com SnackBar
+   "Link copiado", botão "Girar link" com confirmação "O link atual deixará de funcionar para
+   todos. Quem tem o link antigo precisará do novo." e, depois de girar, o aviso sobre atualizar
+   o secret FUT_TOKEN e rodar o deploy para o link curto /fut; botão "Desativar link" com
+   confirmação); erro de rede com "Tentar de novo"; acesso negado com mensagem simples.
+   O token completo nunca vai para debugPrint/log.
+5) Testes com fakes (sem Supabase real, sem token real): repositório fake; telas nos estados
+   acima; item de configurações some para não admin e com isReadOnly; copiar usa o link completo.
+6) docs/DUVIDAS.md: registre o que mudou e o aviso sobre o /fut.
+Aceite: analyze e test ok; git diff main --stat só com os arquivos da tarefa; personal igual
+exceto o novo item de configurações para admins.
+```
+
+Revisão CLAUDE: o item some para não admin; erros tratados; token fora de logs; isolamento do Supabase; sem alteração no fluxo da partida.
+
+**Teste manual (Enzo, no celular, como admin e como não admin):** ver link; copiar e abrir no navegador; girar e conferir que o link antigo dá "Link inválido" e o novo abre; desativar e reativar; conta não admin não vê o item. Depois de girar de verdade, atualizar `FUT_TOKEN` no GitHub e rodar o workflow.
 
 ---
 
-## T7b · Aposentar o site antigo — AG + Enzo · **RASCUNHO, só no fim**
+## T8 · Dashboard do site e carta do jogador mais completa — CLAUDE (desenho) + AG, revisão CLAUDE
 
-Branch: `chore/remove-old-site` · Só depois de o site novo estar validado e em uso.
+Branch por etapa · Próxima tarefa. Respostas do Enzo (15/11/2026): (1) a carta do jogador deveria mostrar o histórico das peladas em que ele jogou; (2) dashboard com resumo das peladas, **craque do mês atual e do mês passado** e outros destaques; (3) sem pedidos específicos dos amigos por enquanto: aceita sugestões, que o Claude Code levanta lendo o código e o Claude valida.
 
-**Enzo:** apagar o projeto do site React na Vercel; por último, `drop table sync_data` no Supabase (depois de conferir que nada mais a usa).
+**Princípio:** sem escrita, sem tabelas novas, sem alterar fórmulas existentes (funções novas vão em arquivos novos). Telas exclusivas do site ficam em `lib/screens/web/`, ligadas só pelo `main_web`. A aba da T8a é aditiva e de leitura, então aparece no app e no site (se o Enzo preferir só no site, esconder com `isReadOnly`).
 
-**AG (código):** remover `SiteSyncService`, `SupabaseSiteSyncService`, `SiteDataGenerator`, a flag `hasSiteSync`, `_scheduleSiteSync` e `_triggerBackgroundSync` do `match_screen`, o campo `siteSync` do `AppServices`, o uso de `my_sync_code`, e os trechos do painel de debug que dependem disso; atualizar `ARCHITECTURE.md` e `BACKLOG.md`. **Atenção:** mexe em `match_screen`, onde fica a proteção offline. Exige revisão do Claude, prompt com a proibição de `git checkout` e o **teste do modo avião (item 9 do checklist)**. Não alterar a chave `pending_matches_v1` nem as outras chaves protegidas. O prompt completo será escrito quando chegar a hora.
+| Etapa | O que | Quem | Situação |
+|---|---|---|---|
+| T8.0 | Levantamento das telas do site, definição de "craque" no app e ideias de destaques | Claude Code (somente leitura) | ✅ feito em 15/11 (decisões abaixo) |
+| T8a | Aba "Peladas" na carta do jogador | AG, revisão CLAUDE | ⏳ prompt pronto, independe da T8.0 |
+| T8b | Dashboard "Início" do site | AG, revisão CLAUDE | ⏳ prompt pronto |
+| T8c | Histórico mais legível (só se o Enzo ainda quiser depois da T8a) | AG, revisão CLAUDE | ⏳ a decidir |
+
+### T8.0 · Levantamento e ideias (colar no Claude Code, somente leitura)
+
+```
+SOMENTE LEITURA: não edite arquivos; não rode git checkout, switch nem stash; para a versão
+antiga use `git show pre-refactor:<arquivo>`.
+Contexto: o site (main_web, flag isReadOnly) lê um snapshot do grupo (grupo, temporadas, sessões,
+membros, jogadores, partidas, escalações, eventos, presenças) e reaproveita telas do app.
+Queremos um dashboard (tela inicial do site) com destaques. Responda:
+1) Telas que o site mostra hoje: arquivo, o que mostra, se é compartilhada com o app, e como o
+   main_web chega a cada uma.
+2) Como o app define "craque" (da pelada, do mês, da temporada)? Onde é calculado (arquivo:linha),
+   com qual critério e desempate? Há funções reutilizáveis para filtrar por mês/período e para
+   ranking? O que significa "G+A" e como goleiros são tratados.
+3) Proponha 6 a 8 destaques para o dashboard usando SÓ dados do snapshot. Para cada um: dado
+   necessário, se já existe função pronta ou precisa de função nova (em arquivo novo, sem alterar
+   fórmulas existentes) e esforço (P/M/G). Inclua obrigatoriamente: craque do mês atual e do mês
+   passado, resumo da última pelada; o resto é sugestão sua (ex.: artilheiro e garçom do mês,
+   sequência de vitórias, presença, melhor dupla).
+4) Desempenho no iPhone com ~540 partidas e ~4,7 mil escalações: o que calcular uma vez e guardar
+   em memória.
+Entregue um relatório curto, com tabela nos itens 1 e 3. Não escreva código.
+```
+
+### T8a · Aba "Peladas" na carta do jogador (AG)
+
+Branch: `feat/player-recent-sessions` (a partir da `main`).
+
+```
+[cabeçalho]
+Tarefa: na carta do jogador (player_detail.dart), no bloco do gráfico de evolução (que já tem as
+abas de notas e de participações em gols), adicionar mais uma aba "Peladas": lista das 3 últimas
+peladas (sessions) em que o jogador participou, cada uma com data, nome da pelada e resumo:
+gols, assistências, G+A, vitórias, empates e derrotas naquela pelada. Botão "Ver mais" que abre a
+lista completa (bottom sheet ou tela simples, rolável). A lista segue o MESMO filtro de período
+que a carta já usa para os gráficos.
+Regras: sem escrita; sem novas chamadas de rede (use os dados que a carta já carrega); não altere
+fórmulas existentes nem chaves de SharedPreferences; a aba aparece no app e no site (somente
+leitura), sem botões de edição. Reuse a lógica atual de V/E/D e de gols/assistências; se precisar
+de uma função nova (agrupar por pelada), crie em arquivo novo (ex.: lib/utils/player_session_summary.dart),
+pura e testável, sem tocar nos calculators. Goleiros: siga como a carta já trata goleiros e registre
+em docs/DUVIDAS.md. Cuidado: player_detail.dart é grande e tem proteções de escrita/offline;
+mude o mínimo e não mexa nelas.
+Testes: unit da função nova (ordem por data, filtro de período, jogador sem peladas, partidas em
+que ele não jogou não contam) e teste de consistência: soma de gols/assistências/V/E/D da lista
+completa = totais que a carta mostra para o mesmo filtro. Widget test da aba (3 itens + "Ver mais"
+e estado vazio "Sem peladas no período").
+Aceite: analyze e test ok; git diff -M main --stat só com player_detail.dart, arquivos novos e testes.
+```
+
+Revisão CLAUDE (Claude Code, somente leitura): consistência dos totais, filtro de período, proteções de escrita de `player_detail.dart` intactas, app e site sem regressão.
+
+### T8.0 · Resultado (15/11/2026) e decisões do Enzo
+
+Relatório do Claude Code (resumo): o site só mostra telas do app; não existe "craque" calculado em lugar nenhum (o "Craque do Mês" é um selo manual: `monthly_highlight`, `monthly_star_count`, `craque_mes_count`); o ranking da pelada ordena por G+A, depois gols, depois nota, sem mínimo; G+A = gols + assistências (gol contra não conta; assistência só em evento de gol); goleiros são tratados de 3 jeitos nas telas; não há função pública para filtrar por mês/período; riscos: duas fórmulas de nota (base 6,0 e 7,0), fuso horário (`MatchModel.fromMap` sem `.toLocal()`), partida sem data vira "agora", `arrivals` vem vazio no snapshot, a tela do dashboard recria a aba a cada troca e o cálculo no Safari trava a thread principal.
+
+Decisões do Enzo:
+1. **"Craque do mês" = selo manual (oficial). "Destaque do mês" = líder calculado**, mostrado do mês atual (parcial) e do passado, com o selo oficial ao lado quando existir.
+2. **Mínimo de 5 partidas no mês** para entrar no destaque calculado.
+3. **Goleiros fora do destaque agora**; "Goleiro do mês" numa segunda versão.
+4. **Escopo da v1:** destaque do mês atual e do passado, resumo da última pelada, artilheiro e garçom do mês. Fica para depois: sequência de vitórias, melhor dupla, mais assíduo, goleiro do mês.
+5. Escolhas técnicas da Claude: mês pela **data da pelada** (não pelo horário de cada partida); partidas sem data ignoradas; desempate **G+A, gols, vitórias, nome** (sem nota, para não depender das fórmulas divergentes); o resumo da última pelada **não recalcula o craque da pelada**: o toque abre o Ranking da pelada, que já existe; dashboard como **nova primeira aba "Início" só no site**, resultados calculados uma vez e guardados fora do `State`.
+
+### T8b · Dashboard "Início" do site (AG)
+
+Branch: `feat/web-dashboard` (a partir da `main`). Independe da T8a (arquivos diferentes).
+
+```
+[cabeçalho]
+Tarefa: criar a aba "Início" (dashboard) do site, somente leitura, e funções puras de destaques.
+Regras gerais: sem escrita; sem nova chamada de rede (use os repositórios que já leem o snapshot);
+não altere fórmulas existentes, telas do app personal nem chaves de SharedPreferences; nada de
+SharedPreferences nesta aba. A aba aparece SOMENTE quando AppServices.instance.features.isReadOnly
+for true (site); no app personal o group_dashboard_screen fica idêntico.
+1) lib/utils/dashboard_highlights.dart (arquivo novo, funções puras e testáveis, sem tocar nos
+   calculators nem nas telas). Copie a lógica de soma por jogador de season_stats_screen.dart
+   (~297-438, privada) para cá em vez de alterar a tela. Convenções: G+A = gols + assistências;
+   gol contra não conta; assistência só em evento de gol. Jogadores de linha apenas (excluir
+   goleiros pelo mesmo critério que season_stats_screen usa para tirá-los dos pódios).
+   - Mês = chave 'aaaa-MM' da DATA DA PELADA (sessão), em horário local. Ignore partidas sem
+     pelada/data (nunca use DateTime.now() como data).
+   - monthlyHighlight(mês): top 3 por G+A, depois gols, depois vitórias, depois nome. Só entra
+     quem tem 5 ou mais partidas no mês. Devolve por jogador: gols, assistências, G+A, partidas,
+     vitórias.
+   - topScorerOfMonth e topAssisterOfMonth (mesma soma e mesmo mínimo de 5 partidas; ordena por
+     gols / por assistências; desempate vitórias, nome).
+   - lastSessionSummary: pelada mais recente já finalizada: id, nome, data, nº de partidas, total
+     de gols, maior goleada (placar e times), artilheiro(s) da pelada.
+2) Resultados calculados UMA vez após o snapshot carregar (mês atual e mês anterior + última
+   pelada) e guardados fora do State (objeto único em memória, no estilo do GroupBootstrap), sem
+   recalcular a cada troca de aba. Não use compute() no web. Renderize o primeiro quadro antes do
+   cálculo (esqueleto/spinner). A nova aba precisa se manter viva (não recriar ao trocar de aba).
+3) group_dashboard_screen.dart: com isReadOnly, acrescentar a aba "Início" como PRIMEIRA aba
+   (o site abre nela). Sem isReadOnly nada muda.
+4) Tela lib/screens/web/home_dashboard_screen.dart, cartões em coluna (mobile primeiro; em tela
+   larga, conteúdo centralizado com largura máxima ~720):
+   - "Destaque do mês · <mês atual> (parcial)": top 3 com avatar, nome, gols, assistências, jogos.
+   - "Destaque do mês · <mês passado>": idem.
+   - "Craque do mês (selo oficial)": jogadores com monthly_highlight verdadeiro, se houver; senão
+     não mostra o cartão. Registre em docs/DUVIDAS.md o que esse campo guarda de fato (só o
+     portador atual, ou há informação de mês?) e que o snapshot o traz.
+   - "Última pelada": data, nome, nº de partidas, gols, maior goleada, artilheiro. Tocar abre o
+     TournamentDashboardScreen dessa pelada, igual a sessions_screen.dart:154.
+   - "Artilheiro do mês" e "Garçom do mês" (mês atual; mostre também o do mês passado em linha menor).
+   - Estados vazios claros: "Poucos jogos neste mês" (menos de 5 partidas), "Sem peladas ainda".
+   Tocar em um jogador abre o player_detail existente. Use o tema e os avatares já usados no ranking.
+5) Testes com dados sintéticos: unit das funções (mês pela data da pelada: pelada de 31/10 à noite
+   fica em outubro; mínimo de 5 partidas; desempate G+A→gols→vitórias→nome; gol contra ignorado;
+   assistência só em gol; goleiro excluído; partida sem data ignorada; mês sem dados; última pelada
+   com empate de artilheiros). Widget test da aba "Início" com isReadOnly=true (cartões e estados
+   vazios) e teste de que a aba NÃO existe com isReadOnly=false.
+6) docs/DUVIDAS.md: registre as definições (Destaque calculado ≠ selo manual; mês pela data da pelada;
+   desempate; mínimo 5) e o que descobriu sobre monthly_highlight.
+Aceite: analyze e test ok; git diff -M main --stat só com os arquivos novos, group_dashboard_screen.dart,
+testes e docs; app personal idêntico.
+```
+
+Revisão CLAUDE (Claude Code, somente leitura): mês pela data da pelada e fuso; cálculo uma vez e fora do `State`; aba só com `isReadOnly`; goleiros fora; sem escrita nem SharedPreferences; funções novas sem alterar as existentes; desempenho (sem `compute()` no web).
+
+---
+
+## T7b · Aposentar o site antigo — AG + Enzo · **RASCUNHO, por último**
+
+Branch: `chore/remove-old-site` · Só depois de a T8 estar na `main` e o site novo em uso pelos amigos. Faça com a `main` limpa, sem outras branches abertas que mexam em `match_screen`.
+
+**Enzo (nesta ordem):** 1) confirmar que o site novo funciona para os amigos; 2) apagar o projeto do site React na Vercel; 3) conferir no Supabase se mais alguma coisa usa `sync_data` / `my_sync_code`; 4) por último, `drop table sync_data` (SQL entregue pelo Claude, com backup antes).
+
+**AG (código):** remover `SiteSyncService`, `SupabaseSiteSyncService`, `SiteDataGenerator`, a flag `hasSiteSync`, `_scheduleSiteSync` e `_triggerBackgroundSync` do `match_screen`, o campo `siteSync` do `AppServices`, o uso de `my_sync_code` e os trechos do painel de debug que dependem disso; remover do repositório qualquer pasta ou arquivo do site React antigo (se existir); atualizar `ARCHITECTURE.md`, `BACKLOG.md` e `DUVIDAS.md`. **Atenção:** mexe em `match_screen`, onde fica a proteção offline. Exige revisão do Claude Code (prompt com a proibição de `git checkout`/`switch`/`stash`) e o **teste do modo avião (item 9 do checklist)**. Não alterar a chave `pending_matches_v1` nem as outras chaves protegidas. A coluna `groups.sync_code` fica (não apagar sem decisão separada). O prompt completo será escrito quando chegar a hora.

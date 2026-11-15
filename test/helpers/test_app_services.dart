@@ -285,6 +285,9 @@ class StubSeasonsRepository implements SeasonsRepository {
 }
 
 class StubSessionsRepository implements SessionsRepository {
+  final List<SessionModel> sessions;
+  StubSessionsRepository({this.sessions = const []});
+
   @override
   Future<SessionModel> createSession(SessionModel session) async => session;
 
@@ -301,7 +304,7 @@ class StubSessionsRepository implements SessionsRepository {
   Future<SessionModel?> getSessionById(String sessionId) async => null;
 
   @override
-  Future<List<SessionModel>> getSessionsByGroup(String groupId) async => [];
+  Future<List<SessionModel>> getSessionsByGroup(String groupId) async => sessions;
 
   @override
   Future<void> updateRuntimeState(String sessionId, {bool? isRunning, int? secondsPlayed, int? scoreRed, int? scoreWhite, int? redStreak, int? whiteStreak, bool? isOvertime, DateTime? startedAt, String? status}) async {}
@@ -359,6 +362,7 @@ AppServices setupTestAppServices({
   GroupsRepository? groups,
   PlayersRepository? players,
   MatchesRepository? matches,
+  SessionsRepository? sessions,
   PermissionService? permissions,
   AuthService? auth,
   AppFeatures? features,
@@ -372,7 +376,7 @@ AppServices setupTestAppServices({
     seasons: StubSeasonsRepository(),
     players: players ?? StubPlayersRepository(),
     playerAccounts: playerAccounts ?? StubPlayerAccountRepository(),
-    sessions: StubSessionsRepository(),
+    sessions: sessions ?? StubSessionsRepository(),
     matches: matches ?? StubMatchesRepository(),
     sessionArrivals: StubSessionArrivalsRepository(),
     actionLogs: StubActionLogsRepository(),

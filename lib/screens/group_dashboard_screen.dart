@@ -1,5 +1,6 @@
 import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/players_screen.dart';
+import 'package:app_do_fut/screens/web/home_dashboard_screen.dart';
 import 'package:app_do_fut/screens/sessions_screen.dart';
 import 'package:app_do_fut/screens/season_stats_screen.dart';
 import 'package:app_do_fut/screens/player_detail.dart';
@@ -80,13 +81,16 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A aba "Início" é a primeira (site e app). Fica viva (Offstage) para não
+    // ser recriada ao trocar de aba.
     final List<Widget> screens = [
+      const SizedBox.shrink(),
       SessionsScreen(groupId: widget.groupId), 
       PlayersScreen(groupId: widget.groupId),
       SeasonStatsScreen(groupId: widget.groupId),
     ];
 
-    final List<String> titles = ["Peladas", "Elenco", "Estatísticas"];
+    final List<String> titles = ["Início", "Peladas", "Elenco", "Estatísticas"];
 
     return Scaffold(
       backgroundColor: AppColors.deepBlue,
@@ -137,7 +141,16 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
         ],
       ),
 
-      body: screens[_currentIndex], 
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(
+            offstage: _currentIndex != 0,
+            child: HomeDashboardScreen(groupId: widget.groupId),
+          ),
+          if (_currentIndex != 0) screens[_currentIndex],
+        ],
+      ),
 
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -160,6 +173,7 @@ class _GroupDashboardScreenState extends State<GroupDashboardScreen> {
             });
           },
           items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: "Início"),
             BottomNavigationBarItem(
               icon: Icon(Icons.calendar_month),
               label: "Peladas",

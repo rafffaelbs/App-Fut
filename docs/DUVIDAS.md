@@ -617,3 +617,27 @@ Resolvido em fix/players-cache
      - Corrigida a quebra de linha acidental (`\n`) no trecho de documentação do comando `printf` do `_redirects`.
 
 
+
+---
+
+### 43. Aba "Peladas" na carta do jogador e tratamento de goleiros — Tarefa feat/player-recent-sessions
+- **O que foi feito:** nova aba "Peladas" no bloco "Evolução" de `lib/screens/player_detail.dart` (3 últimas peladas + "Ver mais"), usando o mesmo histórico já filtrado pelo período da carta. Função pura em `lib/utils/player_session_summary.dart` e widget em `lib/widgets/player/player_sessions_list.dart`. Sem escrita e sem rede nova.
+- **Goleiros (como a carta já trata):** `calculateGlobalStats` e `_calculateChartData` tratam o goleiro como jogador comum: a partida conta como jogo, entra em V/E/D e os gols/assistências dele somam. A aba segue exatamente isso, para a soma da lista bater com os totais da carta. (O `RankingScreen` usa ranking separado de goleiros; a carta não.)
+- **Nome da pelada:** o histórico não traz o título da pelada. Ele é lido de `sessions.getCachedSession` (só cache local, sem rede). Se não houver no cache, a lista mostra "Pelada de dd/MM/aaaa".
+- **Partidas pré-temporada:** no caminho legado (SharedPreferences) partidas com `isExactCurrentSeason == false` não entram nos totais da carta; a aba também as ignora.
+- **Achado fora do escopo (não alterado):** `_calculateChartData` em `player_detail.dart` sai cedo quando o período filtrado não tem partidas e mantém o gráfico antigo na tela. A aba "Peladas" não sofre disso.
+
+
+---
+
+### 44. Aba "Início" (dashboard) — site e app
+- **Onde aparece:** a aba "Início" é a PRIMEIRA aba do grupo no **site e no app** (por pedido do Enzo, sem restrição a `isReadOnly`). Isso muda a tela do app personal (ganha uma aba nova na frente); o restante das abas segue igual. Somente leitura, sem escrita e sem SharedPreferences.
+- **Onde está:** funções puras em `lib/utils/dashboard_highlights.dart`, resultado guardado em `lib/services/dashboard_store.dart` (calculado uma vez por grupo, depois da carga inicial; não recalcula ao trocar de aba) e tela em `lib/screens/web/home_dashboard_screen.dart`. A lógica de soma por jogador foi copiada de `season_stats_screen.dart` (a tela não foi alterada).
+- **Definições:**
+  - **Destaque calculado ≠ selo manual.** "Destaque do mês" é calculado pelas partidas. "Craque do mês (selo oficial)" é o selo marcado à mão pelo admin (`monthly_highlight`).
+  - **Mês = data da pelada** (sessão), em horário local, chave `aaaa-MM`. Pelada de 31/10 à noite fica em outubro. Partida sem pelada ou sem data é ignorada (nunca usa `DateTime.now()` como data da partida).
+  - **Ordem:** G+A, depois gols, depois vitórias, depois nome. **Mínimo de 5 partidas** de linha no mês para entrar. Artilheiro ordena por gols e garçom por assistências (desempate vitórias, nome).
+  - Gol contra não conta; assistência só em evento de gol; goleiros ficam de fora (partida como goleiro não conta como jogo).
+  - **Última pelada:** a mais recente com status finalizada e ao menos uma partida. Maior goleada = maior diferença de gols (desempate: mais gols no total).
+- **O que `monthly_highlight` guarda de fato:** é só um booleano na tabela `players` (coluna `monthly_highlight`), ou seja, **só quem é o portador atual**; não há mês nem data junto. Quem liga/desliga é o admin (`setMonthlyHighlight`). O número de estrelas vem de `monthly_star_count`/`craque_mes_count`. O snapshot do elenco já traz o campo (`GroupBootstrap.playerSnapshotMap` → `monthly_highlight`), então a aba não precisa de chamada nova de rede. Por isso o cartão "Craque do mês" não diz de qual mês é o selo.
+- **Observação:** `GroupBootstrap.prefetch` ainda usa `compute()` quando há histórico (já era assim; no web roda inline). A aba Início não usa `compute()`.

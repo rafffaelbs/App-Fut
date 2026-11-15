@@ -12,6 +12,8 @@ import '../models/player_badge_model.dart';
 import 'package:app_do_fut/app/app_services.dart';
 import '../utils/constants.dart';
 import '../utils/player_identity.dart';
+import '../utils/player_session_summary.dart';
+import '../widgets/player/player_sessions_list.dart';
 import '../utils/overall_calculator.dart';
 import '../utils/rating_calculator.dart';
 import '../utils/stats_calculator.dart';
@@ -75,10 +77,14 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   // ── Gráfico ──────────────────────────────────────────────────
   List<dynamic> _allHistory = []; // histórico já filtrado (usado na tela toda)
-  String _chartMetric = 'Nota'; // 'Nota' ou 'G+A' (Gols/Assistências)
+  String _chartMetric = 'Nota'; // aba: 'Nota', 'G+A' (Gols/Assistências) ou 'Peladas'
   String _chartPeriod = 'Sessão';
   bool _chartAccumulated = false; // dia a dia (false) ou acumulado (true)
   List<Map<String, dynamic>> _chartData = [];
+
+  // ── Aba "Peladas" (somente leitura; usa o mesmo histórico filtrado) ──
+  List<PlayerSessionSummary> _sessionSummaries = const [];
+  Map<String, String> _sessionTitles = {};
 
   Map<String, dynamic> playerStats = {
     'name': '',
@@ -382,6 +388,36 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     });
 
     _calculateChartData();
+    _updateSessionSummaries();
+  }
+
+  /// Resume as peladas do jogador no período atual (sem rede).
+  void _updateSessionSummaries() {
+    final summaries = summarizePlayerSessions(_allHistory, widget.playerId);
+    setState(() => _sessionSummaries = summaries);
+    _loadSessionTitles(summaries);
+  }
+
+  /// Nomes das peladas vêm só do cache local (`getCachedSession`, sem rede).
+  /// Se faltar, a lista mostra "Pelada de dd/MM/aaaa".
+  Future<void> _loadSessionTitles(List<PlayerSessionSummary> summaries) async {
+    final missing = {
+      for (final s in summaries)
+        if (s.sessionId.isNotEmpty && !_sessionTitles.containsKey(s.sessionId))
+          s.sessionId,
+    };
+    if (missing.isEmpty) return;
+    final found = <String, String>{};
+    for (final id in missing) {
+      try {
+        final session = await AppServices.instance.sessions.getCachedSession(id);
+        found[id] = session?.title.trim() ?? '';
+      } catch (_) {
+        found[id] = '';
+      }
+    }
+    if (!mounted) return;
+    setState(() => _sessionTitles = {..._sessionTitles, ...found});
   }
 
   void _onFilterChanged(String key) {
@@ -2364,7 +2400,100 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     return result;
   }
 
+  // ── Bloco "Evolução": abas Nota | Gols e Assist. | Peladas ──────────
+  static const String _tabNota = 'Nota';
+  static const String _tabGoals = 'G+A';
+  static const String _tabSessions = 'Peladas';
+
   Widget _buildEvolutionChart() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_graph, color: AppColors.accentBlue),
+              SizedBox(width: 8),
+              Text(
+                'Evolução',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildEvolutionTabs(),
+          const SizedBox(height: 16),
+          if (_chartMetric == _tabSessions)
+            PlayerSessionsList(
+              summaries: _sessionSummaries,
+              titles: _sessionTitles,
+            )
+          else
+            _buildChartPanel(),
+        ],
+      ),
+    );
+  }
+
+  /// Seletor de abas (estilo "segmentado") do bloco de evolução.
+  Widget _buildEvolutionTabs() {
+    const tabs = {
+      _tabNota: 'Nota',
+      _tabGoals: 'Gols e Assist.',
+      _tabSessions: 'Peladas',
+    };
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.deepBlue,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          for (final e in tabs.entries)
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _chartMetric = e.key),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _chartMetric == e.key
+                        ? AppColors.accentBlue.withOpacity(0.2)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    e.value,
+                    style: TextStyle(
+                      color: _chartMetric == e.key
+                          ? AppColors.accentBlue
+                          : Colors.white54,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Controles (sessão/mês e acumulado) + gráfico das abas Nota e Gols/Assist.
+  Widget _buildChartPanel() {
     if (_chartData.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
@@ -2377,177 +2506,97 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       );
     }
 
-    final bool isNota = _chartMetric == 'Nota';
+    final bool isNota = _chartMetric == _tabNota;
     final List<String> keys = isNota
         ? ['Nota']
         : ['G+A', 'Gols', 'Assistências'];
     final List<Map<String, dynamic>> series = _seriesFor(keys);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.headerBlue,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Cabeçalho do gráfico
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: AppColors.deepBlue,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _chartPeriod,
+                  dropdownColor: AppColors.deepBlue,
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white54,
+                    size: 16,
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  items: ['Sessão', 'Mês']
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _chartPeriod = v);
+                      _calculateChartData();
+                    }
+                  },
+                ),
+              ),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _chartAccumulated = !_chartAccumulated),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.auto_graph, color: AppColors.accentBlue),
-                  SizedBox(width: 8),
-                  Text(
-                    'Evolução',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: Checkbox(
+                      value: _chartAccumulated,
+                      activeColor: AppColors.accentBlue,
+                      checkColor: Colors.white,
+                      side: const BorderSide(color: Colors.white38),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      onChanged: (v) =>
+                          setState(() => _chartAccumulated = v ?? false),
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Acumulado',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ],
               ),
-              Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.deepBlue,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _chartPeriod,
-                    dropdownColor: AppColors.deepBlue,
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: Colors.white54,
-                      size: 16,
-                    ),
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    items: ['Sessão', 'Mês']
-                        .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() => _chartPeriod = v);
-                        _calculateChartData();
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Seletor de métrica + toggle acumulado
-          Row(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['Nota', 'G+A'].map((metric) {
-                      final bool isSelected = _chartMetric == metric;
-                      final String label = metric == 'G+A'
-                          ? 'Gols e Assistências'
-                          : metric;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() => _chartMetric = metric);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.accentBlue.withOpacity(0.2)
-                                  : Colors.transparent,
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.accentBlue
-                                    : Colors.white24,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? AppColors.accentBlue
-                                    : Colors.white54,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () =>
-                    setState(() => _chartAccumulated = !_chartAccumulated),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: Checkbox(
-                        value: _chartAccumulated,
-                        activeColor: AppColors.accentBlue,
-                        checkColor: Colors.white,
-                        side: const BorderSide(color: Colors.white38),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) =>
-                            setState(() => _chartAccumulated = v ?? false),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Acumulado',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Gráfico
-          SizedBox(
-            height: 220,
-            child: isNota
-                ? _buildSingleLineChart(series)
-                : _buildGoalsAssistsChart(series),
-          ),
-
-          if (!isNota) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildLegendDot('G+A', AppColors.highlightBlue),
-                const SizedBox(width: 16),
-                _buildLegendDot('Gols', AppColors.highlightGreen),
-                const SizedBox(width: 16),
-                _buildLegendDot('Assistências', Colors.amberAccent),
-              ],
             ),
           ],
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          height: 220,
+          child: isNota
+              ? _buildSingleLineChart(series)
+              : _buildGoalsAssistsChart(series),
+        ),
+        if (!isNota) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendDot('G+A', AppColors.highlightBlue),
+              const SizedBox(width: 16),
+              _buildLegendDot('Gols', AppColors.highlightGreen),
+              const SizedBox(width: 16),
+              _buildLegendDot('Assistências', Colors.amberAccent),
+            ],
+          ),
         ],
-      ),
+      ],
     );
   }
 
