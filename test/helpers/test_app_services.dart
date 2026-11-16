@@ -55,15 +55,30 @@ class StubAuthService implements AuthService {
 
 class StubPermissionService implements PermissionService {
   bool adminResult;
+  final Map<String, bool>? adminByGroup;
+  final bool Function(String groupId)? isAdminCallback;
 
-  StubPermissionService({this.adminResult = true});
+  StubPermissionService({
+    this.adminResult = true,
+    this.adminByGroup,
+    this.isAdminCallback,
+  });
 
   @override
-  Future<bool> isAdmin(String groupId) async => adminResult;
+  Future<bool> isAdmin(String groupId) async {
+    if (adminByGroup != null && adminByGroup!.containsKey(groupId)) {
+      return adminByGroup![groupId]!;
+    }
+    if (isAdminCallback != null) {
+      return isAdminCallback!(groupId);
+    }
+    return adminResult;
+  }
 
   @override
   Future<void> requireAdmin(String groupId, [String? message]) async {
-    if (!adminResult) {
+    final ok = await isAdmin(groupId);
+    if (!ok) {
       throw Exception(message ?? 'Acesso negado: requer privilégio de administrador.');
     }
   }
@@ -222,6 +237,10 @@ class StubCustomBadgesRepository implements CustomBadgesRepository {
 }
 
 class StubGroupsRepository implements GroupsRepository {
+  final List<GroupModel> groups;
+
+  StubGroupsRepository({this.groups = const []});
+
   @override
   bool get lastLoadFromCache => false;
 
@@ -232,7 +251,7 @@ class StubGroupsRepository implements GroupsRepository {
   Future<void> deleteGroup(String groupId) async {}
 
   @override
-  Future<List<GroupModel>> getMyGroups() async => [];
+  Future<List<GroupModel>> getMyGroups() async => groups;
 
   @override
   Future<GroupModel> updateGroup(GroupModel group) async => group;

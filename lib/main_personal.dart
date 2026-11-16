@@ -212,6 +212,7 @@ class _HomePageState extends State<HomePage> {
   List<GroupModel> groups = [];
   bool isLoading = true;
   bool _hasConnectionError = false;
+  Map<String, bool> _groupAdminStatus = {};
 
   @override
   void initState() {
@@ -238,8 +239,25 @@ class _HomePageState extends State<HomePage> {
     });
     try {
       final fetchedGroups = await AppServices.instance.groups.getMyGroups();
+      Map<String, bool> adminMap = {};
+      try {
+        final entries = await Future.wait(
+          fetchedGroups.map((g) async {
+            try {
+              final isAdmin = await AppServices.instance.permissions.isAdmin(g.id);
+              return MapEntry(g.id, isAdmin);
+            } catch (_) {
+              return MapEntry(g.id, false);
+            }
+          }),
+        );
+        adminMap = Map.fromEntries(entries);
+      } catch (_) {
+        adminMap = {};
+      }
       setState(() {
         groups = fetchedGroups;
+        _groupAdminStatus = adminMap;
       });
     } catch (e) {
       debugPrint("Error loading groups: $e");
@@ -831,7 +849,8 @@ class _HomePageState extends State<HomePage> {
                           "Toque para ver elenco e jogos",
                           style: TextStyle(color: Colors.grey, fontSize: 13),
                         ),
-                        trailing: AppServices.instance.features.isReadOnly
+                        trailing: !AppServices.instance.features.canAdminister(
+                                _groupAdminStatus[group.id] ?? false)
                             ? null
                             : PopupMenuButton(
                                 icon: const Icon(
