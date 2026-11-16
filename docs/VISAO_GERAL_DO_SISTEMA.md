@@ -1,5 +1,7 @@
 # Visão Geral do App-Fut: Arquitetura, Produto e Funcionamento
 
+> ⚠️ **Documento histórico de 03/11/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 > **Documento de referência para Product Owner (PO) e Entendimento do Sistema**  
 > **Versão:** 1.0 (Atualizado pós Fase 1 e Fase 1b — Novembro/2026)  
 > **Público-alvo:** Enzo (PO / Gestor do Produto) e novos desenvolvedores
@@ -188,7 +190,7 @@ Quando o organizador toca em "Sortear":
 
 ## 8. Próximos Passos no Roadmap
 
-1. **Fase 2 — Site Web Somente Leitura:**
+1. **Fase 2 — Site Web Somente Leitura (✅ no ar desde 15/11/2026):**
    - Permitir que os participantes da pelada (especialmente usuários de iPhone) acessem um link web sem login para ver classificações, artilharia e cartas dos jogadores em tempo real.
 2. **Fase 3 — App Público Offline:**
    - Versão standalone para publicação nas lojas de aplicativos, usando banco SQLite local, permitindo a qualquer pelada do país organizar seus jogos com o mesmo motor do App-Fut.

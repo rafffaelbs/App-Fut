@@ -11,11 +11,11 @@
 | # | Tarefa | Quem | Branch | Situação |
 |---|---|---|---|---|
 | T5 | Telas seguras para web, flags `web_readonly`, esconder escrita | AG, revisão CLAUDE | `feat/web-readonly-screens` | ✅ na `main` em 08/11/2026 (revisada, 233 testes, testada no celular) |
-| T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (`docs/sql/`) | ✅ executada e testada em produção em 04/11/2026 (testes da API como visitante ok; falta só o teste de admin do passo 5, necessário antes da T6c) |
+| T6 | Tabela de token + funções SQL no Supabase | CLAUDE (SQL) + Enzo (executa) | sem branch (`docs/F2_T6_testes.md`; o `F2_T6_share_link.sql` NÃO está no repositório, ver C5 em `docs/C-TASK.md`) | ✅ executada e testada em produção em 04/11/2026 (testes da API como visitante ok; falta só o teste de admin do passo 5, necessário antes da T6c) |
 | T6b | Repositórios via token, `bootstrap_web`, `main_web` completo | AG, revisão CLAUDE | `feat/web-token-repos` | ✅ na `main` em 14/11/2026 (URL mantém o token no F5; teste do erro de conexão a repetir no site publicado) |
 | T7 | Build + deploy no Cloudflare Pages + teste no iPhone | AG + Enzo | `feat/web-deploy` | ✅ no ar em 14/11/2026: `https://app-fut-site.pages.dev/fut` (302 para o link com token ok; 281 testes). **Falta:** teste no iPhone por um amigo (atalho da tela de início) |
-| T6c | Tela do admin **no app** (não no site): ver, copiar, girar e desativar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏸️ **adiada (backlog)** por decisão de 14/11. Enquanto isso, o token é girado pelo SQL Editor. Ao retomar: rodar antes o passo 5 de `sql/F2_T6_testes.md` |
-| E1 | Estética e conteúdo do site e da carta: aba Peladas na carta (E1a), dashboard "Início" (E1b), melhorias no dashboard e estatísticas (E1c) | CLAUDE (desenho) + AG, revisão CLAUDE | por etapa | ✅ E1a, E1b e E1c concluídas em 15/11/2026 (308 testes passando) |
+| T6c | Tela do admin **no app** (não no site): ver, copiar, girar e desativar o link | AG, revisão CLAUDE | `feat/share-link-admin` | ⏸️ **adiada (backlog)** por decisão de 14/11. Enquanto isso, o token é girado pelo SQL Editor. Ao retomar: rodar antes o passo 5 de `docs/F2_T6_testes.md` |
+| E1 | Estética e conteúdo do site e da carta: aba Peladas na carta (E1a), dashboard "Início" (E1b), melhorias no dashboard e estatísticas (E1c) | CLAUDE (desenho) + AG, revisão CLAUDE | por etapa | ✅ E1a, E1b, E1c e E1d concluídas em 15/11/2026 (E1d = estilos de avatar, seção "Atualizações" e sino de notificações pessoais). Suíte atual: 322 testes passando (conferido em 15/11/2026; o 308 era o número de antes da E1d) |
 | T7b | Aposentar o site antigo (código, Vercel, `sync_data`) | AG + Enzo | `chore/remove-old-site` | ⏳ **por último**, depois da E1 (**RASCUNHO**) |
 
 Ordem: T5, T6, T6b e T7 ✅ → **E1** (dashboard/legibilidade do site) → **T7b** (remover o site antigo). A **T6c** (tela de admin no app) está adiada no backlog. A T7b fica por último porque mexe no `match_screen` (proteção offline) e para não gerar conflito.
@@ -209,12 +209,12 @@ Antes do merge: `grep -rn "match_history_full" lib test tool docs` (o arquivo fo
 
 ## T6 · Token e funções no banco — CLAUDE (SQL), Enzo executa
 
-Sem branch. O Claude entrega `docs/sql/F2_T6_share_link.sql` (e um arquivo de testes). **O banco é de produção** (o grupo "Fut do INF" tem os dados reais do Enzo): tudo é aditivo e roda dentro de uma transação.
+Sem branch. O Claude entregou `F2_T6_share_link.sql` (**não está no repositório**: existe só na máquina do Enzo; tarefa C5 em `docs/C-TASK.md`: o Enzo fornece o arquivo e ele entra em `docs/sql/` sem nenhum token dentro) e um arquivo de testes (`docs/F2_T6_testes.md`). **O banco é de produção** (o grupo "Fut do INF" tem os dados reais do Enzo): tudo é aditivo e roda dentro de uma transação.
 
-### Arquivos (em `docs/sql/`)
+### Arquivos (`docs/F2_T6_testes.md` está no repositório; `F2_T6_share_link.sql` ainda não, ver C5)
 
-- `F2_T6_share_link.sql` — cria a tabela `group_share_tokens` e as funções. Roda numa transação. Aditivo.
-- `F2_T6_testes.md` — roteiro de testes na ordem: backup, rodar, testes estruturais, criar o link do Fut do INF, testes pela API como visitante (`anon`), testes de admin, conferência do app.
+- `F2_T6_share_link.sql` (fora do repositório até a C5; a pasta `docs/sql/` ainda não existe) — cria a tabela `group_share_tokens` e as funções. Roda numa transação. Aditivo.
+- `docs/F2_T6_testes.md` — roteiro de testes na ordem: backup, rodar, testes estruturais, criar o link do Fut do INF, testes pela API como visitante (`anon`), testes de admin, conferência do app.
 
 **Validação:** a sintaxe SQL e PL/pgSQL foi conferida com o parser do Postgres, mas o script **não foi executado** num banco. Os testes do roteiro são obrigatórios.
 
@@ -425,7 +425,7 @@ Ao terminar: flutter analyze e flutter test; git diff main --stat; resumo em 5 l
 
 > Decisão de 14/11/2026: não é prioridade (o link já funciona; o token é girado pelo SQL Editor). A tela é do **app do celular** (configurações, só para admin), nunca do site. O prompt abaixo fica guardado e pronto para quando for retomada.
 
-Branch: `feat/share-link-admin` · Parte da `main` atual · **Pré-requisito:** teste de admin (passo 5 de `docs/sql/F2_T6_testes.md`: `get_/rotate_/revoke_group_share_token` com usuário admin, com JWT simulado e rollback). Se esse teste não passou, não comece.
+Branch: `feat/share-link-admin` · Parte da `main` atual · **Pré-requisito:** teste de admin (passo 5 de `docs/F2_T6_testes.md`: `get_/rotate_/revoke_group_share_token` com usuário admin, com JWT simulado e rollback). Se esse teste não passou, não comece.
 
 **Funções do banco (já existem, assinaturas reais):** `get_group_share_token(p_group_id text) returns text` (null = link desativado/inexistente), `rotate_group_share_token(p_group_id text) returns text` (cria ou troca e devolve o token), `revoke_group_share_token(p_group_id text) returns void`. Só `authenticated` e só admin do grupo; não-admin recebe erro "Acesso negado".
 
@@ -553,8 +553,8 @@ Branch: `feat/web-dashboard` (a partir da `main`). Independe da E1a (arquivos di
 Tarefa: criar a aba "Início" (dashboard) do site, somente leitura, e funções puras de destaques.
 Regras gerais: sem escrita; sem nova chamada de rede (use os repositórios que já leem o snapshot);
 não altere fórmulas existentes, telas do app personal nem chaves de SharedPreferences; nada de
-SharedPreferences nesta aba. A aba aparece SOMENTE quando AppServices.instance.features.isReadOnly
-for true (site); no app personal o group_dashboard_screen fica idêntico.
+SharedPreferences nesta aba. A aba Início é a primeira no site e no app (DUVIDAS #44); o personal
+ganha uma aba (o resto do group_dashboard_screen não muda).
 1) lib/utils/dashboard_highlights.dart (arquivo novo, funções puras e testáveis, sem tocar nos
    calculators nem nas telas). Copie a lógica de soma por jogador de season_stats_screen.dart
    (~297-438, privada) para cá em vez de alterar a tela. Convenções: G+A = gols + assistências;
@@ -573,8 +573,8 @@ for true (site); no app personal o group_dashboard_screen fica idêntico.
    pelada) e guardados fora do State (objeto único em memória, no estilo do GroupBootstrap), sem
    recalcular a cada troca de aba. Não use compute() no web. Renderize o primeiro quadro antes do
    cálculo (esqueleto/spinner). A nova aba precisa se manter viva (não recriar ao trocar de aba).
-3) group_dashboard_screen.dart: com isReadOnly, acrescentar a aba "Início" como PRIMEIRA aba
-   (o site abre nela). Sem isReadOnly nada muda.
+3) group_dashboard_screen.dart: acrescentar a aba "Início" como PRIMEIRA aba, no site e no app
+   (DUVIDAS #44); o personal ganha uma aba.
 4) Tela lib/screens/web/home_dashboard_screen.dart, cartões em coluna (mobile primeiro; em tela
    larga, conteúdo centralizado com largura máxima ~720):
    - "Destaque do mês · <mês atual> (parcial)": top 3 com avatar, nome, gols, assistências, jogos.
@@ -591,14 +591,14 @@ for true (site); no app personal o group_dashboard_screen fica idêntico.
    fica em outubro; mínimo de 5 partidas; desempate G+A→gols→vitórias→nome; gol contra ignorado;
    assistência só em gol; goleiro excluído; partida sem data ignorada; mês sem dados; última pelada
    com empate de artilheiros). Widget test da aba "Início" com isReadOnly=true (cartões e estados
-   vazios) e teste de que a aba NÃO existe com isReadOnly=false.
+   vazios). A aba Início é a primeira no site e no app (DUVIDAS #44); o personal ganha uma aba.
 6) docs/DUVIDAS.md: registre as definições (Destaque calculado ≠ selo manual; mês pela data da pelada;
    desempate; mínimo 5) e o que descobriu sobre monthly_highlight.
 Aceite: analyze e test ok; git diff -M main --stat só com os arquivos novos, group_dashboard_screen.dart,
-testes e docs; app personal idêntico.
+testes e docs; o personal ganha uma aba (Início), o resto fica igual.
 ```
 
-Revisão CLAUDE (Claude Code, somente leitura): mês pela data da pelada e fuso; cálculo uma vez e fora do `State`; aba só com `isReadOnly`; goleiros fora; sem escrita nem SharedPreferences; funções novas sem alterar as existentes; desempenho (sem `compute()` no web).
+Revisão CLAUDE (Claude Code, somente leitura): mês pela data da pelada e fuso; cálculo uma vez e fora do `State`; aba Início é a primeira no site e no app (DUVIDAS #44); goleiros fora; sem escrita nem SharedPreferences; funções novas sem alterar as existentes; desempenho (sem `compute()` no web).
 
 ---
 
@@ -666,16 +666,17 @@ Branch: `chore/remove-old-site` · Só depois de a E1 estar na `main` e o site n
 
 ## Encerramento da Fase 2 (15/11/2026)
 
-**Entregue:** link secreto por grupo sem login (T6); site Flutter Web somente leitura lendo um snapshot por token (T5, T6b); URL mantém o token; build e deploy automático no Cloudflare Pages via GitHub Actions, com link curto `/fut` e `start_url` do atalho (T7); dashboard "Início" e aba "Peladas" na carta do jogador (E1a, E1b); melhorias visuais no dashboard e reformulação completa da tela de estatísticas da temporada no padrão do ranking de pelada com pódio, top 4-8, cartões, HT e bordas de tier (E1c); personalização de estilo de avatar (fundo vs auréola por tela), seção de atualizações recentes e notificações exclusivas para o perfil logado no app (E1d). 320 testes passando na suíte.
+**Entregue:** link secreto por grupo sem login (T6); site Flutter Web somente leitura lendo um snapshot por token (T5, T6b); URL mantém o token; build e deploy automático no Cloudflare Pages via GitHub Actions, com link curto `/fut` e `start_url` do atalho (T7); dashboard "Início" e aba "Peladas" na carta do jogador (E1a, E1b); melhorias visuais no dashboard e reformulação completa da tela de estatísticas da temporada no padrão do ranking de pelada com pódio, top 4-8, cartões, HT e bordas de tier (E1c); personalização de estilo de avatar (fundo vs auréola por tela), seção de atualizações recentes e notificações exclusivas para o perfil logado no app (E1d). 322 testes passando na suíte (conferido em 15/11/2026, já com a C2).
 
 **Pendências que não bloqueiam o encerramento:**
-1. **Merge** de E1a (`feat/player-recent-sessions`), E1b (`feat/web-dashboard`), E1c e E1d na `main`. Recomendado: revisão do Claude Code em sessão nova, somente leitura. Conferir que o app personal não teve quebras.
+1. ~~**Merge** de E1a, E1b, E1c e E1d na `main`~~ **Feito**: a `main` já tem E1a a E1d (commits `b2ea3fa` e `9432713`, 15/11/2026). Falta só a revisão do Claude Code em sessão nova, somente leitura, e conferir que o app personal não teve quebras.
 2. **Teste no iPhone** por um amigo (Safari → Adicionar à Tela de Início → abrir pelo ícone). Se o atalho abrir "Link inválido", o `start_url: "/fut"` não valeu no iOS.
 3. **Teste do erro de conexão no site publicado** (DevTools → Network request blocking → `*supabase.co*` → recarregar → "Tentar de novo").
 4. Conferir `curl -s https://app-fut-site.pages.dev/_redirects | grep -c <início do token>` = 0.
 5. **T7b** (remover o site antigo): só quando o site novo estiver em uso pelos amigos; mexe no `match_screen`, então precisa de revisão e do teste de modo avião.
-6. **T6c** (tela de admin no app para ver/girar o link): adiada (backlog). Antes, rodar o passo 5 de `sql/F2_T6_testes.md`.
+6. **T6c** (tela de admin no app para ver/girar o link): adiada (backlog). Antes, rodar o passo 5 de `docs/F2_T6_testes.md`.
 7. **E1c e E1d concluídas em 15/11**; eventuais novos refinamentos estéticos pontuais no futuro podem ser feitos conforme feedback.
 8. Antes de divulgar o link: decidir se gira o token (o atual passou por prints e chat); se girar, atualizar o secret `FUT_TOKEN` no GitHub e rodar o workflow.
 9. Registrar no `BACKLOG.md`: tela de admin do link (T6c); sequência de vitórias, melhor dupla, mais assíduo e goleiro do mês no dashboard; `/fut` resolver o token atual em tempo de execução (hoje exige atualizar `FUT_TOKEN` após girar); `--no-web-resources-cdn` se o Network mostrar chamadas ao Google; selo "Craque do mês" não guarda o mês (só o portador atual).
-10. Ajustes de documentação listados em `TASKS.md` (regra 5 do `ARCHITECTURE.md` com as exceções aditivas da T6 e da S1, seção 7, Fut do INF não apagado, contagem de testes atualizada para 320).
+10. ~~Ajustes de documentação~~ **Feitos na C4** (branch `docs/atualizacao-2026-11-15`; ver `docs/DIAGNOSTICO_AG_2026-11-15.md`).
+11. **Correções pós-Fase 2 (C1 a C5)**, com prompts em `docs/C-TASK.md`. O item F2 do `BACKLOG.md` §0b ("botões que dão erro") NÃO estava resolvido: é a C3.

@@ -46,7 +46,7 @@ Ao terminar: rode `flutter analyze` e `flutter test`, faça commits pequenos e m
 
 ## Desenho
 
-**S1a — SQL (`docs/sql/S1a_players_select_rls.sql`):** função `visible_player_ids()` (`SECURITY DEFINER`) devolve os ids visíveis para o usuário atual: membros dos grupos dele, mais quem aparece em escalações, eventos (autor/assistência) ou presenças desses grupos. A policy vira `creator_id = auth.uid() OR id IN (SELECT visible_player_ids())`. A subconsulta é calculada **uma vez por consulta** (e não por linha), para não pesar nas leituras que embutem jogadores (4709 escalações). Inclui bloco DESFAZER.
+**S1a — SQL (`docs/S1_players_select_rls.sql`):** função `visible_player_ids()` (`SECURITY DEFINER`) devolve os ids visíveis para o usuário atual: membros dos grupos dele, mais quem aparece em escalações, eventos (autor/assistência) ou presenças desses grupos. A policy vira `creator_id = auth.uid() OR id IN (SELECT visible_player_ids())`. A subconsulta é calculada **uma vez por consulta** (e não por linha), para não pesar nas leituras que embutem jogadores (4709 escalações). Inclui bloco DESFAZER.
 
 **S1b — app (AG):** `createGhostPlayer` passa a inserir o jogador **sem pedir a linha de volta**, insere em `group_members` e só então lê o jogador; e o plano B sem filtro do elenco passa a devolver lista vazia.
 
@@ -129,7 +129,7 @@ Termine com riscos para o app pessoal e se está seguro para merge.
 
 ## S1a — SQL
 
-`docs/sql/S1a_players_select_rls.sql` (validado só em sintaxe). **Não rodar antes dos passos 1 a 3 da "Ordem de aplicação".**
+`docs/S1_players_select_rls.sql` (validado só em sintaxe). **Não rodar antes dos passos 1 a 3 da "Ordem de aplicação".**
 
 ## Testes da S1a
 

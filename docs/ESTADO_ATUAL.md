@@ -1,5 +1,7 @@
 # ESTADO_ATUAL.md — Levantamento do Estado Atual do Código
 
+> ⚠️ **Documento histórico de 02/11/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 > **Data do levantamento:** 02/11/2026  
 > **Branch analisada:** `main`  
 > **Modo de execução:** Somente leitura (inspeção estática e caracterização, sem alterações de lógica ou comportamento).
@@ -478,7 +480,7 @@ Comando de verificação oficial do `ARCHITECTURE.md`:
 grep -rl "supabase_flutter" lib | grep -v "^lib/data/supabase/" | grep -v "^lib/bootstrap_personal.dart"
 ```
 - **Saída:** Vazio (0 arquivos).
-- **Detalhamento:** Todos os 14 arquivos que importam `supabase_flutter` residem estritamente em `lib/data/supabase/`:
+- **Detalhamento:** Todos os arquivos que importam `supabase_flutter` residem estritamente em `lib/data/supabase/` (**corrigido em 15/11/2026: são 16, não 14**; os extras são `supabase_config.dart` e `readonly/snapshot_source.dart`, e o isolamento da regra 2 continua válido):
   - `lib/data/supabase/action_logs_repository.dart`
   - `lib/data/supabase/group_members_repository.dart`
   - `lib/data/supabase/groups_repository.dart`

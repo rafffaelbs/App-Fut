@@ -3,7 +3,7 @@
 > Documento de referência para quem executa as tarefas (Antigravity / Claude Code).
 > Base: `docs/INVENTARIO_SUPABASE.md`. Em caso de conflito entre este documento e o código, **pare e registre em `docs/DUVIDAS.md`** em vez de decidir sozinho.
 >
-> **Status (15/11/2026): Fase 1, Fase 1b e Fase 2 concluídas.** T0 a T7 e tarefas estéticas/funcionais da Fase 2 (E1a, E1b, E1c, E1d) estão concluídas (site somente leitura no Cloudflare Pages, link por token, dashboard web/app, estatísticas da temporada no padrão do ranking, personalização de estilos de avatar fundo vs auréola, atualizações e notificações pessoais). 320 testes passando, 0 erros no analyze. Bugs resolvidos e pendências: seção 11, `docs/F2-TASK.md` e `docs/BACKLOG.md`.
+> **Status (15/11/2026): Fase 1, Fase 1b e Fase 2 concluídas; fase C (correções pós-Fase 2) em andamento (`docs/C-TASK.md`, estado em `docs/TASKS.md`).** T0 a T7 e tarefas estéticas/funcionais da Fase 2 (E1a, E1b, E1c, E1d) estão concluídas (site somente leitura no Cloudflare Pages, link por token, dashboard web/app, estatísticas da temporada no padrão do ranking, personalização de estilos de avatar fundo vs auréola, atualizações e notificações pessoais). 322 testes passando (rodados em 15/11/2026, já com a C2), 0 erros no analyze (só avisos antigos: 14 warnings, o resto `info`). Bugs resolvidos e pendências: seção 11, `docs/F2-TASK.md` e `docs/BACKLOG.md`.
 
 ## 1. Objetivo
 
@@ -13,7 +13,7 @@ Um único repositório gera:
 |---|---|---|---|---|---|
 | **personal** | Supabase | sim | sim | Blue Lock | Enzo e o grupo dele |
 | **public** | SQLite local (drift) | não | o dono do aparelho é admin | neutro | qualquer pessoa |
-| **web_readonly** (depois) | Supabase (somente leitura) | a decidir | não | igual ao personal | quem usa iPhone |
+| **web_readonly** | Supabase (somente leitura, por snapshot via token) | não: web no ar, link secreto sem login, apenas leitura | não | igual ao personal | quem usa iPhone |
 
 O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** como backup. Quem quiser ficar online "se vira" usando as interfaces e o schema documentado.
 
@@ -25,8 +25,8 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
    grep -rl "supabase_flutter" lib | grep -v "^lib/data/supabase/" | grep -v "^lib/bootstrap_personal.dart"
    ```
 3. Telas, widgets, serviços e utils dependem de **interfaces** (`lib/domain/`) e de `AppServices` / `AppFeatures`. Nunca de classes `Supabase*`.
-4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.** **Exceção conhecida (após a T3e):** `getAllGroupMatches` em `stats_calculator.dart` agora recebe `matchesRepository`, `playersRepository` e `matchHistoryStore` por injeção, mas o fallback ainda lê as chaves legadas `sessions_*` e `seasons_*` direto do `SharedPreferences` (~linhas 106-120), e `site_data_generator.dart` (~35-43) também. Ninguém grava essas chaves; ficam como leitura legada até decidirmos limpá-las.
-5. **Não alterar:** nomes de tabelas/colunas do Supabase, policies RLS, RPCs, fórmulas dos calculators.
+4. `lib/utils/*_calculator.dart` não dependem de plataforma nem de banco. **Não alterar as fórmulas.** **Exceção conhecida (após a T3e):** `getAllGroupMatches` em `stats_calculator.dart` agora recebe `matchesRepository`, `playersRepository` e `matchHistoryStore` por injeção, mas o fallback ainda lê as chaves legadas `sessions_*` e `seasons_*` direto do `SharedPreferences` (~linhas 106-120), e `site_data_generator.dart` (~35-43) também. Ninguém *cria* essas chaves; a única rotina que as reescreve é `_normalizeSessionIds` (`supabase_site_sync_service.dart:171-215`), chamada por `exportDataToSupabase` (linha 31), ou seja, só roda quando o envio ao site antigo roda (e só troca ids antigos `session_<timestamp>` e renomeia `match_history_<id>`). Ficam como leitura legada; saem junto com a T7b.
+5. **Não alterar:** nomes de tabelas/colunas do Supabase, policies RLS, RPCs, fórmulas dos calculators. **Exceções aditivas aprovadas:** (a) tabela `group_share_tokens` e funções `get_/rotate_/revoke_group_share_token` e `get_group_snapshot` (`SECURITY DEFINER`); (b) S1 (quando aplicada): substitui a policy `players_select`, cria `visible_player_ids()`, reversível.
 6. Uma tarefa = uma branch = commits pequenos. Antes de terminar: `flutter analyze` e `flutter test`.
 7. **Não adicionar pacotes** sem estar listado na tarefa. Pacotes previstos mais à frente: `drift`, `drift_flutter` (ou `sqlite3_flutter_libs`), `path`.
 8. Exceções e mensagens de erro existentes (ex.: "sem permissão") devem ser **preservadas com o mesmo texto**.
@@ -34,7 +34,7 @@ O app public terá botões **Exportar banco (.db)** e **Importar banco (.db)** c
 10. **Não renomear nem alterar chaves de `SharedPreferences`** (lista na seção 9). Uma chave alterada faz o app perder partidas pendentes ou o estado da partida em andamento de quem já tem o app instalado.
 11. **Não mexer na lógica de proteção contra queda de internet** (fila de envio, cache, estado local da partida; seção 9). Só é permitido movê-la de pasta/abstraí-la como descrito nas tarefas, preservando o comportamento.
 
-## 3. Estrutura alvo de pastas
+## 3. Estrutura de pastas (conferida com `ls` em 15/11/2026)
 
 ```
 lib/
@@ -42,22 +42,29 @@ lib/
     repositories/      # interfaces (classes abstratas) — Fase 1 / T1
     services/          # AuthService, PermissionService, MatchOutbox, SiteSyncService, DiagnosticsService
   data/
-    supabase/          # implementações Supabase* (e supabase_config.dart)
+    supabase/          # implementações Supabase* (e supabase_config.dart, cache_store.dart, site_data_generator.dart)
+      readonly/        # web somente leitura por token (9 arquivos): snapshot_source.dart (chama a RPC get_group_snapshot), readonly_services.dart e token_*_repository.dart (groups, matches, membership, players, seasons, session_arrivals, sessions)
     prefs/             # implementações em SharedPreferences (histórico local de partidas, insígnias personalizadas) — T3e
     local/             # drift/SQLite (Fase 3)
   app/
     app_services.dart  # guarda as implementações ativas (substitui SupabaseService.instance)
     app_features.dart  # flags por flavor
   bootstrap_personal.dart
+  bootstrap_web.dart         # web somente leitura (usa SupabaseConfig.client, sem importar supabase_flutter)
   bootstrap_public.dart      # Fase 3
   main_personal.dart
+  main_web.dart              # entrypoint do site (`flutter build web -t lib/main_web.dart`)
   main_public.dart           # Fase 3
-  (constants, models, screens, services/group_bootstrap.dart, theme, utils, widgets: como estão; a pasta lib/config/ deixou de existir, o supabase_config.dart está em lib/data/supabase/)
+  screens/web/home_dashboard_screen.dart   # aba "Início" (site e app; DUVIDAS #44)
+  services/              # group_bootstrap.dart, avatar_style_manager.dart (estilo de avatar por tela), dashboard_store.dart (destaques calculados uma vez por grupo)
+  utils/                 # novos: dashboard_highlights.dart, group_milestones_calculator.dart, player_session_summary.dart
+  widgets/shared/notifications_sheet.dart; widgets/player/player_sessions_list.dart; models/milestone_update.dart
+  (constants, models, screens, theme, utils, widgets: como estão; a pasta lib/config/ deixou de existir, o supabase_config.dart está em lib/data/supabase/)
 tool/legacy/           # scripts de migração antigos (fora dos apps)
 docs/
 ```
 
-`lib/main.dart` continua existindo até a Fase 1 acabar, apenas chamando `main_personal.dart`, para não quebrar comandos atuais.
+`lib/main.dart` continua existindo, apenas chamando `main_personal.dart`, para não quebrar comandos atuais. O site é gerado por `lib/main_web.dart` (workflow `.github/workflows/deploy-web.yml`).
 
 ## 4. Mapa de interfaces (origem → destino)
 
@@ -147,18 +154,18 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 
 ### 4.6 `AppServices` (17 campos hoje, `lib/app/app_services.dart`)
 
-`features` (AppFeatures), `groups`, `members`, `seasons`, `players`, `playerAccounts`, `sessions`, `matches`, `sessionArrivals`, `actionLogs`, `auth`, `permissions`, `outbox`, `matchHistory`, `customBadges`, e os opcionais `siteSync` e `diagnostics` (nulos no public e na web). `AppServices.instance` é definido uma vez em `bootstrap_personal.dart`. Pontos de entrada: `lib/main.dart` (só chama `mainPersonal()`) → `lib/main_personal.dart`. Isolamento do Supabase conferido: 14 arquivos importam `supabase_flutter`, todos em `lib/data/supabase/`.
+`features` (AppFeatures), `groups`, `members`, `seasons`, `players`, `playerAccounts`, `sessions`, `matches`, `sessionArrivals`, `actionLogs`, `auth`, `permissions`, `outbox`, `matchHistory`, `customBadges`, e os opcionais `siteSync` e `diagnostics` (nulos no public e na web). `AppServices.instance` é definido uma vez em `bootstrap_personal.dart`. Pontos de entrada: `lib/main.dart` (só chama `mainPersonal()`) → `lib/main_personal.dart`. Isolamento do Supabase conferido em 15/11/2026: **16** arquivos importam `supabase_flutter` (15 em `lib/data/supabase/` + `lib/data/supabase/readonly/snapshot_source.dart`), todos dentro de `lib/data/supabase/`; `bootstrap_personal.dart` hoje não importa. A regra 2 continua válida (o grep da regra imprime nada).
 
 ## 5. Feature flags (`AppFeatures`)
 
 | Flag | personal | public | web_readonly |
 |---|---|---|---|
-| `hasAuth` (login) | true | false | decidir |
+| `hasAuth` (login) | true | false | false |
 | `hasMembershipManagement` (convites, pedidos, papéis) | true | false | false |
 | `hasCosmetics` (efeitos de nome, Bola de Ouro, Craque do Mês) | true | false (ou simplificado) | true |
 | `hasGoalSounds` | true | false | false |
 | `hasAuditLog` | true | false | false |
-| `hasSiteSync` (envio do "pacote do site" para `sync_data` a cada ~90 s) | true | false | false |
+| `hasSiteSync` (envio do "pacote do site" antigo para `sync_data`: Timer de uso único de 90 s, rearmado após cada partida finalizada, `match_screen.dart:3713-3725`) | true | false | false |
 | `hasCloudDraftSync` (rascunho da partida no Supabase: `replaceArrivals`/`updateRuntimeState`, restauração remota no `_loadMatchState`) | true | false | false |
 | `hasAdminDebug` (painel de debug, teste de conexão) | true | false | false |
 | `hasDbExportImport` | false | true | false |
@@ -166,7 +173,7 @@ abstract class DiagnosticsService {     // hoje: cache_sync_manager (painel de d
 
 Regra: tela de admin/engrenagem/edição aparece se `AppFeatures` permitir **e** `PermissionService.isAdmin` for true (e `isReadOnly` for false). No código: `bool canAdminister(bool isAdmin) => !isReadOnly && isAdmin;` em `AppFeatures`, usado em 9 telas. Ações de escrita que **não** exigiam admin na versão original só ganharam `!isReadOnly` (lista completa em `docs/DUVIDAS.md` #19).
 
-**Estado da T4:** implementada. `hasMembershipManagement`, `hasCosmetics`, `hasGoalSounds`, `hasSiteSync`, `hasCloudDraftSync`, `hasAdminDebug` e `isReadOnly` já são consultadas pelas telas. **Ainda sem uso:** `hasAuth`, `hasAuditLog`, `hasDbExportImport` (serão ligadas nas Fases 2 e 3). Para o site (Fase 2): decidir se `match_screen` existe na web (hoje ela tem ações de escrita condicionadas só a `!isReadOnly`).
+**Estado da T4:** implementada. `hasMembershipManagement`, `hasCosmetics`, `hasGoalSounds`, `hasSiteSync`, `hasCloudDraftSync`, `hasAdminDebug` e `isReadOnly` já são consultadas pelas telas. **Ainda sem uso:** `hasAuth`, `hasAuditLog`, `hasDbExportImport` (serão ligadas nas Fases 2 e 3). Para o site (Fase 2): **decidido: `match_screen` não existe na web.** (O arquivo ainda entra no build web por causa do import em `tournament_dashboard_screen.dart:6`, mas a tela não é oferecida com `isReadOnly`; teste em `test/screens/tournament_dashboard_readonly_test.dart`.)
 
 ## 6. Dados locais e transações (Fase 3 — responsabilidade do Claude)
 
@@ -188,6 +195,8 @@ Problemas no código atual (só afetam o build web; no celular funcionam):
 
 - **Cache do elenco (achado de 02/11):** `PlayerComparisonScreen` lê **só** `players_<groupId>` no `SharedPreferences` e `match_screen` (adicionar jogadores) usa essa chave antes do Supabase. Na web não há `GroupBootstrap.prefetch` rodando como no celular, então essas telas ficariam vazias ou com "Desconhecido". A correção dos bugs B2/B3 (fase 1b) deve fazer essas telas buscarem pelo repositório quando o snapshot faltar, antes da Fase 2.
 - `SharedPreferences` na web é `localStorage` do navegador: nenhum dado de partida em andamento ou fila existe lá; telas que dependem disso precisam funcionar sem.
+
+**Estado (15/11/2026): no ar.** Link curto `…/fut` redireciona para `#/g/<token>` (arquivo `_redirects` gerado no deploy a partir do secret `FUT_TOKEN`). Hospedagem: Cloudflare Pages (projeto `app-fut-site`, deploy por GitHub Actions, `flutter build web --release -t lib/main_web.dart --pwa-strategy=none`). **A web não tem `match_screen`** (decidido): partida ao vivo e notificações de evento são só do app.
 
 Modelo de acesso: **link secreto sem login** (decidido; ver `TASKS.md`, Fase 2). A segurança real é por token + funções `SECURITY DEFINER` no banco (T6), não por esconder botão. Os repositórios da web vivem em `lib/data/supabase/readonly/` (parte integrante de `data/supabase/`, utilizando `SnapshotSource` que pode importar `supabase_flutter`), e a inicialização em `bootstrap_web.dart` consome `SupabaseConfig.client`.
 
@@ -213,21 +222,34 @@ Fonte: `docs/INVENTARIO_OFFLINE.md`. São 4 camadas independentes; **nenhuma é 
 3. **Cache de leitura** — `CacheStore` (chaves `cache:*`) usado pelos repositórios de partidas, sessões e jogadores como fallback quando a rede falha. Inclui também o cache da lista de grupos da conta (`groups:my:<userId>`), adicionado na T-B6b com o getter `lastLoadFromCache` e aviso na tela, permitindo que a `HomePage` abra e mostre os grupos salvos mesmo sem conexão (corrigindo a suposição antiga de que a HomePage "já usava cache").
 4. **Snapshot do elenco** — `GroupBootstrap` (`players_<groupId>`, `ratings_snapshot_at_<groupId>`) permite sorteio/draft sem rede.
 
-Chaves de `SharedPreferences` que NÃO podem mudar: `pending_matches_v1`, `cache:*`, `my_sync_code`, `cache_has_pending_cloud_sync`, `cache_last_cloud_sync_at`, `cache_last_cloud_fetch_at`, `present_players_*`, `team_red_*`, `team_white_*`, `score_red_*`, `score_white_*`, `match_events_*`, `is_overtime_*`, `seconds_played_*`, `is_running_*`, `start_timestamp_*`, `red_streak_*`, `white_streak_*`, `active_gk_*`, `first_gk_*`, `match_history_*`, `players_*`, `ratings_snapshot_at_*`.
+Chaves de `SharedPreferences` que NÃO podem mudar (lista completa do que o código **grava**, conferida com grep em 15/11/2026; `<id>` = id da pelada):
 
-O que `sync_service` e `cache_sync_manager` realmente fazem: `sync_service` envia o "pacote do site" (JSON do `SiteDataGenerator`) para `sync_data` a cada ~90 s e ao fechar a tela de partida (alimenta o site antigo); `cache_sync_manager` é diagnóstico do painel de debug do admin (ping e dump do storage). Nenhum dos dois dispara reenvio da fila.
+| Grupo | Chaves | Onde |
+|---|---|---|
+| Fila de envio | `pending_matches_v1` | `supabase_match_outbox.dart:37` |
+| Cache de leitura | `cache:*` (inclui `cache:groups:my:<usuário>`, a lista de grupos da conta; prefixo em `cache_store.dart:18`) | repositórios Supabase |
+| Diagnóstico (painel de debug) | `cache_has_pending_cloud_sync`, `cache_last_cloud_sync_at`, `cache_last_cloud_fetch_at` | `supabase_diagnostics_service.dart:10-12` |
+| Snapshot e dados locais | `players_<grupo>`, `ratings_snapshot_at_<grupo>`, `match_history_<sessão>`, `custom_badges_<grupo>` | `group_bootstrap.dart`, `prefs_*`, telas |
+| Partida em andamento | `present_players_<id>`, `team_red_<id>`, `team_white_<id>`, `score_red_<id>`, `score_white_<id>`, `match_events_<id>`, `is_overtime_<id>`, `seconds_played_<id>`, `is_running_<id>`, `start_timestamp_<id>`, `red_streak_<id>`, `white_streak_<id>`, `active_gk_red_<id>`, `active_gk_white_<id>`, `first_gk_red_<id>`, `first_gk_white_<id>` | `match_screen.dart` |
+| Preferências de tela | `show_radar_chart`, `confirm_timer_enabled`, `pitch_horizontal`, `pitch_use_cards`, `pitch_use_chips`, `show_tactical_pitch`, `require_gk`, `avatar_style_ranking`, `avatar_style_dashboard`, `avatar_style_stats`, `avatar_style_match`, `last_seen_notif_<grupo>_<jogador>` | `settings_screen`, `match_screen`, `avatar_style_manager.dart`, `notifications_sheet.dart` |
+| Site antigo (saem na T7b) | `my_sync_code`, `sync_history` | `supabase_site_sync_service.dart`, `match_screen.dart` |
+| Só lidas (legado; ninguém cria) | `sessions_<grupo>`, `seasons_<grupo>`, `app_groups*`, `players_grupo_*` | `stats_calculator.dart`, `site_data_generator.dart` |
+
+O grep não achou nenhuma outra chave gravada além destas (`seasons_config` no `site_data_generator` é um campo do JSON enviado, não uma chave).
+
+O que o `SupabaseSiteSyncService` (antigo `sync_service`) e o `SupabaseDiagnosticsService` (antigo `cache_sync_manager`) realmente fazem: o `SupabaseSiteSyncService` envia o "pacote do site" (JSON do `SiteDataGenerator`) para `sync_data` por um **Timer de uso único de 90 s, rearmado após cada partida finalizada** (`_scheduleSiteSync`, `match_screen.dart:3713-3725`; não é um ciclo) e ao fechar a tela de partida (alimenta o site antigo); `cache_sync_manager` é diagnóstico do painel de debug do admin (ping e dump do storage). Nenhum dos dois dispara reenvio da fila.
 
 ## 10. Dados que hoje vivem só no SharedPreferences (de `INVENTARIO_SHAREDPREFS.md`)
 
 | Dado | Chave | Situação hoje | Decisão |
 |---|---|---|---|
-| Súmula local das partidas | `match_history_<sessão>` | Única fonte do ranking do grupo (`GroupRankingScreen`); fallback de `RankingScreen` e `MatchScreen`; lida também por `stats_calculator`. Escrita por `match_screen` ao finalizar. | Interface `MatchHistoryStore` (T3e). Personal: SharedPreferences, igual hoje. Public: derivada das tabelas do SQLite (somente leitura; `appendToSession` não faz nada). Se o T0e confirmar que `GroupRankingScreen` é inalcançável, ela é removida em vez de adaptada. |
+| Súmula local das partidas | `match_history_<sessão>` | Fallback de `RankingScreen` e `MatchScreen` (a antiga `GroupRankingScreen` foi removida na T0g); lida também por `stats_calculator`. Escrita por `match_screen` ao finalizar. | Interface `MatchHistoryStore` (T3e). Personal: SharedPreferences, igual hoje. Public: derivada das tabelas do SQLite (somente leitura; `appendToSession` não faz nada). `GroupRankingScreen` foi removida na T0g. |
 | Insígnias personalizadas | `custom_badges_<grupo>` | Não existe no Supabase; cada aparelho tem as suas. | `CustomBadgesRepository`. Personal: igual hoje. Public: tabela `custom_badges` no SQLite (entra no `.db`). Web: vazio por enquanto. |
 | Elenco com campos calculados | `players_<grupo>` | Cache do Supabase, recriado pelo `GroupBootstrap`. | Continua como cache nos dois apps. Depois de importar um `.db`, apagar esses snapshots e `cache:*` (T11). |
 | Cache de leitura | `cache:*` | Só repositórios Supabase. | Fica em `lib/data/supabase/`; não existe no public. |
 | Estado da partida em andamento | `present_players_*`, `team_*`, `score_*`, `is_running_*`... | Temporário. | Continua em SharedPreferences nos dois apps; **não** vai para o `.db`. Avisar na tela que exportar/importar deve ser feito entre partidas. |
-| Preferências de tela | `show_radar_chart`, `pitch_use_cards`, `require_gk`, `avatar_style_*`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
-| Legado sem escritor | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`; ninguém grava, mas o aparelho do Enzo pode ainda ter dados antigos nessas chaves. | **Não remover na T3e** (poderia mudar números no aparelho dele). Continuam como leitura legada; decidir depois da Fase 1. No app public ficam vazias e inofensivas. |
+| Preferências de tela | `show_radar_chart`, `confirm_timer_enabled`, `pitch_*`, `show_tactical_pitch`, `require_gk`, `avatar_style_*`, `last_seen_notif_<grupo>_<jogador>`... | Config do aparelho. | Continuam locais; não fazem parte do backup. |
+| Legado sem criador | `sessions_*`, `seasons_*`, `app_groups`, `players_grupo_` | Eram lidos por `GroupRankingScreen` (removida na T0g); ainda lidos por `stats_calculator` e `site_data_generator`. Ninguém cria essas chaves, mas existe uma rotina que reescreve `sessions_*` (e `players_*`, `match_history_*`): `_normalizeSessionIds`/`_normalizeUuidData` em `supabase_site_sync_service.dart` (a partir da linha 73 e 171), chamadas por `exportDataToSupabase` (linhas 30-31), que só roda no envio ao site antigo. O aparelho do Enzo pode ainda ter dados antigos. | **Não remover na T3e.** A Fase 1 já acabou; a decisão de limpar fica junto da T7b (que remove o envio ao site antigo). No app public ficam vazias e inofensivas. |
 | Envio do site e diagnóstico | `sync_history`, `my_sync_code`, `cache_*_cloud_*` | Só do envio do pacote do site e do painel de debug. | Saem na T7b. |
 
 ## 11. Bugs conhecidos: resolvidos na Fase 1b (detalhe em `docs/BACKLOG.md` seção 0)
@@ -241,9 +263,46 @@ Os bugs mapeados no levantamento da Fase 1 foram integralmente corrigidos e inte
 - **Abrir o app sem rede (branches `fix/offline-startup` e `fix/groups-offline-cache`):** `ProfileCheckResult` distingue erro de rede de lista vazia; `GroupsRepository.getMyGroups` faz cache offline sob `groups:my:<userId>` com o getter `lastLoadFromCache` e aviso de dados salvos na `HomePage`; gatilhos automáticos de outbox ao abrir o app e ao retornar do background.
 
 ### O que continua em aberto (ver `docs/BACKLOG.md` "Pendências deixadas pela Fase 1b"):
-- **B6:** Qualquer pessoa com o app cria grupos (decisão de desenho; todos os grupos legados de teste/terceiros foram apagados do Supabase pelo Enzo em 02/11; discussão de gestão de grupos retorna após o app offline).
+- **B6:** Qualquer pessoa com o app cria grupos (decisão de desenho; todos os grupos de teste e de terceiros foram apagados em 02/11, exceto o Fut do INF (dados reais, 71 jogadores); discussão de gestão de grupos retorna após o app offline).
 - Linhas parciais em `matches`/`match_lineups`/`match_events` no Supabase quando uma partida isolada falha e o descarte remove apenas o armazenamento local (`DUVIDAS.md` 30; candidata: T-B5b).
 - `createSeason` sequencial sem bloco transacional / RPC atômica (`DUVIDAS.md` 26).
 - RLS da tabela `players` permitindo ao dono alterar outras colunas além do nome (`DUVIDAS.md` 28).
 - Tratamento de JSON corrompido em `_readFromPrefs` da outbox para não sobrescrever a fila no próximo enqueue.
 - Latência de rede no diálogo de adicionar jogadores offline e detalhes de cache/snapshot mapeados na revisão da Fase 1b.
+
+## 12. O que veio com E1a a E1d (aba Peladas, dashboard, avatares, notificações)
+
+Na `main` desde 15/11/2026 (commits `b2ea3fa` e `9432713`). Código conferido com `ls`/`git show --stat`:
+
+| Recurso | Arquivos |
+|---|---|
+| Aba "Peladas" na carta do jogador (E1a) | `lib/widgets/player/player_sessions_list.dart`, `lib/utils/player_session_summary.dart`, integração em `lib/screens/player_detail.dart` |
+| Dashboard "Início" (E1b), **aba presente no site e no app** (DUVIDAS #44) | `lib/screens/web/home_dashboard_screen.dart`, `lib/services/dashboard_store.dart` (calcula uma vez por grupo), `lib/utils/dashboard_highlights.dart` (destaque do mês, artilheiro, garçom, última pelada, maior goleada), abas em `lib/screens/group_dashboard_screen.dart` |
+| Destaque do mês (calculado) × Craque do mês (selo manual `monthly_highlight`) | `dashboard_highlights.dart` (calculado); selo manual vem de `PlayersRepository.setMonthlyHighlight`. O selo guarda só o portador atual, sem mês (BACKLOG) |
+| Tela de estatísticas da temporada no padrão do ranking (E1c) | `lib/screens/season_stats_screen.dart` |
+| Estilos de avatar por tela, fundo ou auréola (E1d) | `lib/services/avatar_style_manager.dart` (chaves `avatar_style_ranking/dashboard/stats/match`), `lib/widgets/shared/ranking_player_bits.dart`, `lib/widgets/player/fifa_card.dart`, configuração em `lib/screens/settings_screen.dart` |
+| Seção "Atualizações" do dashboard (E1d) | `lib/utils/group_milestones_calculator.dart`, `lib/models/milestone_update.dart`, card em `home_dashboard_screen.dart` |
+| Sino de notificações pessoais (E1d), **só no app** (`!kIsWeb && hasAuth && _myPlayerId != null`) | `lib/widgets/shared/notifications_sheet.dart`, `group_dashboard_screen.dart`; chave `last_seen_notif_<grupo>_<jogador>` |
+| Testes novos | `test/screens/home_dashboard_screen_test.dart`, `test/utils/{dashboard_highlights,player_session_summary,group_milestones_calculator}_test.dart`, `test/widgets/{player_sessions_list,notifications_sheet}_test.dart`, `test/services/avatar_style_manager_test.dart` |
+
+A versão do app subiu para `1.2.0+3` (`pubspec.yaml`, só o número; nenhum pacote novo).
+
+**Nota da carta (C2, branch `fix/rating-all-history`, já mesclada na `main`, merge `027fb03`):** nota e overall pela história inteira em todas as telas; gols, jogos e posição continuam respeitando o filtro de período.
+
+## 13. Banco: o que o app e o site usam de fato
+
+- **Site (web somente leitura):** uma única chamada, a RPC `get_group_snapshot(p_token)` (`lib/data/supabase/readonly/snapshot_source.dart:193`). Não lê tabelas direto e não escreve nada. A tabela `group_share_tokens` e as funções `get_/rotate_/revoke_group_share_token` existem no banco (T6), mas **nenhum código do app as chama**: o token é girado pelo SQL Editor (T6c adiada).
+- **App personal:** tabelas do inventário (`docs/INVENTARIO_SUPABASE.md`), as RPCs `approve_join_request`, `reject_join_request`, `claim_ghost_profile`, `find_group_by_invite_code`, e a tabela `sync_data` (só o envio ao site antigo e o teste de conexão do painel de debug; sai na T7b).
+- `F2_T6_share_link.sql` (cria `group_share_tokens` e as funções) **não está no repositório** (tarefa C5). `docs/S1_players_select_rls.sql` está (S1, nada aplicado no banco).
+
+## 14. T7b: lista de dependências do envio ao site antigo (conferida no código)
+
+A T7b continua **por último**. O que a remoção precisa tratar: `_siteSyncTimer` e `_scheduleSiteSync` (`match_screen.dart:70, 3713-3725`), `dispose` (137-140), `_triggerBackgroundSync` (4301), `_recordSyncHistory` (4318), `hasSiteSync` (`app_features.dart:40, 66`), `SiteSyncService` (interface), `SupabaseSiteSyncService` (inclui `_normalizeUuidData` e `_normalizeSessionIds`), `my_sync_code`, `sync_history`, `SiteDataGenerator`, tabela `sync_data`, `AppServices.siteSync`, `bootstrap_personal.dart:44, 71` (criação e registro; o `bootstrap_web.dart:161` passa `null`), `admin_debug_screen.dart:36-40`. Mexe no `match_screen`: exige revisão e teste de modo avião.
+
+## 15. Decisões novas da fase C (15/11/2026)
+
+- **C2:** nota e overall pela história inteira em todas as telas (feito).
+- **C3:** todos veem a lista de partidas do histórico; só o admin altera (lixeira "Limpar tudo", lápis, toque longo de debug); mesmo o admin precisa de senha para alterar o histórico. Menu ⋮ do grupo (Editar/Excluir) só admin (o código já exige admin ao salvar: `groups_repository.dart:320, 349`). A senha dentro do app é atrito contra clique acidental, não segurança: a proteção real é o RLS exigir admin. A senha `"0101"` fixa (`history_screen.dart:213`) num repositório público precisa ser redesenhada (C3c). Falta conferir o RLS real de `matches`/`sessions` com `pg_policies` (C3b; o Enzo roda o SQL).
+- **C1:** preview "Entra:" do diálogo de fim de partida (`match_screen.dart:3682-3702`); exige teste de modo avião.
+- **C5:** mover `F2_T6_share_link.sql` para `docs/sql/`, sem token.
+- **Ordem das frentes:** C2, C4, investigação da C3, C3a, C1, C5; depois pendências da Fase 2 e S1; depois Fase 3; T7b por último.

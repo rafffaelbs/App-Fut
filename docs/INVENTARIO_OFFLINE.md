@@ -1,5 +1,7 @@
 # Inventário de Comportamento Offline e Resiliência a Quedas de Conexão
 
+> ⚠️ **Documento histórico de 29/10/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 Este documento descreve detalhadamente o comportamento do aplicativo durante a perda de conectividade (queda de internet) em uma partida, o funcionamento dos serviços de fila e cache, o ciclo de vida de finalização de partidas, a persistência de estado em tempo real no `MatchScreen`, e o papel dos serviços `CacheSyncManager` e `SyncService`.
 
 ---
@@ -29,7 +31,7 @@ Este documento descreve detalhadamente o comportamento do aplicativo durante a p
   | `lib/screens/match_screen.dart` | 1705 | `valueListenable: PendingMatchQueue.instance.pending,` | Exibe selo/contador na AppBar informando partidas aguardando envio. |
   | `lib/screens/match_screen.dart` | 3418 | `await PendingMatchQueue.instance.enqueue({...});` | Chamado em `_finishMatch()` ao concluir a partida atual para enfileirar súmula, escalações e eventos. |
   | `lib/screens/match_screen.dart` | 3660 | `if (isMatchRunning \|\| PendingMatchQueue.instance.pending.value > 0)` | Impede agendamento de sincronização do site enquanto houver itens pendentes na fila. |
-  | `lib/screens/match_screen.dart` | 3676 | `valueListenable: PendingMatchQueue.instance.pending,` | Monitora a quantidade de partidas pendentes para renderizar o banner de alerta `_buildSyncWarningBanner()`. |
+  | `lib/screens/match_screen.dart` | 3676 | `valueListenable: PendingMatchQueue.instance.pending,` | **[Linha 32: a afirmação sobre `_onAppResumed()` e o banner "Reenviar agora" citada neste inventário foi refutada em 15/11/2026; ver DUVIDAS #14 e ARCHITECTURE §8 e §9.]** Monitora a quantidade de partidas pendentes para renderizar o banner de alerta `_buildSyncWarningBanner()`. |
   | `lib/screens/match_screen.dart` | 3678 | `valueListenable: PendingMatchQueue.instance.lastError,` | Monitora a mensagem de erro para exibir no banner de alerta. |
   | `lib/screens/match_screen.dart` | 3690 | `onPressed: () => PendingMatchQueue.instance.flush(),` | Botão "Reenviar agora" no banner de alerta de falha de conexão. |
 
@@ -232,7 +234,7 @@ A fila tenta o reenvio nos seguintes cenários:
 1. **Backoff Exponencial Automático**: O método `_scheduleRetry()` (`pending_match_queue.dart:124–129`) agenda um timer para executar `flush()`. O tempo de espera inicia em 5 segundos e dobra a cada tentativa consecutiva falha (`5s -> 10s -> 20s -> 40s -> 60s`), limitado a um teto de 60 segundos.
 2. **Ao Abrir a Tela da Partida**: O método `initState()` de `_MatchScreenState` (`match_screen.dart:129`) dispara `PendingMatchQueue.instance.flush()`.
 3. **Ao Iniciar Nova Partida**: O método `_startMatch()` (`match_screen.dart:605`) dispara `PendingMatchQueue.instance.flush()` no momento em que a bola começa a rolar.
-4. **Ao Voltar do Background**: O método `_onAppResumed()` em `match_screen.dart` aciona o reenvio quando o app volta a ter foco no sistema operacional.
+4. **Ao Voltar do Background**: ~~O método `_onAppResumed()` em `match_screen.dart` aciona o reenvio...~~ **[REFUTADO em 15/11/2026: não existe `_onAppResumed()` no código; o gatilho real é `_AuthGateState.didChangeAppLifecycleState` em `main_personal.dart`. Ver DUVIDAS #14 e ARCHITECTURE §9.]**
 5. **Reenvio Manual pelo Usuário**: O botão "Reenviar agora" no banner de alerta (`match_screen.dart:3690`) invoca diretamente `PendingMatchQueue.instance.flush()`.
 
 ---

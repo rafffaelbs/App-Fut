@@ -1,5 +1,7 @@
 # Contexto para a nova conversa (App do Fut)
 
+> ⚠️ **Documento histórico de 03/11/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 Cole este texto na primeira mensagem e anexe: `ARCHITECTURE.md`, `TASKS.md`, `BACKLOG.md`, `ESTADO_ATUAL.md` (todos de `docs/`). O `DUVIDAS.md` só se eu pedir.
 
 ## Quem sou eu e como quero trabalhar

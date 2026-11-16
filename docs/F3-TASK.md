@@ -16,7 +16,7 @@ Ao terminar: rode `flutter analyze` e `flutter test`, faça commits pequenos e
 me diga em 5 linhas o que mudou e o que ficou pendente.
 ```
 
-## FASE 3 — App público offline (1 grupo)  ·  *detalhar depois do gate*
+## FASE 3 — App público offline (1 grupo)  ·  *detalhar depois da Fase 2 (encerrada em 15/11)*
 
 | # | Tarefa | Quem |
 |---|---|---|

@@ -123,7 +123,7 @@ Apenas fatos, com arquivo e número de linha. Não proponha mudanças.
 ---
 
 ### T0g · Remover telas inalcançáveis (parte da Fase 0) — AG
-Branch: `chore/remove-unreachable-screens` · Revisão: não · **Só rodar se o Enzo confirmar** (pergunta em aberto 3) · Pode rodar antes ou depois da T1; precisa estar pronta antes da T3e
+Branch: `chore/remove-unreachable-screens` · Revisão: não · ✅ **Já feita** (commit `158281f`, 30/10/2026; ver DUVIDAS #13) · Pode rodar antes ou depois da T1; precisa estar pronta antes da T3e
 
 ```
 [cabeçalho]

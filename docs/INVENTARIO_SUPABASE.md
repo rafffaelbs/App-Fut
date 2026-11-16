@@ -1,5 +1,7 @@
 # Inventário de Acoplamento com Supabase e Dependências de Plataforma
 
+> ⚠️ **Documento histórico de 26/10/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 Este documento mapeia o acoplamento do aplicativo com o Supabase, chamadas de banco de dados, fluxos de autenticação, operações de escrita multi-tabela, dependência de papéis administrativos e restrições de compatibilidade para execução na Web.
 
 ---

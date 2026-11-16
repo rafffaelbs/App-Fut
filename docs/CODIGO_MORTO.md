@@ -1,5 +1,7 @@
 # CODIGO_MORTO.md — Mapeamento de Chamadores de Repositórios e Alcançabilidade de Telas
 
+> ⚠️ **Documento histórico de 29/10/2026; vale o `ARCHITECTURE.md` e o código.** Estado das tarefas: `TASKS.md`.
+
 Este documento registra o inventário factual de chamadores para cada método público de `lib/repositories/`, o mapeamento de alcançabilidade de cada tela em `lib/screens/` e a origem dos dados das telas alcançáveis de ranking e estatísticas.
 
 ---

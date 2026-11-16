@@ -13,7 +13,7 @@ Ponto de partida: a `main` atual (Fase 1 integrada, incluindo T4). Para cada bug
 | B3 | ✅ **Corrigido na branch `fix/players-cache`.** Nome editado não aparece em carta, título nem comparação (chegou a mostrar "Desconhecido") | Persistia só em algumas telas. | Resolvido: `_savePlayerName` chama `updatePlayer` no Supabase validando permissões (admin ou próprio dono); comparação e `match_screen` consultam repositório com fallback no snapshot. |
 | B4 | ✅ **Corrigido pelo Enzo em 02/11 (branch `feature/player-advanced-stats`).** Estatísticas avançadas do jogador com números errados | Ex.: 10 derrotas; o jogador com quem mais perdeu esteve em 3 delas, mas dizia "cerca de 70%" (deveria ser 30%). | Corrigido pelo Enzo antes da Fase 1b. |
 | B5 | ✅ **Corrigido na branch `fix/outbox-permanent-errors`.** Partida presa na fila de envio sem aviso | Gol de um jogador apagado continuava nas estatísticas mesmo com histórico e `match_events` vazios; voltava a cada reinício. | Resolvido: `isPermanentOutboxError` classifica erros permanentes (`23503`, `23502`, `23514`, `22P02`); após 2 falhas a partida ganha `status: 'failed'`, sai do topo da fila e das estatísticas; diálogo com Copiar, Tentar de novo e Descartar. |
-| B6 | **Qualquer pessoa com o app cria grupos** | Outras pessoas já criaram grupos ("du", "du fut", "Baba do Carlos"). A restrição de admin só existe dentro do grupo. | Não é bug de código, é decisão de desenho. Todos os grupos antigos foram apagados do Supabase em 02/11; a discussão volta depois do app offline. |
+| B6 | **Qualquer pessoa com o app cria grupos** | Outras pessoas já criaram grupos ("du", "du fut", "Baba do Carlos"). A restrição de admin só existe dentro do grupo. | Não é bug de código, é decisão de desenho. Todos os grupos de teste e de terceiros foram apagados em 02/11, exceto o Fut do INF (dados reais, 71 jogadores); a discussão volta depois do app offline. |
 
 Relacionados já registrados abaixo: 2c (tela do nome offline), 2d (catálogo de insígnias), 2b (fila ao abrir o app).
 
@@ -34,8 +34,8 @@ Com todas as flags em `true` (app personal) nada mudou. As lacunas abaixo só ap
 | # | Achado | Detalhe |
 |---|---|---|
 | F1 | `hasCosmetics = false` **não esconde a tela "gerenciar cosméticos"** | A flag hoje só é consultada em `manage_badges_screen.dart:34` (`_canManageCosmetics`). A tela ou aba continua aparecendo. Decidir: a flag controla só a **gestão** ou também a **exibição** (molduras, efeitos de nome) nas cartas e rankings? Para o public (flag `false`) provavelmente os dois. |
-| F2 | Com `isReadOnly = true` ainda aparecem botões de gravar que dão erro | Ex.: editar/apagar pelada mostra "apenas admins podem", mesmo logado como admin (a mensagem engana: o app está em modo somente leitura). É o mesmo padrão que já existia para quem **não é admin**: a opção aparece e o banco/o app recusa. Está no `Plano_de_Acao.md` (item 2.4: tirar acesso às opções de escrita de quem não é admin). Correção: esconder o botão em vez de mostrar e recusar. Pré-requisito do site (T5). |
-| F3 | `match_screen` em somente leitura: dá para adicionar jogador à pelada e **iniciar** a partida, mas não encerrar | A T4 só bloqueou o encerramento (`DUVIDAS.md` #19, itens 7, 8 e 18). Decisão da Fase 2: `match_screen` existe na web? Se não existir, o problema some. |
+| F2 | **NÃO resolvido (é a C3).** Com `isReadOnly = true` ainda aparecem botões de gravar que dão erro; e, para quem não é admin, o menu ⋮ do grupo (`main_personal.dart:834-860`) e as ações do histórico (`history_screen.dart:260-262, 314, 326-328`) aparecem e são recusados depois | Ex.: editar/apagar pelada mostra "apenas admins podem", mesmo logado como admin (a mensagem engana: o app está em modo somente leitura). É o mesmo padrão que já existia para quem **não é admin**: a opção aparece e o banco/o app recusa. Está no `Plano_de_Acao.md` (item 2.4: tirar acesso às opções de escrita de quem não é admin). Correção: esconder o botão em vez de mostrar e recusar. Pré-requisito do site (T5). |
+| F3 | `match_screen` em somente leitura: dá para adicionar jogador à pelada e **iniciar** a partida, mas não encerrar | A T4 só bloqueou o encerramento (`DUVIDAS.md` #19, itens 7, 8 e 18). **Decidido: `match_screen` não existe na web** (o problema some na web; o app continua igual). |
 | F4 | `hasCloudDraftSync = false`: **teste inconclusivo** | Durante o teste houve `SocketException: Failed host lookup ... supabase.co` (falha de DNS da máquina) na fila de envio e o ícone de nuvem (selo de partida pendente) apareceu. Isso não depende da flag: a fila de envio não é controlada por ela. Repetir com a rede estável e conferir se `sessions` e `session_arrivals` deixam de ser atualizados durante a partida. |
 
 ## Pendências deixadas pela Fase 1b
@@ -95,6 +95,23 @@ Métodos com 0 chamadores que ficaram nas classes Supabase (ver `docs/ARCHITECTU
 
 ## 4. Limpezas pequenas (sem pressa)
 
-- 24 avisos do `flutter analyze` (268 itens no total).
+- Avisos do `flutter analyze`: em 15/11/2026 são 263 itens, dos quais **14 `warning`** (o resto `info`; 0 erros). Limpar os 14 warnings.
 - Mover `CommunityAttributes` de `overall_calculator.dart` para `lib/models/`, para `lib/domain` não depender de `lib/utils`.
 - Comentário errado em `kBonusTeamGoal` (item 2 da seção 1).
+
+## 5. Pendências pós-Fase 2 e fase C (registradas em 15/11/2026)
+
+- **S1 (prioridade alta, não urgente):** restringir a leitura da tabela `players` (policy `players_select` expõe e-mail). Ver [S1-TASK.md](S1-TASK.md). A edição de colunas da própria linha é a DUVIDAS #28.
+- **T6c:** tela do admin no app para ver, copiar, girar e desativar o link. Adiada (14/11). Antes: passo 5 de `docs/F2_T6_testes.md`.
+- **Ideias do dashboard:** sequência de vitórias, melhor dupla, mais assíduo, goleiro do mês.
+- **`/fut` resolver o token em tempo de execução:** hoje exige atualizar o secret `FUT_TOKEN` e rodar o workflow depois de girar o token.
+- **`--no-web-resources-cdn`:** adicionar ao build web se o Network mostrar chamadas ao Google.
+- **"Craque do mês" não guarda o mês** (só o portador atual; DUVIDAS #44).
+- **C1:** preview "Entra:" do fim de partida sugere quem está saindo (`match_screen.dart:3682-3702`; DUVIDAS #49).
+- **C2:** nota pela história inteira: **feita** e mesclada (DUVIDAS #50).
+- **C3:** botões de admin (menu ⋮ do grupo, ações do histórico, senha `"0101"` e RLS): é o item F2 do §0b, **não resolvido** (DUVIDAS #48).
+- **C5:** mover `F2_T6_share_link.sql` para `docs/sql/`, sem token (o Enzo fornece o arquivo).
+- **Fatiar `match_screen.dart` (4.330 linhas) e `player_detail.dart` (4.385 linhas):** DUVIDAS #52.
+- **Limpar os 14 avisos (`warning`) do `flutter analyze`:** DUVIDAS #53.
+- **Histórico da nota da comunidade** (guardar a nota anterior): ver §2.
+- **T-B5b (candidata):** apagar a partida parcial no servidor ao descartar (DUVIDAS #30).

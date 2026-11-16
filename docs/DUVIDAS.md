@@ -186,18 +186,18 @@ Este documento registra comportamentos inesperados, inconsistências nas fórmul
   4. `lib/screens/history_screen.dart:327` (Botão de edição no card de partida): Condicionado a `!isReadOnly`.
   5. `lib/screens/edit_match_screen.dart:405` (`_saveChanges`): Salva alterações de placar e eventos de uma partida já jogada no Supabase via `MatchesRepository`. Não exige admin (acessado via senha local). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
   6. `lib/screens/edit_match_screen.dart:498` (Botão `SALVAR` no `AppBar`): Condicionado a `!isReadOnly`.
-  7. `lib/screens/match_screen.dart:1045` (Botão "Encerrar Partida" no diálogo de confirmação): Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
-  8. `lib/screens/match_screen.dart:3361` (`_finishMatch`): Grava o encerramento da partida na fila outbox e no histórico local. Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidir na Fase 2 se `match_screen` existirá no web**.
-  9. `lib/main_personal.dart:258` (`_showGroupDialog`): Criar novo grupo ou editar nome do grupo. Ação do dono da conta pessoal (sem papel admin por grupo). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
-  10. `lib/main_personal.dart:384` (`_deleteGroup`): Excluir grupo da conta. No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
-  11. `lib/main_personal.dart:834` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`.
+  7. `lib/screens/match_screen.dart:1045` (Botão "Encerrar Partida" no diálogo de confirmação): Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidido: `match_screen` não existe na web**.
+  8. `lib/screens/match_screen.dart:3361` (`_finishMatch`): Grava o encerramento da partida na fila outbox e no histórico local. Sem restrição de admin; no web somente leitura não deve existir; condicionado a `!isReadOnly`; **decidido: `match_screen` não existe na web**.
+  9. `lib/main_personal.dart:258` (`_showGroupDialog`): Criar novo grupo ou editar nome do grupo. Criar grupo: qualquer usuário logado. Editar o nome exige admin do grupo (`groups_repository.dart:320`; correção de 15/11: o texto antigo dizia "ação do dono da conta"). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  10. `lib/main_personal.dart:384` (`_deleteGroup`): Excluir grupo: **exige admin** do grupo (`groups_repository.dart:349`). No app web/read-only não deve existir. Condicionado a `!isReadOnly`.
+  11. `lib/main_personal.dart:834` (Menu de contexto do grupo: Editar / Excluir): Condicionado a `!isReadOnly`. **Editar/excluir grupo exige admin** (`groups_repository.dart:320, 349`; não é "ação do dono"), mas o menu ⋮ aparece para qualquer um e o repositório recusa depois: é o defeito A4 / tarefa C3a (docs/C-TASK.md).
   12. `lib/main_personal.dart:870` (FAB de criar grupo): Condicionado a `!isReadOnly`.
   13. `lib/screens/player_detail.dart:1004, 3101` (`_savePlayerIcon` / `_openIconPicker`): Atualização de foto/ícone de perfil. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly`.
   14. `lib/screens/player_detail.dart:1052, 1105, 3752` (`_saveGoalSound` / `_showAudioPickerModal`): Escolha de som de gol. Permitido ao dono do perfil ou ao admin (`_canEditProfile`). Condicionado a `!isReadOnly` e `hasGoalSounds`.
   15. `lib/screens/manage_badges_screen.dart:1153, 1558, 1667, 1737` (`_saveBadges`, botões e FAB de troféus): Salvar e excluir insígnias e troféus personalizados. Não exigia admin na main. No modo read-only não deve existir. Condicionado a `!isReadOnly`.
   16. `lib/screens/player_detail.dart:985, 1632, 3720` (`_savePlayerName`, `_showEditNameDialog`, botão "Editar nome"): Editar apelido local do jogador no cache. Não exigia admin na main. Condicionado a `!isReadOnly`.
   17. `lib/screens/join_group_screen.dart:20, 106` (`_submit`, botão "SOLICITAR ENTRADA"): Solicitar entrada em grupo com código de convite via `AppServices.instance.members.requestToJoin`. Aberto a qualquer usuário autenticado (não exige admin). Condicionado a `!isReadOnly`.
-  18. `lib/screens/match_screen.dart:228-257, 309, 313, 2824, 4030` (`_saveMatchState`, `_syncToCloud`, cache de jogadores e log de sync): Gravações de estado transiente e rascunho de pelada em andamento no `SharedPreferences` e Supabase. Não exigiam admin na main; `_syncToCloud` é condicionado a `hasCloudDraftSync`; a persistência definitiva do encerramento é tratada em `_finishMatch` (item 8). **Decidir na Fase 2 se `match_screen` existirá no web**.
+  18. `lib/screens/match_screen.dart:228-257, 309, 313, 2824, 4030` (`_saveMatchState`, `_syncToCloud`, cache de jogadores e log de sync): Gravações de estado transiente e rascunho de pelada em andamento no `SharedPreferences` e Supabase. Não exigiam admin na main; `_syncToCloud` é condicionado a `hasCloudDraftSync`; a persistência definitiva do encerramento é tratada em `_finishMatch` (item 8). **Decidido: `match_screen` não existe na web**.
 
 - **Ações de escrita que EXIGEM admin (condicionadas a `canAdminister` e suas respectivas flags):**
   1. `lib/screens/sessions_screen.dart:163` (`onEdit`): Editar sessão — exige admin (`canAdminister`).
@@ -681,4 +681,33 @@ Resolvido em fix/players-cache
      - Modal `NotificationsSheet` com lista personalizada ("Você alcançou ...") e marcação automática como lida em `SharedPreferences` (`last_seen_notif_${groupId}_${playerId}`).
   4. **Testes unitários e de widgets:**
      - 12 novos testes adicionados (`group_milestones_calculator_test.dart`, `avatar_style_manager_test.dart`, `notifications_sheet_test.dart`), totalizando 320 testes passando na suíte.
+
+---
+
+### 47. Diagnóstico do AG de 15/11/2026 e verificação do Claude Code (tarefa C4)
+- **O que é:** o AG leu os docs, rodou `flutter analyze` e `flutter test` e olhou trechos do código; o Claude Code verificou em sessão nova, somente leitura. Tabela completa em `docs/DIAGNOSTICO_AG_2026-11-15.md` (A1 a A9, com C1 a C5).
+- **Números conferidos:** suíte com 322 testes passando; `flutter analyze` com 263 itens (14 warnings, o resto `info`; nenhum erro); 16 arquivos importam `supabase_flutter`, todos em `lib/data/supabase/`.
+
+### 48. Histórico: quem pode alterar, e a senha `"0101"` — C3
+- **O que viu (código de 15/11):** `history_screen.dart` esconde a lixeira "Limpar tudo" (linha 260-262), o lápis (326-328) e o toque longo (314) só com `isReadOnly`, **sem checar admin**; o lápis pede a senha fixa `"0101"` (linha 213). O menu ⋮ do grupo (`main_personal.dart:834-860`) também só checa `isReadOnly`, mas `updateGroup`/`deleteGroup` exigem admin (`groups_repository.dart:320, 349`): o botão aparece e o banco/o app recusa.
+- **Decisão do Enzo:** todos veem a lista de partidas; só o admin altera; mesmo o admin digita senha. A senha no app é atrito contra clique acidental, não segurança; a proteção real é o RLS exigir admin. Menu ⋮ do grupo só para admin.
+- **Aberto:** (C3c) como guardar a senha sem deixá-la literal num repositório público; (C3b) o RLS real de `matches`/`sessions`, a conferir com `pg_policies` (o Enzo roda o SQL que sair da investigação). Tarefas: investigação, C3a, C3b, C3c em `docs/C-TASK.md`.
+
+### 49. Preview "Entra:" do diálogo de fim de partida sugere quem está saindo — C1
+- **O que viu:** `_calculateEnteringPlayers` (`match_screen.dart:3682-3702`) só pula quem fica em campo (`stayingIds` = times menos quem sai) e quem desistiu, então os próprios jogadores que saem aparecem em "Entra:". O fluxo real (`_processMatchExit`, ~4119-4180) está certo e não muda.
+- **A verificar:** o mesmo defeito em `enteringForSplit` (`match_screen.dart:3611-3614`), que filtra só os vencedores.
+- **Regra:** a tarefa mexe no `match_screen`: exige teste de modo avião (ARCHITECTURE §8, item 9).
+
+### 50. Nota do jogador: história inteira em todas as telas — C2 (feita)
+- **O que era:** Elenco (`players_screen.dart:108-132`), comparação (`player_comparison_screen.dart:94-95`) e snapshot (`group_bootstrap.dart:193`) usavam todas as partidas; a carta (`player_detail.dart`) usava o período escolhido.
+- **Decisão do Enzo e estado:** história inteira. Branch `fix/rating-all-history`, **já mesclada na `main`** (commits `cab6d49`, `d146233`, merge `027fb03`, 15/11/2026; a branch não existe mais, nem local nem remota). Gols, jogos e posição continuam respeitando o filtro de período. `ranking_screen.dart` (ranking da pelada) e `season_stats_screen.dart` (média do período) são legítimos e não mudam.
+
+### 51. `F2_T6_share_link.sql` fora do repositório e pasta `docs/sql/` inexistente — C5
+- Os docs da Fase 2 citavam `docs/sql/F2_T6_share_link.sql`, `docs/sql/F2_T6_testes.md` e `docs/sql/S1a_players_select_rls.sql`. Só existem `docs/F2_T6_testes.md` e `docs/S1_players_select_rls.sql`. O arquivo `F2_T6_share_link.sql` existe só na máquina do Enzo. C5: o Enzo fornece o arquivo; entra em `docs/sql/` **sem nenhum token dentro**.
+
+### 52. Fatiar `match_screen.dart` e `player_detail.dart` (backlog)
+- Mais de 4.300 linhas cada (ver `wc -l`). Candidato a tarefa própria; qualquer mudança no `match_screen` exige teste de modo avião.
+
+### 53. Avisos do `flutter analyze`
+- Em 15/11/2026: 263 itens, dos quais **14 são `warning`** e o resto `info` (inclui `tool/`). O BACKLOG antigo falava em "24 avisos (268 itens)"; vale o número novo. Limpeza no backlog (DUVIDAS #39 explica o comportamento das flags no CI).
 
