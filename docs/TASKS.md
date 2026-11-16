@@ -1,7 +1,7 @@
 # TASKS.md — Índice e fonte única do estado das tarefas (v7, atualizado em 15/11/2026)
 
 > Este arquivo é o **índice** e a **única tabela de estado** de todas as tarefas (para importar no Obsidian). Os prompts, branches e prompts de revisão ficam em um arquivo por fase. O agente (AG ou Claude Code) lê `docs/ARCHITECTURE.md` e **apenas o arquivo da fase atual**.
-> **Suíte de testes: 322 passando** (rodada em 15/11/2026; 0 erros no analyze, 14 warnings). Números antigos (217, 222, 308, 320) nos arquivos de fase são históricos.
+> **Suíte de testes: 350 passando** (rodada em 16/11/2026, após a C3c; 0 erros no analyze, 14 warnings). Números antigos (217, 222, 308, 320) nos arquivos de fase são históricos.
 
 ## Arquivos
 

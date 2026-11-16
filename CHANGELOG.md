@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.0] - 2026-11-16
+
+### Added
+- **Confirmação do administrador** nas ações destrutivas (limpar histórico, editar partida, editar/excluir grupo, excluir pelada): autenticação do aparelho (digital, PIN ou padrão) ou senha do app (hash SHA-256 com sal; bloqueio de 30 s após 5 erros). Escolha nas Configurações, por aparelho.
+- "Esqueci a senha": redefine só depois de autenticar pelo aparelho.
+
+### Changed
+- Ações de edição do histórico e o menu ⋮ do grupo só aparecem para o admin (C3a).
+- Nota do jogador considera a história inteira (C2).
+
+### Removed
+- A senha fixa "0101" do histórico.
+
+### Technical
+- Novos pacotes: `local_auth` e `crypto`; `MainActivity` agora é `FlutterFragmentActivity`; permissão `USE_BIOMETRIC`; `NSFaceIDUsageDescription` no iOS.
+- 3 novas chaves de SharedPreferences: `admin_gate_mode`, `admin_gate_pass_hash`, `admin_gate_pass_salt`.
+
+---
+
 ## [1.1.0] - 2026-05-01
 
 ### Added

@@ -23,7 +23,7 @@ REGRAS
 - Só lib/data/supabase/ e lib/bootstrap_personal.dart importam supabase_flutter. Não quebre isso.
 - A proteção offline do app (fila pending_matches_v1, CacheStore, estado local da partida, snapshot do elenco) NÃO pode ser alterada sem tarefa própria.
 - Antes de qualquer mudança no banco: backup (supabase db dump --remote="hcjiqushursknfsdvavy" --data-only --use-copy -f ~/backups/backup_dados_AAAA-MM-DD.sql). Nenhuma tarefa da fase C mexe no banco sem eu pedir.
-- Rode `flutter analyze` e `flutter test` e informe os números. Baseline: 322 testes passando (conferido em 15/11/2026, já com a C2); o analyze tem avisos antigos (DUVIDAS #39), só erros novos contam.
+- Rode `flutter analyze` e `flutter test` e informe os números. Baseline: 350 testes passando (conferido em 16/11/2026, após a C3c; antes da C3c eram 322); o analyze tem avisos antigos (DUVIDAS #39), só erros novos contam.
 - Quando o código discorda do doc, o código vale.
 - Responda em português, simples.
 ```
@@ -278,7 +278,7 @@ O arquivo existe só na máquina do Enzo e os docs o citam como `docs/sql/F2_T6_
 ```
 | C1 | Preview "Entra:" no fim de partida (match_screen.dart:3682-3702) | C | AG | fix/entering-preview | ⏳ prompt pronto (docs/C-TASK.md), exige teste de modo avião |
 | C2 | Nota do jogador pela história inteira | C | Claude Code | fix/rating-all-history | ⏳ prompt pronto |
-| C3 | Ações de edição só para admin (menu ⋮ do grupo e histórico) + senha + RLS | C | investigação, AG | fix/admin-only-actions | ⏳ investigar, depois C3a, C3b, C3c |
+| C3 | Ações de edição só para admin (menu ⋮ do grupo e histórico) + senha + RLS | C | investigação, AG | fix/admin-only-actions | ✅ C3, C3a, C3b e C3c feitas (16/11/2026) |
 | C4 | Atualizar os docs conforme a validação de 15/11 | C | Claude Code ou AG | docs/atualizacao-2026-11-15 | ⏳ prompt pronto |
 | C5 | Mover F2_T6_share_link.sql para docs/sql/ (sem token) | C | Enzo | docs/share-link-sql | ⏳ |
 ```
