@@ -1,3 +1,5 @@
+import '../models/player_model.dart';
+import '../models/season_model.dart';
 import '../models/session_model.dart';
 import 'player_identity.dart';
 
@@ -68,6 +70,30 @@ class LastSessionSummary {
     required this.bigWinWinner,
     required this.topScorers,
   });
+}
+
+/// Estatísticas agregadas de visão geral do grupo para os cards do Dashboard.
+class GroupOverviewStats {
+  final int totalMatches;
+  final int totalSessions;
+  final int totalPlayers;
+  final int activePlayersSeason;
+  final int totalGoals;
+  final Map<String, int> playerMatches;
+  final Map<String, int> playerSessions;
+
+  const GroupOverviewStats({
+    required this.totalMatches,
+    required this.totalSessions,
+    required this.totalPlayers,
+    required this.activePlayersSeason,
+    required this.totalGoals,
+    this.playerMatches = const {},
+    this.playerSessions = const {},
+  });
+
+  double get averageGoalsPerMatch =>
+      totalMatches > 0 ? totalGoals / totalMatches : 0.0;
 }
 
 /// Chave 'aaaa-MM' de uma data, em horário local.
@@ -338,3 +364,141 @@ LastSessionSummary? lastSessionSummary(
     topScorers: scorers,
   );
 }
+
+/// Calcula os números gerais de resumo do grupo para os cards do Dashboard:
+/// - total de partidas realizadas;
+/// - total de sessões/peladas cadastradas;
+/// - total de jogadores cadastrados e quantos estão ativos na temporada (>= 5 jogos);
+/// - total de gols marcados e média por partida;
+/// - mapas de participação individual em partidas e sessões.
+GroupOverviewStats computeGroupOverview({
+  required List<dynamic> allHistory,
+  required List<SessionModel> sessions,
+  required List<PlayerModel> players,
+  SeasonModel? currentSeason,
+}) {
+  final Map<String, SessionModel> sessionsById = {
+    for (final s in sessions) s.id: s,
+  };
+
+  var matchCount = 0;
+  var totalGoals = 0;
+  final Map<String, int> playerMatches = {};
+  final Map<String, Set<String>> playerSessionSets = {};
+  final Map<String, int> seasonPlayerMatches = {};
+
+  for (final m in allHistory) {
+    if (m is! Map || m['isExactCurrentSeason'] == false) continue;
+    matchCount++;
+
+    final r = _score(m['scoreRed']);
+    final w = _score(m['scoreWhite']);
+    totalGoals += r + w;
+
+    final sid = (m['sessionId'] ?? '').toString();
+    final matchDate = _parseOverviewMatchDate(m, sessionsById);
+    final inSeason =
+        _isOverviewMatchInSeason(m, matchDate, currentSeason, sessionsById);
+
+    final playersMap = m['players'] as Map?;
+    final redList = playersMap?['red'] as List? ?? const [];
+    final whiteList = playersMap?['white'] as List? ?? const [];
+    final gkRed = playersMap?['gk_red'];
+    final gkWhite = playersMap?['gk_white'];
+
+    final Set<String> matchParticipants = {};
+
+    void addParticipant(dynamic p) {
+      if (p == null) return;
+      final id = playerIdFromObject(p);
+      if (id.isNotEmpty) matchParticipants.add(id);
+    }
+
+    for (final p in redList) {
+      addParticipant(p);
+    }
+    for (final p in whiteList) {
+      addParticipant(p);
+    }
+    addParticipant(gkRed);
+    addParticipant(gkWhite);
+
+    for (final pid in matchParticipants) {
+      playerMatches[pid] = (playerMatches[pid] ?? 0) + 1;
+      if (sid.isNotEmpty) {
+        playerSessionSets.putIfAbsent(pid, () => <String>{}).add(sid);
+      }
+      if (inSeason) {
+        seasonPlayerMatches[pid] = (seasonPlayerMatches[pid] ?? 0) + 1;
+      }
+    }
+  }
+
+  final Map<String, int> playerSessions = {
+    for (final entry in playerSessionSets.entries)
+      entry.key: entry.value.length,
+  };
+
+  final knownPids = players.isNotEmpty
+      ? players.map((p) => p.id).toSet()
+      : seasonPlayerMatches.keys.toSet();
+
+  final activeCount = seasonPlayerMatches.entries
+      .where((e) => knownPids.contains(e.key) && e.value >= 5)
+      .length;
+
+  return GroupOverviewStats(
+    totalMatches: matchCount,
+    totalSessions: sessions.length,
+    totalPlayers: players.length,
+    activePlayersSeason: activeCount,
+    totalGoals: totalGoals,
+    playerMatches: playerMatches,
+    playerSessions: playerSessions,
+  );
+}
+
+DateTime _parseOverviewMatchDate(
+  Map match,
+  Map<String, SessionModel> sessionsById,
+) {
+  final raw = match['session_date'] ?? match['date'] ?? match['start_time'];
+  if (raw != null) {
+    final parsed = DateTime.tryParse(raw.toString());
+    if (parsed != null) return parsed;
+  }
+  final sid = (match['sessionId'] ?? '').toString();
+  final sess = sessionsById[sid];
+  if (sess != null) return sess.sessionDate;
+  return DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+bool _isOverviewMatchInSeason(
+  Map match,
+  DateTime matchDate,
+  SeasonModel? currentSeason,
+  Map<String, SessionModel> sessionsById,
+) {
+  if (currentSeason == null) {
+    return matchDate.year == DateTime.now().year;
+  }
+  final mSeasonId = match['seasonId'] ?? match['season_id'];
+  if (mSeasonId != null && mSeasonId.toString().isNotEmpty) {
+    return mSeasonId.toString() == currentSeason.id;
+  }
+  final sid = (match['sessionId'] ?? '').toString();
+  final sess = sessionsById[sid];
+  if (sess?.seasonId != null && sess!.seasonId!.isNotEmpty) {
+    return sess.seasonId == currentSeason.id;
+  }
+  if (currentSeason.startDate != null &&
+      matchDate.isBefore(currentSeason.startDate!)) {
+    return false;
+  }
+  if (currentSeason.endDate != null) {
+    final endLimit = currentSeason.endDate!.add(const Duration(days: 1));
+    if (matchDate.isAfter(endLimit)) return false;
+  }
+  return true;
+}
+

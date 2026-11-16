@@ -120,6 +120,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _buildWelcomeHero(data),
+                _overviewCards(data),
                 _updatesCard(data),
                 _monthCard(
                   'Destaque do mês · ${_nomeMes(data.currentMonth)} (parcial)',
@@ -294,6 +295,176 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _overviewCards(DashboardData data) {
+    final ov = data.overview;
+    final hasUser = !kIsWeb && _myPlayerId != null && _myPlayerId!.isNotEmpty;
+
+    final userMatches = hasUser ? (ov.playerMatches[_myPlayerId] ?? 0) : 0;
+    final pctMatches =
+        ov.totalMatches > 0 ? (userMatches / ov.totalMatches * 100) : 0.0;
+    final matchesSub = hasUser
+        ? '($userMatches/${pctMatches.toStringAsFixed(0)}% participou)'
+        : 'Total no grupo';
+
+    final userSessions = hasUser ? (ov.playerSessions[_myPlayerId] ?? 0) : 0;
+    final pctSessions =
+        ov.totalSessions > 0 ? (userSessions / ov.totalSessions * 100) : 0.0;
+    final sessionsSub = hasUser
+        ? '($userSessions/${pctSessions.toStringAsFixed(0)}% participou)'
+        : 'Total no grupo';
+
+    final playersSub = '(${ov.activePlayersSeason} ativos na temporada)';
+    final goalsSub =
+        '${ov.averageGoalsPerMatch.toStringAsFixed(1)} por partida';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _statCard(
+                    title: 'Partidas jogadas',
+                    value: '${ov.totalMatches}',
+                    subtitle: matchesSub,
+                    icon: Icons.sports_soccer,
+                    iconColor: AppColors.accentBlueLight,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _statCard(
+                    title: 'Sessões jogadas',
+                    value: '${ov.totalSessions}',
+                    subtitle: sessionsSub,
+                    icon: Icons.calendar_month,
+                    iconColor: Colors.tealAccent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _statCard(
+                    title: 'Jogadores',
+                    value: '${ov.totalPlayers}',
+                    subtitle: playersSub,
+                    tooltip: 'Ativos = com pelo menos 5 jogos na temporada atual',
+                    icon: Icons.people_alt_outlined,
+                    iconColor: Colors.amber,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _statCard(
+                    title: 'Gols marcados',
+                    value: '${ov.totalGoals}',
+                    subtitle: goalsSub,
+                    icon: Icons.whatshot,
+                    iconColor: Colors.orangeAccent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    String? tooltip,
+  }) {
+    Widget cardContent = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderSubtle),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 14, color: iconColor),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textDim,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textWhite,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 10,
+              height: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (tooltip != null) {
+      return Tooltip(
+        message: tooltip,
+        child: cardContent,
+      );
+    }
+    return cardContent;
   }
 
   Widget _card(

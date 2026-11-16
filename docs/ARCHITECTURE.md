@@ -270,14 +270,15 @@ Os bugs mapeados no levantamento da Fase 1 foram integralmente corrigidos e inte
 - Tratamento de JSON corrompido em `_readFromPrefs` da outbox para não sobrescrever a fila no próximo enqueue.
 - Latência de rede no diálogo de adicionar jogadores offline e detalhes de cache/snapshot mapeados na revisão da Fase 1b.
 
-## 12. O que veio com E1a a E1d (aba Peladas, dashboard, avatares, notificações)
+## 12. O que veio com E1a a E1e (aba Peladas, dashboard, avatares, notificações e cards de resumo)
 
-Na `main` desde 15/11/2026 (commits `b2ea3fa` e `9432713`). Código conferido com `ls`/`git show --stat`:
+Na `main` desde 15/11/2026 (commits `b2ea3fa` e `9432713`), estendida em 16/11/2026 com E1e. Código conferido com `ls`/`git show --stat`:
 
 | Recurso | Arquivos |
 |---|---|
 | Aba "Peladas" na carta do jogador (E1a) | `lib/widgets/player/player_sessions_list.dart`, `lib/utils/player_session_summary.dart`, integração em `lib/screens/player_detail.dart` |
 | Dashboard "Início" (E1b), **aba presente no site e no app** (DUVIDAS #44) | `lib/screens/web/home_dashboard_screen.dart`, `lib/services/dashboard_store.dart` (calcula uma vez por grupo), `lib/utils/dashboard_highlights.dart` (destaque do mês, artilheiro, garçom, última pelada, maior goleada), abas em `lib/screens/group_dashboard_screen.dart` |
+| Cards de Resumo Geral no Dashboard (E1e) | `lib/screens/web/home_dashboard_screen.dart` (`_overviewCards`), `lib/utils/dashboard_highlights.dart` (`GroupOverviewStats`, `computeGroupOverview`), `lib/services/dashboard_store.dart`. Cards de partidas jogadas, sessões realizadas, jogadores cadastrados (ativos na temporada atual) e gols marcados (média por partida), com indicador de participação pessoal no app móvel autenticado |
 | Destaque do mês (calculado) × Craque do mês (selo manual `monthly_highlight`) | `dashboard_highlights.dart` (calculado); selo manual vem de `PlayersRepository.setMonthlyHighlight`. O selo guarda só o portador atual, sem mês (BACKLOG) |
 | Tela de estatísticas da temporada no padrão do ranking (E1c) | `lib/screens/season_stats_screen.dart` |
 | Estilos de avatar por tela, fundo ou auréola (E1d) | `lib/services/avatar_style_manager.dart` (chaves `avatar_style_ranking/dashboard/stats/match`), `lib/widgets/shared/ranking_player_bits.dart`, `lib/widgets/player/fifa_card.dart`, configuração em `lib/screens/settings_screen.dart` |

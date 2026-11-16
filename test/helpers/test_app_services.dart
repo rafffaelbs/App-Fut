@@ -360,6 +360,7 @@ class StubPlayerAccountRepository implements PlayerAccountRepository {
 
 AppServices setupTestAppServices({
   GroupsRepository? groups,
+  MembershipRepository? members,
   PlayersRepository? players,
   MatchesRepository? matches,
   SessionsRepository? sessions,
@@ -372,7 +373,7 @@ AppServices setupTestAppServices({
   final services = AppServices(
     features: features ?? AppFeatures.personal(),
     groups: groups ?? StubGroupsRepository(),
-    members: StubMembershipRepository(),
+    members: members ?? StubMembershipRepository(),
     seasons: StubSeasonsRepository(),
     players: players ?? StubPlayersRepository(),
     playerAccounts: playerAccounts ?? StubPlayerAccountRepository(),
