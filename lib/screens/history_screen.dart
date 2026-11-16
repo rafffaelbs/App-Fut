@@ -24,11 +24,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> history = [];
   bool isLoading = true;
   String? errorMessage;
+  bool _isAdmin = false;
+
+  bool get _canAdminister =>
+      AppServices.instance.features.canAdminister(_isAdmin);
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    bool isAdmin = false;
+    try {
+      isAdmin = await AppServices.instance.permissions.isAdmin(widget.groupId);
+    } catch (_) {
+      isAdmin = false;
+    }
+    if (mounted) {
+      setState(() {
+        _isAdmin = isAdmin;
+      });
+    }
   }
 
   Map<String, String> _idToName = {};
@@ -161,7 +180,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _clearHistory() async {
-    if (AppServices.instance.features.isReadOnly) return;
+    if (!_canAdminister) return;
     setState(() => isLoading = true);
     try {
       // Deletes each match individually to ensure the repository cascades
@@ -184,7 +203,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
-    if (AppServices.instance.features.isReadOnly) return;
+    if (!_canAdminister) return;
     final TextEditingController passController = TextEditingController();
 
     showDialog(
@@ -257,7 +276,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               onPressed: _exportHistory,
               tooltip: "Exportar",
             ),
-          if (!AppServices.instance.features.isReadOnly)
+          if (_canAdminister)
             IconButton(
               icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
               onPressed: () {
@@ -311,7 +330,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final List<dynamic> whiteTeam = match['players']?['white'] ?? [];
 
                 return GestureDetector(
-                  onLongPress: AppServices.instance.features.isReadOnly
+                  onLongPress: !_canAdminister
                       ? null
                       : () => _showDebugInfo(match),
                   child: Card(
@@ -323,7 +342,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (!AppServices.instance.features.isReadOnly)
+                        if (_canAdminister)
                           IconButton(
                             icon: const Icon(Icons.edit, color: AppColors.accentBlue, size: 20),
                             onPressed: () => _promptPasswordForEdit(index, match),
@@ -416,7 +435,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _showDebugInfo(Map<String, dynamic> match) {
-    if (AppServices.instance.features.isReadOnly) return;
+    if (!_canAdminister) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0D1B2A),
