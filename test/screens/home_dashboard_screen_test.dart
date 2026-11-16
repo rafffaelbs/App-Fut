@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_do_fut/app/app_features.dart';
+import 'package:app_do_fut/models/group_member_model.dart';
 import 'package:app_do_fut/models/match_event_model.dart';
 import 'package:app_do_fut/models/match_lineup_model.dart';
 import 'package:app_do_fut/models/match_model.dart';
@@ -23,6 +24,9 @@ void main() {
   });
 
   Future<void> pumpHome(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HomeDashboardScreen(groupId: 'g'))));
     // Primeiro quadro: esqueleto/spinner, antes de qualquer cálculo.
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -71,14 +75,60 @@ void main() {
         SessionModel(id: 's1', groupId: 'g', title: 'Pelada de Terça', sessionDate: DateTime(now.year, now.month, 1, 12)),
       ]),
     );
-    tester.view.physicalSize = const Size(800, 3000);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
     await pumpHome(tester);
     expect(find.text('Ana'), findsWidgets);
     expect(find.text('Craque do mês (selo oficial)'), findsOneWidget);
     expect(find.textContaining('Pelada de Terça'), findsOneWidget);
     expect(find.text('Garçom do mês'), findsOneWidget);
+    expect(find.text('Partidas jogadas'), findsOneWidget);
+    expect(find.text('Sessões jogadas'), findsOneWidget);
+    expect(find.text('Jogadores'), findsOneWidget);
+    expect(find.text('Gols marcados'), findsOneWidget);
+  });
+
+  testWidgets('cards de resumo mostram participação pessoal no app para usuário logado', (tester) async {
+    final now = DateTime.now();
+    final players = [
+      const PlayerModel(id: 'a', name: 'Ana'),
+      const PlayerModel(id: 'b', name: 'Beto'),
+    ];
+    final matches = [
+      for (var i = 0; i < 5; i++)
+        MatchModel(
+          id: 'm$i',
+          sessionId: 's1',
+          startTime: now,
+          teamAScore: 1,
+          teamBScore: 0,
+          lineups: const [
+            MatchLineupModel(matchId: 'm', playerId: 'a', team: MatchLineupModel.teamA),
+            MatchLineupModel(matchId: 'm', playerId: 'b', team: MatchLineupModel.teamB),
+          ],
+        ),
+    ];
+    setupTestAppServices(
+      features: const AppFeatures.personal(),
+      players: StubPlayersRepository(players: players),
+      matches: StubMatchesRepository(matches: matches),
+      sessions: StubSessionsRepository(sessions: [
+        SessionModel(id: 's1', groupId: 'g', title: 'Pelada de Terça', sessionDate: now),
+      ]),
+      members: _MyMembershipRepo(
+        GroupMemberModel(
+          id: 'mem1',
+          groupId: 'g',
+          playerId: 'a',
+          role: 'member',
+          joinedAt: now,
+          player: const PlayerModel(id: 'a', name: 'Ana'),
+        ),
+      ),
+    );
+    await pumpHome(tester);
+    expect(find.text('Partidas jogadas'), findsOneWidget);
+    expect(find.text('(5/100% participou)'), findsOneWidget);
+    expect(find.text('Sessões jogadas'), findsOneWidget);
+    expect(find.text('(1/100% participou)'), findsOneWidget);
   });
 
   testWidgets('aba Início existe em site (isReadOnly) e no app', (tester) async {
@@ -93,3 +143,13 @@ void main() {
     }
   });
 }
+
+class _MyMembershipRepo extends StubMembershipRepository {
+  final GroupMemberModel _myMembership;
+
+  _MyMembershipRepo(this._myMembership);
+
+  @override
+  Future<GroupMemberModel?> getMyMembership(String groupId) async => _myMembership;
+}
+

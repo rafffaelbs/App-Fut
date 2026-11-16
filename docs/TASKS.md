@@ -56,6 +56,7 @@ Status: ✅ feito · 🔄 em andamento · ⏳ pendente · ⏸️ adiada · ❌ c
 | E1b | Dashboard "Início" (site e app, DUVIDAS #44) | 2 | ✅ | AG | E1a | `feat/web-dashboard` | 2026-11-15 (commit `b2ea3fa`) |
 | E1c | Melhorias no dashboard e estatísticas da temporada | 2 | ✅ | AG | E1b | não consta | 2026-11-15 (commit `9432713`) |
 | E1d | Estilos de avatar, "Atualizações" e sino de notificações | 2 | ✅ | AG | E1c | não consta | 2026-11-15 (commit `9432713`) |
+| E1e | Cards de resumo no dashboard (partidas, sessões, jogadores, gols) | 2 | ✅ | AG | E1d | `feat/dashboard-overview-cards` | 2026-11-16 |
 | F2-t1 | Teste no iPhone: "Adicionar à Tela de Início" abre o site (não "Link inválido") | 2 | ⏳ | Enzo (com um amigo) | T7 | — | — |
 | F2-t2 | Teste do erro de conexão no site publicado (bloquear `*supabase.co*` → "Tentar de novo") | 2 | ⏳ | Enzo | T7 | — | — |
 | F2-t3 | Conferir que `_redirects` não expõe o token (`curl .../_redirects`) | 2 | ⏳ | Enzo | T7 | — | — |

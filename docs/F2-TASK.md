@@ -654,6 +654,29 @@ Revisão CLAUDE (Claude Code, somente leitura): mês pela data da pelada e fuso;
 
 ---
 
+### E1e · Cards de Resumo no Dashboard (AG)
+
+✅ **Concluída em 16/11/2026** (326 testes passando, 0 erros no `dart analyze`).
+Branch: `feat/dashboard-overview-cards`.
+
+**O que foi feito:**
+1. **Cards Informativos de Resumo no Dashboard (`HomeDashboardScreen`):**
+   - Inseridos logo abaixo do card de boas-vindas (`_buildWelcomeHero`) e acima da seção de "Atualizações Recentes" (`_updatesCard`).
+   - Disposição em grid 2x2 com alinhamento de altura (`IntrinsicHeight`) e estilo visual integrado ao tema do aplicativo (`AppColors.headerBlue`, bordas sutis e ícones temáticos).
+2. **Cards Implementados:**
+   - **Partidas jogadas:** Total de partidas já jogadas no grupo. No app móvel com perfil logado, exibe a métrica pessoal `(X/Y% participou)`. No site web somente leitura (`kIsWeb`) ou sem login, exibe o total geral sem o parêntese pessoal.
+   - **Sessões jogadas:** Total de peladas/sessões realizadas no grupo. No app móvel com perfil logado, exibe `(X/Y% participou)`. No site web, exibe apenas o total geral.
+   - **Jogadores cadastrados:** Total de jogadores registrados no grupo e quantos estão ativos na temporada atual (`(X ativos na temporada)` — jogadores com pelo menos 5 partidas na temporada). Inclui tooltip explicativo.
+   - **Gols marcados:** Total acumulado de gols na história do grupo e a média por partida (`X.X por partida`).
+3. **Cálculo Puro e Estado (`lib/utils/dashboard_highlights.dart` e `lib/services/dashboard_store.dart`):**
+   - Criação da classe `GroupOverviewStats` e função pura `computeGroupOverview(...)`.
+   - Adicionado o campo `overview` no `DashboardData`, pré-calculado de forma única por grupo no `DashboardStore`.
+4. **Testes Criados / Atualizados:**
+   - Testes unitários puros de cálculo e regras em `test/utils/dashboard_highlights_test.dart` (3 novos testes: vazio, totais acumulados com participação individual e filtro de temporada).
+   - Teste de widgets em `test/screens/home_dashboard_screen_test.dart` cobrindo a renderização dos 4 cards de visão geral e a exibição condicional de participação do usuário logado no app.
+
+---
+
 ## T7b · Aposentar o site antigo — AG + Enzo · **RASCUNHO, por último**
 
 Branch: `chore/remove-old-site` · Só depois de a E1 estar na `main` e o site novo em uso pelos amigos. Faça com a `main` limpa, sem outras branches abertas que mexam em `match_screen`.

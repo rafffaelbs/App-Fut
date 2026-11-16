@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:app_do_fut/models/player_model.dart';
+import 'package:app_do_fut/models/season_model.dart';
 import 'package:app_do_fut/models/session_model.dart';
 import 'package:app_do_fut/utils/dashboard_highlights.dart';
 
@@ -124,5 +126,114 @@ void main() {
 
   test('previousMonthKey vira o ano', () {
     expect(previousMonthKey('2026-01'), '2025-12');
+  });
+
+  group('computeGroupOverview', () {
+    final playerA = PlayerModel(id: 'a', name: 'Jogador A');
+    final playerB = PlayerModel(id: 'b', name: 'Jogador B');
+    final playerC = PlayerModel(id: 'c', name: 'Jogador C');
+    final season = SeasonModel(
+      id: 'season_1',
+      groupId: 'g',
+      name: 'Temporada 2026',
+      startDate: DateTime(2026, 1, 1),
+      endDate: DateTime(2026, 12, 31),
+    );
+
+    test('vazio retorna zeros', () {
+      final ov = computeGroupOverview(
+        allHistory: [],
+        sessions: [],
+        players: [],
+        currentSeason: season,
+      );
+      expect(ov.totalMatches, 0);
+      expect(ov.totalSessions, 0);
+      expect(ov.totalPlayers, 0);
+      expect(ov.activePlayersSeason, 0);
+      expect(ov.totalGoals, 0);
+      expect(ov.averageGoalsPerMatch, 0.0);
+      expect(ov.playerMatches, isEmpty);
+      expect(ov.playerSessions, isEmpty);
+    });
+
+    test('calcula totais, ativos na temporada (>= 5 jogos) e participações individuais', () {
+      final s1 = sess('s1', DateTime(2026, 10, 10));
+      final s2 = sess('s2', DateTime(2026, 10, 17));
+      final List<SessionModel> sList = [s1, s2];
+      final List<PlayerModel> pList = [playerA, playerB, playerC];
+
+      // Partidas em s1: 4 partidas com a, b; 1 com goleiro c
+      // Partidas em s2: 2 partidas com a
+      final history = [
+        match('s1', red: ['a'], white: ['b'], sr: 2, sw: 1),
+        match('s1', red: ['a'], white: ['b'], sr: 3, sw: 0),
+        match('s1', red: ['a'], white: ['b'], sr: 1, sw: 1),
+        match('s1', red: ['a'], white: ['b'], sr: 2, sw: 2),
+        match('s1', red: ['a'], white: ['b'], gkRed: 'c', sr: 1, sw: 0),
+        match('s2', red: ['a'], white: [], sr: 1, sw: 0),
+        match('s2', red: ['a'], white: [], sr: 0, sw: 0),
+      ];
+
+      final ov = computeGroupOverview(
+        allHistory: history,
+        sessions: sList,
+        players: pList,
+        currentSeason: season,
+      );
+
+      // 7 partidas no total
+      expect(ov.totalMatches, 7);
+      // 2 sessões
+      expect(ov.totalSessions, 2);
+      // 3 jogadores
+      expect(ov.totalPlayers, 3);
+      // Gols: 2+1 + 3+0 + 1+1 + 2+2 + 1+0 + 1+0 + 0 = 14 gols
+      expect(ov.totalGoals, 14);
+      expect(ov.averageGoalsPerMatch, 2.0);
+
+      // Jogos individuais:
+      // a jogou em todas as 7 partidas
+      expect(ov.playerMatches['a'], 7);
+      // b jogou em 5 partidas
+      expect(ov.playerMatches['b'], 5);
+      // c jogou em 1 partida (como goleiro)
+      expect(ov.playerMatches['c'], 1);
+
+      // Sessões individuais:
+      // a participou de s1 e s2
+      expect(ov.playerSessions['a'], 2);
+      // b participou de s1
+      expect(ov.playerSessions['b'], 1);
+      // c participou de s1
+      expect(ov.playerSessions['c'], 1);
+
+      // Ativos na temporada (>= 5 jogos):
+      // a tem 7 jogos (ativo)
+      // b tem 5 jogos (ativo)
+      // c tem 1 jogo (não ativo)
+      expect(ov.activePlayersSeason, 2);
+    });
+
+    test('partida fora da temporada atual não conta para jogador ativo na temporada', () {
+      final sPast = sess('s_past', DateTime(2025, 5, 1));
+      final List<SessionModel> sList = [sPast];
+      final List<PlayerModel> pList = [playerA];
+
+      // 5 jogos em 2025 (fora da season de 2026)
+      final history = List.generate(5, (_) => match('s_past', red: ['a']));
+
+      final ov = computeGroupOverview(
+        allHistory: history,
+        sessions: sList,
+        players: pList,
+        currentSeason: season,
+      );
+
+      expect(ov.totalMatches, 5);
+      expect(ov.playerMatches['a'], 5);
+      // Não conta como ativo na temporada atual
+      expect(ov.activePlayersSeason, 0);
+    });
   });
 }

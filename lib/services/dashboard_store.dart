@@ -35,6 +35,9 @@ class DashboardData {
   /// Atualizações e conquistas históricas do grupo ordenadas do mais recente para o menos recente.
   final List<MilestoneUpdate> updates;
 
+  /// Estatísticas gerais do grupo (cards de resumo).
+  final GroupOverviewStats overview;
+
   const DashboardData({
     required this.groupId,
     required this.currentMonth,
@@ -50,6 +53,7 @@ class DashboardData {
     required this.lastSession,
     required this.officialCraques,
     required this.playerMaps,
+    required this.overview,
     this.updates = const [],
   });
 }
@@ -109,6 +113,13 @@ class DashboardStore {
         currentSeason: currentSeason,
       );
 
+      final overview = computeGroupOverview(
+        allHistory: history,
+        sessions: sessions,
+        players: players,
+        currentSeason: currentSeason,
+      );
+
       final result = DashboardData(
         groupId: groupId,
         currentMonth: cur,
@@ -127,6 +138,7 @@ class DashboardStore {
           for (final p in players)
             p.id: GroupBootstrap.playerSnapshotMap(p, p.rating ?? kRatingBase),
         },
+        overview: overview,
         updates: milestones,
       );
       // O grupo pode ter mudado durante o cálculo.
