@@ -357,6 +357,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       currentStats: pStats,
     );
 
+    // A nota/overall usa a história inteira (igual ao Elenco), não o período.
+    final double? ratingAll = playerRatingAllHistory(_rawHistory, widget.playerId);
+
     setState(() {
       _allHistory = filtered;
       totalPlayers = leaderboard.length;
@@ -386,6 +389,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         };
       }
     });
+
+    if (ratingAll != null) {
+      playerStats = {...playerStats, 'nota': ratingAll};
+    }
 
     _calculateChartData();
     _updateSessionSummaries();
