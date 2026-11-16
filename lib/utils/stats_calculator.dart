@@ -218,6 +218,13 @@ Future<List<dynamic>> getAllGroupMatches(
   return allHistory;
 }
 
+/// Nota do jogador calculada pela HISTÓRIA INTEIRA (mesma base do Elenco).
+/// Use na carta do jogador para que a nota não mude com o filtro de período.
+double? playerRatingAllHistory(List<dynamic> allHistory, String playerId) {
+  final stats = calculateGlobalStats(allHistory)[playerId];
+  return stats == null ? null : (stats['nota'] as num).toDouble();
+}
+
 /// Processes every match and returns a Map with the global stats for each playerId
 /// Map<String, Map<String, dynamic>> where the key is the playerId.
 Map<String, Map<String, dynamic>> calculateGlobalStats(List<dynamic> allHistory) {

@@ -339,7 +339,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final List<dynamic> filtered = _computeFilteredHistory();
     final globalStats = calculateGlobalStats(filtered);
 
-    final List<Map<String, dynamic>> leaderboard = globalStats.values
+    // Ranking e nota usam a HISTÓRIA INTEIRA (igual ao Elenco), não o período.
+    final allStats = calculateGlobalStats(_rawHistory);
+    final List<Map<String, dynamic>> leaderboard = allStats.values
         .where((data) => (data['games'] as int) >= kMinGamesForGlobalRanking)
         .toList();
     leaderboard.sort(
@@ -349,27 +351,23 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     final int index = leaderboard.indexWhere(
       (p) => (p['id'] as String) == widget.playerId,
     );
-    final Map<String, dynamic>? pStats = index >= 0
-        ? leaderboard[index]
-        : globalStats[widget.playerId];
+    final Map<String, dynamic>? pStats = globalStats[widget.playerId];
     final Map<String, dynamic> advStats = _calculateAdvancedStats(
       filtered,
       currentStats: pStats,
     );
+
+    final double? ratingAll = allStats[widget.playerId]?['nota'] as double?;
 
     setState(() {
       _allHistory = filtered;
       totalPlayers = leaderboard.length;
       advancedStats = advStats;
 
-      if (index >= 0) {
-        rankPosition = index + 1;
-        playerStats = leaderboard[index];
-      } else if (globalStats.containsKey(widget.playerId)) {
-        rankPosition = null;
+      rankPosition = index >= 0 ? index + 1 : null;
+      if (globalStats.containsKey(widget.playerId)) {
         playerStats = globalStats[widget.playerId]!;
       } else {
-        rankPosition = null;
         playerStats = {
           'id': widget.playerId,
           'name': playerName,
@@ -386,6 +384,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         };
       }
     });
+
+    if (ratingAll != null) {
+      playerStats = {...playerStats, 'nota': ratingAll};
+    }
 
     _calculateChartData();
     _updateSessionSummaries();
@@ -3491,7 +3493,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Nota do App',
+                  'Nota do App (histórico completo)',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,

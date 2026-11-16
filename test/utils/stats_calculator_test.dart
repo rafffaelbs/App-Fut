@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:app_do_fut/utils/stats_calculator.dart';
 
 void main() {
+  _ratingAllHistoryTests();
   group('stats_calculator characterization tests', () {
     group('calculateGlobalStats', () {
       test('case 1: empty history returns empty map', () {
@@ -217,6 +218,37 @@ void main() {
         expect((p2['ratings'] as List<double>).first, closeTo(6.1, 1e-4));
         expect(p2['nota'], closeTo(6.7, 1e-4));
       });
+    });
+  });
+}
+
+// Nota pela história inteira: igual ao Elenco, mesmo com partidas em temporadas diferentes.
+void _ratingAllHistoryTests() {
+  Map<String, dynamic> m(String date, int r, int w) => {
+        'session_date': date,
+        'scoreRed': r,
+        'scoreWhite': w,
+        'events': <Map<String, dynamic>>[],
+        'players': {
+          'red': [{'id': 'p1', 'name': 'P1'}],
+          'white': [{'id': 'p2', 'name': 'P2'}],
+          'gk_red': null,
+          'gk_white': null,
+        },
+      };
+  group('playerRatingAllHistory', () {
+    test('carta = Elenco com partidas em temporadas diferentes', () {
+      final old = [m('2025-03-01', 0, 3), m('2025-03-08', 0, 2)];
+      final recent = [m('2026-03-01', 3, 0)];
+      final all = [...old, ...recent];
+      final elenco = calculateGlobalStats(all)['p1']!['nota'] as double;
+      final carta = playerRatingAllHistory(all, 'p1')!;
+      final soTemporada = playerRatingAllHistory(recent, 'p1')!;
+      expect(carta, closeTo(elenco, 1e-9));
+      expect((carta - soTemporada).abs(), greaterThan(0.01));
+    });
+    test('jogador sem partidas retorna null', () {
+      expect(playerRatingAllHistory([], 'x'), isNull);
     });
   });
 }
