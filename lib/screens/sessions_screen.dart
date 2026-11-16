@@ -6,6 +6,7 @@ import '../utils/session_grouping.dart';
 import '../widgets/session/session_delete_dialog.dart';
 import '../widgets/session/session_form_sheet.dart';
 import '../widgets/session/session_list_tile.dart';
+import '../services/admin_action_gate.dart';
 import 'tournament_dashboard_screen.dart';
 
 class SessionsScreen extends StatefulWidget {
@@ -126,6 +127,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   Future<void> _confirmDeleteSession(SessionModel session) async {
+    final gateConfirmed = await confirmAdminAction(context, motivo: 'excluir pelada');
+    if (!gateConfirmed || !mounted) return;
+
     final bool confirmed = await showSessionDeleteDialog(context);
     if (!confirmed) return;
 
