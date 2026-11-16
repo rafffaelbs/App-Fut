@@ -61,6 +61,9 @@ Conforme especificação da tarefa, cada chave ou prefixo está categorizado em:
 | `players_grupo_` | **(e)** / legada | *Nenhum escritor no código* | `lib/data/supabase/site_data_generator.dart:27` | — | Variação legada de chave de grupo pré-Supabase. |
 | `avatar_style_ranking`<br>`avatar_style_dashboard`<br>`avatar_style_stats`<br>`avatar_style_match` | **(d)** | `lib/services/avatar_style_manager.dart:98, 126` | `lib/services/avatar_style_manager.dart:56-69` | — | `String`: Preferência do estilo visual de rating nos avatares (`off`, `halo`, `background`) por tela/contexto. |
 | `last_seen_notif_${groupId}_${playerId}` | **(e)** | `lib/widgets/shared/notifications_sheet.dart:58` | `lib/screens/group_dashboard_screen.dart:82` | — | String ISO 8601 da data/hora em que o jogador logado visualizou suas notificações no grupo pela última vez (usado no cálculo do badge de não lidas). |
+| `admin_gate_mode` | **(d)** | `lib/services/admin_action_gate.dart`<br>`lib/screens/settings_screen.dart` | `lib/services/admin_action_gate.dart`<br>`lib/screens/settings_screen.dart` | — | `String`: Modo de confirmação de ações do administrador no aparelho (`device` ou `password`). Padrão: `device`. |
+| `admin_gate_pass_hash` | **(d)** | `lib/services/admin_action_gate.dart` | `lib/services/admin_action_gate.dart` | — | `String`: Hash SHA-256 da senha de administrador com sal aleatório. Nunca contém a senha em texto puro. |
+| `admin_gate_pass_salt` | **(d)** | `lib/services/admin_action_gate.dart` | `lib/services/admin_action_gate.dart` | — | `String`: Sal aleatório gerado com `Random.secure()` usado no hash da senha. |
 
 ---
 

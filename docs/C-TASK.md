@@ -30,18 +30,18 @@ REGRAS
 
 ## Status
 
-| ID | Tarefa | Quem | Branch | Estado |
-|---|---|---|---|---|
-| C2 | Nota do jogador pela história inteira | Claude Code | `fix/rating-all-history` | ✅ feita e mesclada na `main` (merge `027fb03`, 15/11/2026) |
-| C4 | Atualizar os docs (22 correções + registros) | Claude Code ou AG | `docs/atualizacao-2026-11-15` | ✅ feita em 15/11/2026 (commit único na branch; falta o merge do Enzo) |
-| C3 (invest.) | Investigar senha e RLS do histórico | Claude Code (leitura) | sem branch | ✅ feita em 16/11/2026 |
-| C3a | Esconder ações de edição de quem não é admin | AG | `fix/admin-only-actions` | ✅ feita em 16/11/2026 |
-| C3b | Conferir RLS real de matches/sessions | Enzo roda o SQL | sem branch | ✅ 16/11/2026: RLS correto (ver seção C3b) |
-| C3c | Confirmação do admin (aparelho ou senha) e fim do `"0101"` | AG | `feat/admin-action-gate` | prompt pronto; depende da C3a |
-| C1 | Preview "Entra:" no fim de partida | AG | `fix/entering-preview` | prompt pronto; exige teste de modo avião |
-| C5 | Mover `F2_T6_share_link.sql` para `docs/sql/` (sem token) | Enzo fornece o arquivo | `docs/share-link-sql` | pendente |
+| ID           | Tarefa                                                     | Quem                   | Branch                        | Estado                                                                |
+| ------------ | ---------------------------------------------------------- | ---------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| C2           | Nota do jogador pela história inteira                      | Claude Code            | `fix/rating-all-history`      | ✅ feita e mesclada na `main` (merge `027fb03`, 15/11/2026)            |
+| C4           | Atualizar os docs (22 correções + registros)               | Claude Code ou AG      | `docs/atualizacao-2026-11-15` | ✅ feita em 15/11/2026 (commit único na branch; falta o merge do Enzo) |
+| C3 (invest.) | Investigar senha e RLS do histórico                        | Claude Code (leitura)  | sem branch                    | ✅ feita em 16/11/2026                                                 |
+| C3a          | Esconder ações de edição de quem não é admin               | AG                     | `fix/admin-only-actions`      | ✅ feita e mesclada na `main` (merge `ec2e888`, 16/11/2026)            |
+| C3b          | Conferir RLS real de matches/sessions                      | Enzo roda o SQL        | sem branch                    | ✅ 16/11/2026: RLS correto (ver seção C3b)                             |
+| C3c          | Confirmação do admin (aparelho ou senha) e fim do `"0101"` | AG                     | `feat/admin-action-gate`      | ✅ feita em 16/11/2026                                                 |
+| C1           | Preview "Entra:" no fim de partida                         | AG                     | `fix/entering-preview`        | prompt pronto; exige teste de modo avião                              |
+| C5           | Mover `F2_T6_share_link.sql` para `docs/sql/` (sem token)  | Enzo fornece o arquivo | `docs/share-link-sql`         | pendente                                                              |
 
-Ordem: C2 ✅, C4 ✅, C3 ✅, C3b ✅, C3a ✅, C3c (depois da C3a), C1, C5. Estado de todas as tarefas: `docs/TASKS.md`.
+Ordem: C2 ✅, C4 ✅, C3 ✅, C3b ✅, C3a ✅, C3c ✅, C1, C5. Estado de todas as tarefas: `docs/TASKS.md`.
 
 ## Decisões que valem para a fase C
 - **C2:** nota e overall pela história inteira em todas as telas; gols, jogos e posição continuam respeitando o filtro de período.

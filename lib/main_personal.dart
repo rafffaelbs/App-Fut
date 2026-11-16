@@ -13,6 +13,7 @@ import 'package:app_do_fut/domain/repositories/player_account_repository.dart';
 import 'package:app_do_fut/domain/services/auth_service.dart';
 import 'package:app_do_fut/domain/services/match_outbox.dart';
 import 'package:app_do_fut/models/group_model.dart';
+import 'package:app_do_fut/services/admin_action_gate.dart';
 
 // Global route observer for tracking navigation
 final RouteObserver routeObserver = RouteObserver();
@@ -858,9 +859,23 @@ class _HomePageState extends State<HomePage> {
                                   color: Colors.white54,
                                 ),
                                 color: AppColors.headerBlue,
-                                onSelected: (value) {
-                                  if (value == 'edit') _showGroupDialog(index: index);
-                                  if (value == 'delete') _deleteGroup(index);
+                                onSelected: (value) async {
+                                  if (value == 'edit') {
+                                    final confirmed = await confirmAdminAction(
+                                      context,
+                                      motivo: 'editar grupo',
+                                    );
+                                    if (!confirmed || !context.mounted) return;
+                                    _showGroupDialog(index: index);
+                                  }
+                                  if (value == 'delete') {
+                                    final confirmed = await confirmAdminAction(
+                                      context,
+                                      motivo: 'excluir grupo',
+                                    );
+                                    if (!confirmed || !context.mounted) return;
+                                    _deleteGroup(index);
+                                  }
                                 },
                                 itemBuilder: (context) => [
                                   const PopupMenuItem(

@@ -9,6 +9,7 @@ import 'admin_debug_screen.dart';
 import 'manage_members_screen.dart';
 import 'manage_seasons_screen.dart';
 import 'manage_join_requests_screen.dart';
+import '../services/admin_action_gate.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String groupId;
@@ -42,6 +43,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AvatarRatingStyle _statsStyle = AvatarRatingStyle.background;
   AvatarRatingStyle _matchStyle = AvatarRatingStyle.halo;
 
+  // Segurança do administrador
+  String _adminGateMode = AdminGatePrefs.modeDevice;
+  bool _hasAdminPassword = false;
+
   @override
   void initState() {
     super.initState();
@@ -51,7 +56,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     await AvatarStyleManager.instance.load();
+    final gate = AdminActionGate.instance;
+    final gateMode = await gate.getMode();
+    final hasPass = await gate.hasPasswordConfigured();
+
+    if (!mounted) return;
     setState(() {
+      _adminGateMode = gateMode;
+      _hasAdminPassword = hasPass;
       _showRadar = prefs.getBool('show_radar_chart') ?? true;
       _confirmTimerEnabled = prefs.getBool(kPrefConfirmTimerEnabled) ?? true;
       _pitchHorizontal = prefs.getBool('pitch_horizontal') ?? true;
@@ -398,6 +410,152 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildAdminSecuritySection() {
+    final isDevice = _adminGateMode == AdminGatePrefs.modeDevice;
+    final isPassword = _adminGateMode == AdminGatePrefs.modePassword;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentBlue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.shield_outlined, color: AppColors.accentBlue, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Confirmação de Ações',
+                        style: TextStyle(
+                          color: AppColors.textWhite,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Exige confirmação para ações destrutivas (excluir, editar ou limpar dados).',
+                        style: TextStyle(color: AppColors.textDim, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: AppColors.borderSubtle, height: 1),
+          ListTile(
+            leading: Icon(
+              isDevice ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: isDevice ? AppColors.accentBlue : Colors.white54,
+            ),
+            title: const Text(
+              'Usar autenticação do aparelho (recomendado)',
+              style: TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              'Usa a digital, reconhecimento facial ou PIN do celular para autorizar.',
+              style: TextStyle(color: AppColors.textDim, fontSize: 12),
+            ),
+            onTap: () async {
+              if (isDevice) return;
+              final confirmed = await confirmAdminAction(
+                context,
+                motivo: 'mudar para autenticação do aparelho',
+              );
+              if (!confirmed || !mounted) return;
+              await AdminActionGate.instance.setMode(AdminGatePrefs.modeDevice);
+              setState(() => _adminGateMode = AdminGatePrefs.modeDevice);
+            },
+          ),
+          ListTile(
+            leading: Icon(
+              isPassword ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: isPassword ? AppColors.accentBlue : Colors.white54,
+            ),
+            title: const Text(
+              'Usar senha',
+              style: TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              'Usa uma senha numérica de 4 dígitos ou mais cadastrada no aplicativo.',
+              style: TextStyle(color: AppColors.textDim, fontSize: 12),
+            ),
+            onTap: () async {
+              if (isPassword) return;
+              final confirmed = await confirmAdminAction(
+                context,
+                motivo: 'mudar para autenticação por senha',
+              );
+              if (!confirmed || !mounted) return;
+              if (!_hasAdminPassword) {
+                final created = await showAdminSetPasswordDialog(context);
+                if (created && mounted) {
+                  setState(() {
+                    _adminGateMode = AdminGatePrefs.modePassword;
+                    _hasAdminPassword = true;
+                  });
+                }
+              } else {
+                await AdminActionGate.instance.setMode(AdminGatePrefs.modePassword);
+                if (mounted) setState(() => _adminGateMode = AdminGatePrefs.modePassword);
+              }
+            },
+          ),
+          if (_hasAdminPassword) ...[
+            const Divider(color: AppColors.borderSubtle, height: 1),
+            ListTile(
+              leading: const Icon(Icons.password, color: AppColors.accentBlue, size: 20),
+              title: const Text(
+                'Trocar senha',
+                style: TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Altera a senha de administrador configurada neste celular.',
+                style: TextStyle(color: AppColors.textDim, fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textDim),
+              onTap: () async {
+                final confirmed = await confirmAdminAction(
+                  context,
+                  motivo: 'trocar a senha de administrador',
+                );
+                if (!confirmed || !mounted) return;
+                final changed = await showAdminSetPasswordDialog(context, isReset: true);
+                if (changed && mounted) {
+                  setState(() => _hasAdminPassword = true);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Senha de administrador alterada com sucesso!')),
+                  );
+                }
+              },
+            ),
+          ],
+        ],
+      ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final features = AppServices.instance.features;
@@ -500,6 +658,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                       },
                     ),
+                  _buildSectionHeader('Segurança do Administrador'),
+                  _buildAdminSecuritySection(),
                 ],
 
                 _buildSectionHeader('Preferências do Aplicativo'),

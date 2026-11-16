@@ -4,6 +4,7 @@ import 'package:app_do_fut/constants/app_colors.dart';
 import 'package:app_do_fut/screens/edit_match_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:app_do_fut/app/app_services.dart';
+import '../services/admin_action_gate.dart';
 import '../utils/share_helper.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -202,63 +203,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  void _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) {
+  Future<void> _promptPasswordForEdit(int matchIndex, Map<String, dynamic> matchData) async {
     if (!_canAdminister) return;
-    final TextEditingController passController = TextEditingController();
+    final confirmed = await confirmAdminAction(context, motivo: 'editar partida');
+    if (!confirmed || !mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.headerBlue,
-        title: const Text("Acesso Restrito", style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: passController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentBlue)),
-          ),
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditMatchScreen(
+          tournamentId: widget.tournamentId,
+          matchIndex: matchIndex,
+          matchData: matchData,
+          groupId: widget.groupId,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (passController.text == "0101") {
-                Navigator.pop(ctx); 
-
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EditMatchScreen(
-                      tournamentId: widget.tournamentId,
-                      matchIndex: matchIndex,
-                      matchData: matchData,
-                      groupId: widget.groupId,
-                    ),
-                  ),
-                );
-
-                if (result == true) {
-                  _loadHistory();
-                }
-              } else {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Senha Incorreta!"), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text("Entrar", style: TextStyle(color: AppColors.accentBlue, fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
+
+    if (result == true) {
+      _loadHistory();
+    }
   }
 
   @override
@@ -279,7 +243,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (_canAdminister)
             IconButton(
               icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-              onPressed: () {
+              onPressed: () async {
+                final confirmed = await confirmAdminAction(context, motivo: 'limpar todo o histórico');
+                if (!confirmed || !context.mounted) return;
                 showDialog(
                   context: context,
                   builder: (c) => AlertDialog(
