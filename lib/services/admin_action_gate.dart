@@ -11,7 +11,6 @@ import '../constants/app_colors.dart';
 /// Permite o uso de fakes/stubs em testes sem depender do hardware real.
 abstract class DeviceAuthenticator {
   Future<bool> isDeviceSupported();
-  Future<bool> hasEnrolledBiometricsOrLock();
   Future<bool> authenticate({required String localizedReason});
 }
 
@@ -24,20 +23,6 @@ class LocalAuthDeviceAuthenticator implements DeviceAuthenticator {
     if (kIsWeb) return false;
     try {
       return await _auth.isDeviceSupported();
-    } catch (_) {
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> hasEnrolledBiometricsOrLock() async {
-    if (kIsWeb) return false;
-    try {
-      final supported = await _auth.isDeviceSupported();
-      if (!supported) return false;
-      final canCheck = await _auth.canCheckBiometrics;
-      final biometrics = await _auth.getAvailableBiometrics();
-      return supported && (canCheck || biometrics.isNotEmpty);
     } catch (_) {
       return false;
     }
@@ -225,12 +210,12 @@ Future<bool> _confirmViaDevice(
   required AdminActionGate gate,
 }) async {
   try {
+    // isDeviceSupported cobre digital, PIN, padrão e senha de tela.
     final isSupported = await gate.authenticator.isDeviceSupported();
-    final hasLock = await gate.authenticator.hasEnrolledBiometricsOrLock();
 
     if (!context.mounted) return false;
 
-    if (!isSupported || !hasLock) {
+    if (!isSupported) {
       _showGateMessage(
         context,
         "Ative um bloqueio de tela no celular ou escolha 'Usar senha' nas Configurações",
@@ -282,6 +267,7 @@ Future<bool> _confirmViaPassword(
     builder: (ctx) => AdminPasswordDialog(
       motivo: motivo,
       gate: gate,
+      hostContext: context,
     ),
   );
 
@@ -293,10 +279,15 @@ class AdminPasswordDialog extends StatefulWidget {
   final String motivo;
   final AdminActionGate gate;
 
+  /// Contexto da tela que abriu o diálogo. Continua válido depois que o
+  /// diálogo fecha (usado no fluxo "Esqueci a senha").
+  final BuildContext? hostContext;
+
   const AdminPasswordDialog({
     super.key,
     required this.motivo,
     required this.gate,
+    this.hostContext,
   });
 
   @override
@@ -356,8 +347,11 @@ class _AdminPasswordDialogState extends State<AdminPasswordDialog> {
   }
 
   Future<void> _handleForgotPassword() async {
+    final host = widget.hostContext ?? context;
+    final gate = widget.gate;
     Navigator.pop(context, false);
-    await handleAdminForgotPassword(context, gate: widget.gate);
+    if (!host.mounted) return;
+    await handleAdminForgotPassword(host, gate: gate);
   }
 
   @override
@@ -447,9 +441,8 @@ Future<void> handleAdminForgotPassword(
 
   try {
     final isSupported = await g.authenticator.isDeviceSupported();
-    final hasLock = await g.authenticator.hasEnrolledBiometricsOrLock();
 
-    if (!isSupported || !hasLock) {
+    if (!isSupported) {
       if (context.mounted) {
         showDialog(
           context: context,

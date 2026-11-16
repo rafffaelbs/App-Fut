@@ -10,20 +10,15 @@ import '../helpers/test_app_services.dart';
 
 class FakeDeviceAuthenticator implements DeviceAuthenticator {
   bool isSupported;
-  bool hasLock;
   bool authResult;
 
   FakeDeviceAuthenticator({
     this.isSupported = true,
-    this.hasLock = true,
     this.authResult = true,
   });
 
   @override
   Future<bool> isDeviceSupported() async => isSupported;
-
-  @override
-  Future<bool> hasEnrolledBiometricsOrLock() async => hasLock;
 
   @override
   Future<bool> authenticate({required String localizedReason}) async => authResult;
@@ -194,6 +189,30 @@ void main() {
       expect(find.text('SEGURANÇA DO ADMINISTRADOR'), findsNothing);
       expect(find.text('Usar autenticação do aparelho (recomendado)'), findsNothing);
       expect(find.text('Usar senha'), findsNothing);
+    });
+
+    testWidgets('Admin com confirmação negada -> "Usar senha" não abre cadastro de senha', (tester) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      AdminActionGate.instance.authenticator = FakeDeviceAuthenticator(authResult: false);
+      setupTestAppServices(
+        features: const AppFeatures.personal(),
+        permissions: StubPermissionService(adminResult: true),
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: SettingsScreen(groupId: groupId, isAdmin: true)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Usar senha'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Criar Senha de Administrador'), findsNothing);
     });
 
     testWidgets('Admin (isAdmin: true) -> seção aparece e trocar de modo grava no SharedPreferences', (tester) async {

@@ -502,6 +502,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             onTap: () async {
               if (isPassword) return;
+              final confirmed = await confirmAdminAction(
+                context,
+                motivo: 'mudar para autenticação por senha',
+              );
+              if (!confirmed || !mounted) return;
               if (!_hasAdminPassword) {
                 final created = await showAdminSetPasswordDialog(context);
                 if (created && mounted) {

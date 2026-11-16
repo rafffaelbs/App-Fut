@@ -5,25 +5,23 @@ import 'package:app_do_fut/services/admin_action_gate.dart';
 
 class FakeDeviceAuthenticator implements DeviceAuthenticator {
   bool isSupported;
-  bool hasLock;
   bool authResult;
+  Duration delay;
   String? lastLocalizedReason;
 
   FakeDeviceAuthenticator({
     this.isSupported = true,
-    this.hasLock = true,
     this.authResult = true,
+    this.delay = Duration.zero,
   });
 
   @override
   Future<bool> isDeviceSupported() async => isSupported;
 
   @override
-  Future<bool> hasEnrolledBiometricsOrLock() async => hasLock;
-
-  @override
   Future<bool> authenticate({required String localizedReason}) async {
     lastLocalizedReason = localizedReason;
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     return authResult;
   }
 }
@@ -63,7 +61,7 @@ void main() {
     });
 
     testWidgets('autenticou no aparelho -> ação permitida (retorna true)', (tester) async {
-      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, hasLock: true, authResult: true);
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, authResult: true);
       final gate = AdminActionGate(authenticator: fakeAuth);
 
       bool? result;
@@ -90,7 +88,7 @@ void main() {
     });
 
     testWidgets('falhou ou cancelou autenticação -> ação negada (retorna false)', (tester) async {
-      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, hasLock: true, authResult: false);
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, authResult: false);
       final gate = AdminActionGate(authenticator: fakeAuth);
 
       bool? result;
@@ -115,8 +113,31 @@ void main() {
       expect(result, isFalse);
     });
 
+    testWidgets('só PIN/padrão (suportado, sem biometria) -> autentica normalmente', (tester) async {
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, authResult: true);
+      final gate = AdminActionGate(authenticator: fakeAuth);
+      bool? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await confirmAdminAction(context, motivo: 'excluir item', gate: gate);
+                },
+                child: const Text('Testar'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Testar'));
+      await tester.pump();
+      expect(result, isTrue);
+    });
+
     testWidgets('aparelho sem suporte ou sem bloqueio de tela -> mostra mensagem e retorna false', (tester) async {
-      final fakeAuth = FakeDeviceAuthenticator(isSupported: false, hasLock: false, authResult: true);
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: false, authResult: true);
       final gate = AdminActionGate(authenticator: fakeAuth);
 
       bool? result;
@@ -312,7 +333,7 @@ void main() {
     });
 
     testWidgets('esqueci a senha com aparelho válido -> permite redefinir senha', (tester) async {
-      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, hasLock: true, authResult: true);
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: true, authResult: true);
       final gate = AdminActionGate(authenticator: fakeAuth);
       await gate.savePassword('1234');
 
@@ -354,8 +375,36 @@ void main() {
       expect(ok, isTrue);
     });
 
+    testWidgets('esqueci a senha com autenticação demorada (diálogo já fechado) -> ainda abre Redefinir Senha', (tester) async {
+      final fakeAuth = FakeDeviceAuthenticator(delay: const Duration(seconds: 3));
+      final gate = AdminActionGate(authenticator: fakeAuth);
+      await gate.savePassword('1234');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => confirmAdminAction(context, motivo: 'limpar dados', gate: gate),
+                child: const Text('Testar'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Testar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Esqueci a senha'));
+      await tester.pump(const Duration(seconds: 1)); // diálogo da senha já fechou
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Redefinir Senha'), findsOneWidget);
+    });
+
     testWidgets('esqueci a senha sem bloqueio no aparelho -> avisa que precisa limpar dados', (tester) async {
-      final fakeAuth = FakeDeviceAuthenticator(isSupported: false, hasLock: false, authResult: false);
+      final fakeAuth = FakeDeviceAuthenticator(isSupported: false, authResult: false);
       final gate = AdminActionGate(authenticator: fakeAuth);
       await gate.savePassword('1234');
 
