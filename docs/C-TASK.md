@@ -34,18 +34,20 @@ REGRAS
 |---|---|---|---|---|
 | C2 | Nota do jogador pela história inteira | Claude Code | `fix/rating-all-history` | ✅ feita e mesclada na `main` (merge `027fb03`, 15/11/2026) |
 | C4 | Atualizar os docs (22 correções + registros) | Claude Code ou AG | `docs/atualizacao-2026-11-15` | ✅ feita em 15/11/2026 (commit único na branch; falta o merge do Enzo) |
-| C3 (invest.) | Investigar senha e RLS do histórico | Claude Code (leitura) | sem branch | prompt pronto |
-| C3a | Esconder ações de edição de quem não é admin | AG | `fix/admin-only-actions` | prompt pronto; depende do relatório da investigação |
-| C3b | Conferir RLS real de matches/sessions | Enzo roda o SQL | sem branch | SQL sai da investigação |
-| C3c | Redesenhar a senha do histórico | a decidir | a decidir | depende da investigação |
+| C3 (invest.) | Investigar senha e RLS do histórico | Claude Code (leitura) | sem branch | ✅ feita em 16/11/2026 |
+| C3a | Esconder ações de edição de quem não é admin | AG | `fix/admin-only-actions` | prompt pronto (atualizado em 16/11/2026) |
+| C3b | Conferir RLS real de matches/sessions | Enzo roda o SQL | sem branch | ✅ 16/11/2026: RLS correto (ver seção C3b) |
+| C3c | Confirmação do admin (aparelho ou senha) e fim do `"0101"` | AG | `feat/admin-action-gate` | prompt pronto; depende da C3a |
 | C1 | Preview "Entra:" no fim de partida | AG | `fix/entering-preview` | prompt pronto; exige teste de modo avião |
 | C5 | Mover `F2_T6_share_link.sql` para `docs/sql/` (sem token) | Enzo fornece o arquivo | `docs/share-link-sql` | pendente |
 
-Ordem: C2 ✅, C4 ✅, C3 (invest.), C3a, C1, C5 (C3b e C3c quando o relatório voltar). Estado de todas as tarefas: `docs/TASKS.md`.
+Ordem: C2 ✅, C4 ✅, C3 ✅, C3b ✅, C3a, C3c (depois da C3a), C1, C5. Estado de todas as tarefas: `docs/TASKS.md`.
 
 ## Decisões que valem para a fase C
 - **C2:** nota e overall pela história inteira em todas as telas; gols, jogos e posição continuam respeitando o filtro de período.
-- **C3:** todos veem a lista de partidas do histórico; só o admin altera (lixeira "Limpar tudo", lápis, toque longo de debug); mesmo o admin precisa de senha para alterar o histórico. Menu ⋮ do grupo (Editar/Excluir) só para admin. A senha dentro do app é atrito contra clique acidental, não segurança: a proteção real é o RLS exigir admin.
+- **C3:** todos veem a lista de partidas do histórico; só o admin altera (lixeira "Limpar tudo", lápis, toque longo de debug); mesmo o admin precisa de confirmação para alterar o histórico. Menu ⋮ do grupo (Editar/Excluir) só para admin. A confirmação dentro do app é atrito (principalmente contra alguém que pega o celular desbloqueado do admin), não segurança: a proteção real é o RLS exigir admin.
+- **C3b (16/11/2026):** RLS conferido, está correto. `matches`, `match_events`, `match_lineups`, `rating_history` e `sessions` têm RLS ligado e uma policy `ALL` (`*_write`) com `is_group_admin(...)`. `is_group_admin` = criador do grupo, ou `group_members.role = 'admin'` cujo perfil (`players.creator_id`) é do usuário. Membro comum não altera nem apaga pelo banco (o `DELETE` barrado não dá erro: apaga 0 linhas, por isso a UI deve esconder). Diferença pequena: o app decide admin por `creator_id` ou `role`; o banco exige que o perfil do admin tenha sido criado por ele.
+- **C3c (decisão do Enzo, 16/11/2026):** o risco é o celular do admin ficar disponível para outros. Confirmação em TODAS as ações destrutivas (lixeira, lápis, Editar/Excluir grupo, excluir pelada), não só no lápis. Nas Configurações: "Usar autenticação do aparelho (recomendado)" (digital ou PIN do celular) ou "Usar senha" (plano B, hash em SharedPreferences). Pacote `local_auth` aprovado; chaves novas de SharedPreferences aprovadas só para esta tarefa.
 - **A3 (T7b):** continua por último. O envio ao site antigo é um Timer de uso único de 90 s, rearmado após cada partida finalizada (`match_screen.dart:3713-3725`), não um ciclo.
 
 ---
@@ -115,17 +117,128 @@ Responda em português, simples, com arquivo:linha.
 **Prompt (AG):** cole o cabeçalho da fase C e depois:
 
 ```
-Tarefa C3a: esconder ações de edição de quem não é admin. Branch: fix/admin-only-actions.
+Tarefa C3a: esconder ações de edição de quem não é admin.
+Branch: fix/admin-only-actions (crie a partir da main atualizada).
 
-O que fazer:
-1. Menu ⋮ "Editar / Excluir" da lista de grupos (main_personal.dart:834-860): só aparece se o usuário for admin DAQUELE grupo, usando AppServices.instance.permissions.isAdmin(groupId) junto com features.canAdminister(isAdmin). Para quem não é admin, o menu não existe.
-2. Histórico (history_screen.dart:260-262 e 14-331): TODOS continuam vendo a lista de partidas. Para quem não é admin, somem a lixeira "Limpar tudo", o lápis de edição e o toque longo de debug (nenhum menu ⋮ para membro comum). Para admin, tudo continua como está hoje, inclusive a senha "0101" (NÃO altere nem mova a senha nesta tarefa).
-3. Não altere repositórios, RLS, match_screen nem a proteção offline. Não mude o comportamento do site somente leitura (isReadOnly continua escondendo tudo).
-4. Testes: para cada tela, um teste de widget com membro comum (não aparece) e com admin (aparece), seguindo o padrão de testes existente.
-5. Rode flutter analyze e flutter test e informe os números (esperado: 322 + os novos).
+ANTES DE TUDO
+- Leia docs/ARCHITECTURE.md (permissões e C3) e docs/C-TASK.md. Siga o CLAUDE.md. Responda em português simples. Não adicione pacotes.
+
+CONTEXTO (já decidido e verificado)
+- Todos veem a lista de partidas do histórico. Só o admin altera.
+- O RLS real foi conferido e está correto (5 tabelas exigem is_group_admin). Esta tarefa é só de UI. NÃO altere RLS, SQL, repositórios, nomes de tabelas/colunas, RPCs, fórmulas nem chaves de SharedPreferences.
+
+O QUE FAZER
+1. Menu ⋮ "Editar / Excluir" da lista de grupos (lib/main_personal.dart:834-860):
+   - Só aparece se features.canAdminister(isAdmin) for true, com isAdmin DAQUELE grupo (AppServices.instance.permissions.isAdmin(group.id)).
+   - Carregue o admin de cada grupo junto com a lista (um Map<String,bool> no State, em paralelo com Future.wait). Enquanto não carregou ou se der erro, trate como false (trailing null).
+2. Histórico (lib/screens/history_screen.dart):
+   - Adicione bool _isAdmin = false, carregado no initState com permissions.isAdmin(widget.groupId) (try/catch → false; setState só se mounted). Mesmo padrão de group_dashboard_screen.dart:119-127.
+   - Getter: bool get _canAdminister => AppServices.instance.features.canAdminister(_isAdmin).
+   - Troque os "!isReadOnly" por _canAdminister em: lixeira "Limpar tudo" (260-276), lápis (326-330) e toque longo (314-316).
+   - Coloque if (!_canAdminister) return; na primeira linha de _clearHistory, _promptPasswordForEdit e _showDebugInfo.
+   - TODOS continuam vendo a lista, os cards expandidos e o botão Exportar. Membro comum não vê nenhum botão ou menu de alteração.
+   - Para admin, tudo fica igual a hoje, inclusive a senha "0101". NÃO altere, mova nem comente a senha (é a tarefa C3c).
+3. Não toque em repositórios, match_screen, proteção offline/outbox nem no site somente leitura (isReadOnly continua escondendo tudo; o app público continua com isAdmin = true).
+4. Testes (padrão de test/screens/history_screen_readonly_test.dart e test/helpers/test_app_services.dart; amplie o stub de permissões se precisar, sem mudar o comportamento atual dele):
+   - Histórico, membro comum (isAdmin = false): NÃO aparece Icons.delete_forever nem Icons.edit, o toque longo NÃO abre o debug, a lista ("2 x 1") continua visível.
+   - Histórico, admin (isAdmin = true): lixeira e lápis aparecem, o toque longo abre o debug. O teste existente "isReadOnly = false (personal): long press abre _showDebugInfo" vai precisar de um admin no stub: ajuste só o stub, sem enfraquecer a verificação.
+   - Histórico, isReadOnly = true: continua sem nenhuma ação.
+   - Lista de grupos (main_personal): membro comum não vê o ⋮; admin vê Editar e Excluir. Se a tela for difícil de testar como está, diga qual extração mínima seria necessária ANTES de refatorar; não refatore por conta própria.
+5. Docs: marque C3a como feita em docs/TASKS.md e docs/C-TASK.md. Deixe C3c pendente.
+6. Rode flutter analyze e flutter test e informe os números (antes: 322; esperado: 322 + os novos, 0 falhas, sem problemas novos no analyze).
+
+ENTREGA
+- Commits pequenos em português na branch, sem merge na main.
+- Relatório final simples: arquivos alterados (arquivo:linha), testes novos, números do analyze e do test, e o que ficou de fora ou surpreendeu.
 ```
 
 **Depois:** revisão em sessão nova do Claude Code e teste manual do Enzo com uma conta de membro comum.
+
+---
+
+## C3b: RLS real de matches/sessions (resultado)
+
+Conferido pelo Enzo em 16/11/2026 com `pg_policies`, `pg_class` e `pg_get_functiondef`: RLS ligado nas 5 tabelas; uma policy `ALL` por tabela (`matches_write`, `match_events_write`, `match_lineups_write`, `rating_history_write`, `sessions_write`), todas com `is_group_admin(...)` em `USING` e `WITH CHECK`. **Nada a corrigir no banco.** Detalhes na seção "Decisões".
+
+---
+
+## C3c: confirmação do admin nas ações destrutivas (sem o `"0101"`)
+
+**Contexto:** o risco real é o celular do admin ficar disponível para outros. O RLS já barra membro comum; esta tarefa é atrito para quem pega o aparelho do admin. Depende da C3a (os botões já só existem para admin).
+
+**Aceite:**
+- Uma única função de confirmação, usada em: lixeira "Limpar tudo", lápis de edição, Editar e Excluir do grupo (menu ⋮) e excluir pelada.
+- Nas Configurações, o admin escolhe: "Usar autenticação do aparelho (recomendado)" ou "Usar senha". Padrão: aparelho.
+- O `"0101"` some do código. Nenhuma senha literal no repositório.
+- Testes com autenticador falso (sem biometria real).
+
+**Pacotes e chaves:** `local_auth` e `crypto` (hash da senha) aprovados pelo Enzo em 16/11/2026. Chaves novas de SharedPreferences aprovadas só para esta tarefa: `admin_gate_mode`, `admin_gate_pass_hash`, `admin_gate_pass_salt` (registrar em `docs/INVENTARIO_SHAREDPREFS.md`).
+
+**Prompt (AG):** cole o cabeçalho da fase C e depois:
+
+```
+Tarefa C3c: confirmação do admin nas ações destrutivas. Branch: feat/admin-action-gate (a partir da main, com a C3a já mesclada).
+
+ANTES DE TUDO: leia docs/ARCHITECTURE.md (C3) e docs/C-TASK.md (C3, C3b, C3c). Siga o CLAUDE.md. Responda em português simples.
+
+AUTORIZADO NESTA TAREFA (exceção às regras): adicionar os pacotes local_auth e crypto ao pubspec.yaml e 3 chaves NOVAS de SharedPreferences (admin_gate_mode, admin_gate_pass_hash, admin_gate_pass_salt). Nada além disso. Não altere repositórios, RLS, SQL, tabelas/colunas, fórmulas nem chaves de SharedPreferences existentes. Não mexa no match_screen nem na proteção offline.
+
+1. FUNÇÃO ÚNICA (ex.: lib/services/admin_action_gate.dart):
+   Future<bool> confirmAdminAction(BuildContext context, {required String motivo})
+   - Lê o modo em SharedPreferences (admin_gate_mode: 'device' (padrão) ou 'password').
+   - Atrás de uma interface (ex.: DeviceAuthenticator) para os testes usarem um falso; a implementação real usa local_auth.
+   - Modo 'device': local_auth.authenticate com biometricOnly: false (digital OU PIN/padrão do aparelho). Se o aparelho não tem nenhum bloqueio de tela (isDeviceSupported() false ou nada cadastrado), mostre "Ative um bloqueio de tela no celular ou escolha 'Usar senha' nas Configurações" e devolva false. Nunca deixe passar por falha.
+   - Modo 'password': diálogo pedindo a senha do app (campo oculto). Confira por hash SHA-256 com sal aleatório (Random.secure), nunca guardando a senha em texto. Se ainda não há senha definida, avise "Defina a senha nas Configurações" e devolva false. Após 5 erros seguidos, bloqueie por 30 segundos (só em memória). Link "Esqueci a senha": pede a autenticação do aparelho e, se passar, deixa definir uma senha nova; se o aparelho não tiver bloqueio, explique que só limpando os dados do app.
+   - Qualquer erro/exceção/cancelamento = false (a ação NÃO acontece).
+2. USO (chamar ANTES da ação; se devolver false, não faz nada):
+   - history_screen.dart: lixeira "Limpar tudo" (antes do diálogo "Limpar") e lápis (_promptPasswordForEdit passa a usar a função; remover o diálogo "Acesso Restrito" e o "0101").
+   - main_personal.dart: Editar e Excluir do menu ⋮ do grupo (843-844).
+   - sessions_screen.dart: excluir pelada (_confirmDeleteSession, ~129-134).
+   - O toque longo de debug NÃO pede confirmação (só mostra IDs).
+   - App público (isAdmin sempre true) e site somente leitura: sem mudança de comportamento no site. Se o app público rodar em plataforma sem local_auth, trate como "aparelho sem suporte" (mensagem + usar senha).
+3. CONFIGURAÇÕES (settings_screen.dart, só se features.canAdminister(isAdmin)): seção "Segurança do administrador" com duas opções: "Usar autenticação do aparelho (recomendado)" e "Usar senha". Ao escolher "Usar senha" sem senha definida: pedir para criar (mínimo 4 dígitos, digitar duas vezes). Com senha definida: opções "Trocar senha" (pede a atual) e voltar para "aparelho". A escolha é por aparelho, não por grupo. Texto curto explicando cada opção em português simples.
+4. ANDROID/IOS: android/app/src/main/kotlin/com/example/app_do_fut/MainActivity.kt deve estender FlutterFragmentActivity (exigência do local_auth); AndroidManifest com android.permission.USE_BIOMETRIC; ios/Runner/Info.plist com NSFaceIDUsageDescription ("Confirmar ações do administrador"). Só isso nos arquivos nativos.
+5. TESTES (autenticador falso; padrão dos testes existentes):
+   - modo aparelho: autenticou → ação roda; falhou/cancelou → não roda; sem bloqueio de tela → não roda e mostra a mensagem.
+   - modo senha: correta → roda; errada → não roda; 5 erros → bloqueio; sem senha definida → não roda; o hash salvo NÃO contém a senha em texto.
+   - history: lixeira e lápis chamam a confirmação; com false, o repositório não é chamado.
+   - configurações: aparece só para admin; trocar de modo grava a chave certa.
+   - grep final: nenhum "0101" nem senha literal em lib/.
+6. DOCS: docs/INVENTARIO_SHAREDPREFS.md (3 chaves novas), TASKS.md e C-TASK.md (C3c feita), ARCHITECTURE.md (nota C3).
+7. Rode flutter analyze e flutter test e informe os números. Commits pequenos, sem merge. Relatório final simples com arquivo:linha e o que ficou de fora.
+```
+
+**Depois:** revisão em sessão nova do Claude Code (prompt abaixo) e teste no aparelho do Enzo: (1) modo aparelho com digital; (2) modo aparelho cancelando; (3) modo senha certa e errada; (4) celular sem bloqueio de tela.
+
+**Prompt de REVISÃO (Claude Code, sessão nova, somente leitura):**
+
+```
+REVISÃO da tarefa C3c (branch feat/admin-action-gate). Somente leitura: não edite nada, não rode git checkout, switch nem stash (use git diff main...feat/admin-action-gate e git show para ler a branch). Não rode nada contra o banco. Responda em português simples, com arquivo:linha, separando "PROBLEMA" (precisa corrigir), "ATENÇÃO" (decidir) e "OK".
+
+Confira, nesta ordem:
+1. ESCOPO: git diff main...feat/admin-action-gate --stat. Só podem mudar: a função de confirmação, history_screen, main_personal, sessions_screen, settings_screen, testes, docs, pubspec (apenas local_auth e crypto), MainActivity.kt, AndroidManifest e Info.plist. Qualquer mudança em repositórios, match_screen, proteção offline/outbox, RLS/SQL, fórmulas ou chaves de SharedPreferences existentes é PROBLEMA.
+2. PACOTES: pubspec.yaml e pubspec.lock só ganharam local_auth e crypto (e dependências deles)? Versões compatíveis com o SDK do projeto? Nenhum outro pacote?
+3. ARQUIVOS NATIVOS:
+   - MainActivity.kt estende FlutterFragmentActivity (não FlutterActivity) e o import está certo.
+   - AndroidManifest tem USE_BIOMETRIC e nada a mais (nenhuma permissão extra).
+   - Info.plist tem NSFaceIDUsageDescription.
+   - Há tema Android que o local_auth exige (ex.: LaunchTheme/NormalTheme herdando de Theme.AppCompat/Material)? Aponte risco de crash no Android.
+   - Existem outros flavors/pastas (ex.: app público, web) com MainActivity ou manifest próprios que também precisariam do ajuste?
+4. SEGURANÇA DA FUNÇÃO (confirmAdminAction):
+   - Em TODO erro, exceção, cancelamento, timeout, sem suporte ou sem bloqueio de tela, devolve false? Existe algum caminho que devolve true sem autenticar (try/catch que engole e segue, default true, if invertido)?
+   - Modo padrão é 'device'? O que acontece se o valor salvo for lixo ou ausente?
+   - biometricOnly está false (aparelho = digital ou PIN) como decidido?
+   - Senha: hash SHA-256 com sal aleatório (Random.secure), senha nunca salva nem logada em texto (grep em debugPrint/print), comparação do hash correta, bloqueio de 30 s após 5 erros funciona e não zera ao fechar/abrir o diálogo.
+   - "Esqueci a senha" só deixa redefinir depois de autenticar pelo aparelho; sem bloqueio de tela, não deixa.
+   - Trocar de "senha" para "aparelho" ou trocar a senha exige confirmação? (Alguém com o celular desbloqueado não pode desligar a proteção sem passar por ela.) Se não exige, é PROBLEMA.
+5. USO: a confirmação é chamada ANTES da ação e o false realmente impede (lixeira, lápis, Editar e Excluir do grupo, excluir pelada)? Algum caminho chega às ações sem passar por ela (outro botão, atalho, toque longo, outra tela)? Rode um grep por deleteMatch, updatePartialMatch, deleteSession, deleteGroup, updateGroup em lib/ e liste quem chama cada um. O "0101" e qualquer senha literal sumiram de lib/ (grep "0101", "senha", "password")?
+6. CONFIGURAÇÕES: a seção só aparece para features.canAdminister(isAdmin); a escolha é por aparelho; as 3 chaves novas são as únicas novas, com os nomes combinados (admin_gate_mode, admin_gate_pass_hash, admin_gate_pass_salt); estão em docs/INVENTARIO_SHAREDPREFS.md.
+7. SITE E APP PÚBLICO: o site somente leitura não mudou de comportamento e não importa local_auth de forma que quebre o build web (kIsWeb / import condicional)? O app público continua funcionando em plataforma sem suporte (mensagem + senha)?
+8. TESTES: cobrem tudo o que o prompt da C3c pede (aparelho ok/falha/sem bloqueio; senha certa/errada/5 erros/sem senha/hash sem texto; history; configurações)? Os testes usam o autenticador falso, sem depender de biometria real? Algum teste foi enfraquecido para passar? Rode flutter analyze e flutter test e informe os números (baseline: 322 + os novos da C3a).
+9. RISCOS PARA O ENZO TESTAR NO APARELHO: liste o que só dá para ver num celular de verdade (digital, cancelar, PIN, celular sem bloqueio) e o que pode surpreender o admin (ex.: ficar sem acesso, mensagens confusas).
+
+Termine com: veredito (pode mesclar / corrigir antes) e a lista curta do que o AG precisa corrigir.
+```
 
 ---
 

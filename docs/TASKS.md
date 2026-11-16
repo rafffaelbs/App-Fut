@@ -66,10 +66,10 @@ Status: ✅ feito · 🔄 em andamento · ⏳ pendente · ⏸️ adiada · ❌ c
 | S1a | SQL da policy `players_select` (`docs/S1_players_select_rls.sql`) | S1 | ⏳ | Claude (SQL) + Enzo | S1b, instalar nos admins, backup | sem branch | — |
 | C1 | Preview "Entra:" no fim de partida (`match_screen.dart:3682-3702`) | C | ⏳ prompt pronto; exige teste de modo avião | AG | nenhuma (ordem: depois da C3a) | `fix/entering-preview` | — |
 | C2 | Nota do jogador pela história inteira | C | ✅ | Claude Code | nenhuma | `fix/rating-all-history` (já mesclada; branch removida) | 2026-11-15 (merge `027fb03`) |
-| C3 | Investigar senha e RLS do histórico (somente leitura) | C | ⏳ prompt pronto | Claude Code | C2, C4 | sem branch | — |
-| C3a | Esconder ações de edição de quem não é admin (menu ⋮ do grupo e histórico) | C | ⏳ | AG | C3 (relatório) | `fix/admin-only-actions` | — |
-| C3b | Conferir o RLS real de `matches`/`sessions` (`pg_policies`) | C | ⏳ | Enzo (roda o SQL) | C3 (SQL sai da investigação) | sem branch | — |
-| C3c | Redesenhar a senha do histórico (hoje `"0101"` fixa) | C | ⏳ a decidir | a decidir | C3 | a decidir | — |
+| C3 | Investigar senha e RLS do histórico (somente leitura) | C | ✅ | Claude Code | C2, C4 | sem branch | 2026-11-16 |
+| C3a | Esconder ações de edição de quem não é admin (menu ⋮ do grupo e histórico) | C | ⏳ prompt pronto | AG | C3 ✅, C3b ✅ | `fix/admin-only-actions` | — |
+| C3b | Conferir o RLS real de `matches`/`sessions` (`pg_policies`) | C | ✅ RLS correto: as 5 tabelas exigem `is_group_admin` | Enzo (rodou o SQL) | C3 | sem branch | 2026-11-16 |
+| C3c | Confirmação do admin (autenticação do aparelho ou senha do app) nas ações destrutivas; remove o `"0101"` | C | ⏳ prompt pronto; aprovados: pacotes `local_auth` e `crypto` e 3 chaves novas de SharedPreferences | AG | C3a | `feat/admin-action-gate` | — |
 | C4 | Atualizar os docs (este conjunto de mudanças) | C | ✅ | Claude Code | C2 | `docs/atualizacao-2026-11-15` | 2026-11-15 (commit na branch; falta o merge do Enzo) |
 | C5 | Mover `F2_T6_share_link.sql` para `docs/sql/` (sem token) | C | ⏳ | Enzo fornece o arquivo | nenhuma | `docs/share-link-sql` | — |
 | T8 | Schema drift + migrações | 3 | ⏳ | Claude | não consta | não consta | — |
@@ -81,7 +81,7 @@ Status: ✅ feito · 🔄 em andamento · ⏳ pendente · ⏸️ adiada · ❌ c
 | T14 | `custom_badges`, `MatchHistoryStore` e limpeza ao importar | 3 | ⏳ | Claude | não consta | não consta | — |
 | T15 | Build Android do app público | 3 | ⏳ | AG | não consta | não consta | — |
 
-**Ordem das frentes:** C2 ✅, C4 ✅, investigação da C3, C3a, C1, C5 (C3b e C3c quando o relatório voltar); depois as pendências da Fase 2 (F2-t1 a F2-t5) e a S1; depois a Fase 3; **T7b por último**.
+**Ordem das frentes:** C2 ✅, C4 ✅, C3 ✅, C3b ✅, C3a, C3c (depois da C3a), C1, C5; depois as pendências da Fase 2 (F2-t1 a F2-t5) e a S1; depois a Fase 3; **T7b por último**.
 
 ## Como usar
 
