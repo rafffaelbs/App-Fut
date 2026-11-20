@@ -16,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Melhor Time da Pelada:** Nova aba em `RankingScreen` com mini campo tático e estatísticas da equipe campeã da sessão.
 - **Top Rivalidades e Troféus da Resenha:** Mapeamento de duelos diretos e troféus cômicos ("Inimigo do Gol", "Pé Torto" e "Açougueiro") na temporada.
 - **Formações Táticas Padrão:** Presets táticos expandidos de 4x4 a 11x11 e nova tela `ManageFormationsScreen` com persistência via `FormationManager`.
-- **Insígnias do Rei da Virada:** Conquistas automáticas "Poder de Reação" e "Rei da Virada" em `PlayerDetailScreen`.
 - **Confirmação do administrador** nas ações destrutivas (limpar histórico, editar partida, editar/excluir grupo, excluir pelada): autenticação do aparelho (digital, PIN ou padrão) ou senha do app (hash SHA-256 com sal; bloqueio de 30 s após 5 erros). Escolha nas Configurações, por aparelho.
 - "Esqueci a senha": redefine só depois de autenticar pelo aparelho.
 

@@ -160,13 +160,10 @@ Localizados na aba individual de `SeasonStatsScreen`:
 
 ---
 
-## 7. Conquista & Badge "Rei da Virada" (`PlayerDetailScreen`)
+## 7. Estatísticas de Gols da Virada (`PlayerDetailScreen` e `SeasonStatsScreen`)
 
-No perfil do jogador (`lib/screens/player_detail.dart`):
-- A contagem de `comebackGoals` é exibida no bloco de estatísticas e no resumo avançado.
-- Adicionados badges automáticos na Sala de Troféus:
-  - **Poder de Reação:** 1 ou mais gols de virada marcados.
-  - **Rei da Virada:** 3 ou mais gols de virada marcados na trajetória.
+- A contagem de `comebackGoals` é exibida no bloco de estatísticas e no resumo avançado do perfil do jogador (`lib/screens/player_detail.dart`).
+- Exibição do pódio "Gols da Virada" na tela de estatísticas da temporada (`lib/screens/season_stats_screen.dart`).
 
 ---
 
@@ -177,13 +174,13 @@ No perfil do jogador (`lib/screens/player_detail.dart`):
 | `lib/utils/rating_calculator.dart` | Modificado | Correção matemática da detecção de virada em `findSpecialGoals`. |
 | `lib/utils/tactical_formation.dart` | Modificado | Presets táticos de 3 a 11 jogadores e `FormationManager` via `SharedPreferences`. |
 | `lib/utils/team_stats_calculator.dart` | **Novo** | Lógica de cálculo de times, histórico conjunto, melhor time da sessão e rivalidades. |
-| `lib/screens/settings_screen.dart` | Modificado | Tile de atalho para configuração de formações táticas padrão. |
+| `lib/screens/settings_screen.dart` | Modificado | Tile de atalho para configuração de formações táticas padrão e seletor de Cards vs Chips. |
 | `lib/screens/manage_formations_screen.dart` | **Novo** | Tela administrativa para escolha de formações padrão de 4x4 a 11x11. |
 | `lib/widgets/stats/team_pitch_validator.dart` | **Novo** | Widget interativo de campo tático com seletor de 2 a 11 atletas e histórico de partidas. |
-| `lib/widgets/stats/team_stats_view.dart` | **Novo** | Painel de rankings de times, filtros de tamanho, rivalidades e validador. |
-| `lib/screens/season_stats_screen.dart` | Modificado | Abas `Individual` / `Times & Parcerias`, pódio "Reis da Virada" e Troféus da Resenha. |
+| `lib/widgets/stats/team_stats_view.dart` | **Novo** | Painel de rankings de times, filtros de tamanho, rivalidades detalhadas e validador. |
+| `lib/screens/season_stats_screen.dart` | Modificado | Abas `Individual` / `Times & Parcerias`, pódio "Gols da Virada" e Troféus da Resenha. |
 | `lib/screens/ranking_screen.dart` | Modificado | Aba "Melhor Time" com mini campo e estatísticas da formação campeã da pelada. |
-| `lib/screens/player_detail.dart` | Modificado | Badges automáticos "Poder de Reação" e "Rei da Virada". |
+| `lib/screens/player_detail.dart` | Modificado | Estatísticas avançadas com contabilização de gols de virada. |
 | `test/utils/rating_calculator_test.dart` | Modificado | Testes de caracterização e caso específico para gol de virada. |
 | `test/utils/team_stats_calculator_test.dart` | **Novo** | Testes unitários para `evaluateCustomTeam`, `computeBestSessionTeam` e `computeTopRivalries`. |
 | `docs/BACKLOG.md` | Modificado | Registro da resolução do bug de viradas e adição das novas ideias no backlog. |

@@ -59,13 +59,22 @@ class _TeamStatsViewState extends State<TeamStatsView> {
                     children: [
                       Icon(Icons.sports_kabaddi, color: Colors.amber, size: 22),
                       SizedBox(width: 8),
-                      Text(
-                        'Todas as Rivalidades',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Todas as Rivalidades',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Confrontos diretos: vitórias e gols contra o rival',
+                            style: TextStyle(color: Colors.white54, fontSize: 11),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -410,7 +419,7 @@ class _TeamStatsViewState extends State<TeamStatsView> {
                         ),
                       ),
                       Text(
-                        'Confrontos diretos em times opostos',
+                        'Confrontos diretos: vitórias e gols contra o rival',
                         style: TextStyle(color: Colors.white54, fontSize: 11),
                       ),
                     ],
@@ -550,11 +559,23 @@ class _TeamStatsViewState extends State<TeamStatsView> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        '${r.p1Wins} vitórias (${r.p1Goals}g)',
+                        '${r.p1Wins} ${r.p1Wins == 1 ? 'vitória' : 'vitórias'} no duelo',
                         style: TextStyle(
-                          color: r.p1Wins > r.p2Wins ? AppColors.highlightGreen : Colors.white38,
+                          color: r.p1Wins > r.p2Wins ? AppColors.highlightGreen : Colors.white70,
                           fontSize: 10,
+                          fontWeight: r.p1Wins > r.p2Wins ? FontWeight.bold : FontWeight.normal,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '⚽ ${r.p1Goals} ${r.p1Goals == 1 ? 'gol' : 'gols'} contra este rival',
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 9,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -564,20 +585,38 @@ class _TeamStatsViewState extends State<TeamStatsView> {
           ),
 
           // Placar do Confronto Direto
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.deepBlue,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF1E3A6E)),
-            ),
-            child: Text(
-              '${r.p1Wins} x ${r.p2Wins}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.deepBlue,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF1E3A6E)),
+                  ),
+                  child: Text(
+                    '${r.p1Wins} x ${r.p2Wins}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  r.draws > 0
+                      ? '${r.matchesAgainst} jogos (${r.draws}E)'
+                      : '${r.matchesAgainst} jogos',
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 8,
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -601,11 +640,23 @@ class _TeamStatsViewState extends State<TeamStatsView> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        '${r.p2Wins} vitórias (${r.p2Goals}g)',
+                        '${r.p2Wins} ${r.p2Wins == 1 ? 'vitória' : 'vitórias'} no duelo',
                         style: TextStyle(
-                          color: r.p2Wins > r.p1Wins ? AppColors.highlightGreen : Colors.white38,
+                          color: r.p2Wins > r.p1Wins ? AppColors.highlightGreen : Colors.white70,
                           fontSize: 10,
+                          fontWeight: r.p2Wins > r.p1Wins ? FontWeight.bold : FontWeight.normal,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '⚽ ${r.p2Goals} ${r.p2Goals == 1 ? 'gol' : 'gols'} contra este rival',
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 9,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

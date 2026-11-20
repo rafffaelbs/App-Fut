@@ -17,15 +17,14 @@
 - Destaca a formação de linha que mais venceu aquela pelada específica, exibindo mini campo tático com os atletas posicionados, aproveitamento, gols e saldo.
 
 ### ⚔️ Top Rivalidades e Troféus da Resenha
-- **Maiores Duelos:** Mapeamento automático dos confrontos diretos mais frequentes entre jogadores rivais na temporada.
+- **Maiores Duelos:** Mapeamento automático dos confrontos diretos mais frequentes entre jogadores rivais na temporada, com vitórias e gols marcados especificamente contra o rival no duelo.
 - **Troféus Cômicos da Resenha:**
   - *Inimigo do Gol:* Atleta de linha com a maior sequência de partidas sem balançar as redes.
   - *Pé Torto / Traidor:* Atleta com mais gols contra marcados.
   - *Açougueiro / Xerife:* Atleta com maior acúmulo de cartões amarelos e vermelhos.
 
-### ⚡ Correção dos Gols da Virada & Conquistas
-- **Cálculo Corrigido:** Detecção matemática aprimorada em `findSpecialGoals` — o gol que coloca a equipe em vantagem após ter estado atrás no placar agora é pontuado corretamente como Gol da Virada.
-- **Novas Insígnias:** Conquistas automáticas na carta do jogador (`PlayerDetailScreen`): **Poder de Reação** (1+ virada) e **Rei da Virada** (3+ viradas), além do pódio na temporada.
+### ⚡ Correção dos Gols da Virada
+- **Cálculo Corrigido:** Detecção matemática aprimorada em `findSpecialGoals` — o gol que coloca a equipe em vantagem após ter estado atrás no placar agora é pontuado corretamente como Gol da Virada, com registro nas estatísticas e no pódio da temporada.
 
 ### 📐 Formações Táticas Padrão & Gerenciador
 - **Presets Expandidos:** Suporte tático ampliado para formações de 4x4 até 11x11 (além de 3x3).
