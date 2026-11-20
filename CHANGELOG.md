@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.1.0] - 2026-11-16
+## [3.1.0] - 2026-11-20
 
 ### Added
+- **Estatísticas de Times & Parcerias:** Nova aba em `SeasonStatsScreen` com rankings de times mais vitoriosos, mais goleadores, mais sólidos defensivamente e maior saldo de gols, com filtros de duplas a 5+.
+- **Validador Tático no Campo:** Widget `TeamPitchValidator` que simula combinações de 2 a 11 jogadores, exibindo retrospecto em tempo real e histórico de confrontos.
+- **Suporte a Cards FIFA e Chips:** Opção configurável em `SettingsScreen` e botão de alternância rápida no campinho para exibir cartas estilo FIFA ou chips com foto do atleta.
+- **Melhor Time da Pelada:** Nova aba em `RankingScreen` com mini campo tático e estatísticas da equipe campeã da sessão.
+- **Top Rivalidades e Troféus da Resenha:** Mapeamento de duelos diretos e troféus cômicos ("Inimigo do Gol", "Pé Torto" e "Açougueiro") na temporada.
+- **Formações Táticas Padrão:** Presets táticos expandidos de 4x4 a 11x11 e nova tela `ManageFormationsScreen` com persistência via `FormationManager`.
+- **Insígnias do Rei da Virada:** Conquistas automáticas "Poder de Reação" e "Rei da Virada" em `PlayerDetailScreen`.
 - **Confirmação do administrador** nas ações destrutivas (limpar histórico, editar partida, editar/excluir grupo, excluir pelada): autenticação do aparelho (digital, PIN ou padrão) ou senha do app (hash SHA-256 com sal; bloqueio de 30 s após 5 erros). Escolha nas Configurações, por aparelho.
 - "Esqueci a senha": redefine só depois de autenticar pelo aparelho.
+
+### Fixed
+- **Cálculo de Gols da Virada:** Correção em `findSpecialGoals` para detectar viradas reais após desvantagem no placar (`whiteEverLed` / `redEverLed`).
+- **Renderização de Avatares:** Correção no carregamento de fotos para suportar assets locais (`assets/icons/...`) e imagens remotas com fallback para iniciais.
 
 ### Changed
 - Ações de edição do histórico e o menu ⋮ do grupo só aparecem para o admin (C3a).
