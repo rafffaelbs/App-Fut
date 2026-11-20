@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Ponto de um jogador na metade do campo.
 ///
@@ -156,6 +157,7 @@ List<int> formationRows(int lineCount) {
   }
 }
 
+
 /// Formações alternativas de jogadores de linha (sem goleiro), da primeira
 /// (padrão, igual a [formationRows]) às demais. Cada uma soma [lineCount].
 List<List<int>> formationPresets(int lineCount) {
@@ -174,20 +176,98 @@ List<List<int>> formationPresets(int lineCount) {
         [2, 1, 2],
         [1, 2, 2],
         [1, 1, 2, 1],
+        [3, 2],
       ],
     6 => const [
         [2, 3, 1],
         [2, 2, 2],
         [3, 1, 2],
+        [2, 1, 2, 1],
       ],
     7 => const [
         [3, 2, 2],
         [2, 3, 2],
         [3, 2, 1, 1],
+        [2, 4, 1],
+      ],
+    8 => const [
+        [3, 4, 1],
+        [4, 3, 1],
+        [2, 4, 2],
+        [3, 3, 2],
+      ],
+    9 => const [
+        [3, 4, 2],
+        [4, 4, 1],
+        [3, 3, 3],
+        [4, 3, 2],
+      ],
+    10 => const [
+        [4, 3, 3],
+        [3, 5, 2],
+        [4, 2, 3, 1],
+        [4, 1, 4, 1],
+        [3, 4, 3],
+        [5, 3, 2],
+      ],
+    11 => const [
+        [4, 4, 3],
+        [4, 3, 3, 1],
+        [3, 5, 3],
+        [4, 5, 2],
       ],
     _ => const <List<int>>[],
   };
-  return [base, ...extra];
+  final all = [base, ...extra];
+  final seen = <String>{};
+  final result = <List<int>>[];
+  for (final p in all) {
+    final label = formationRowsLabel(p);
+    if (seen.add(label)) {
+      result.add(p);
+    }
+  }
+  return result;
 }
 
 String formationRowsLabel(List<int> rows) => rows.join('-');
+
+/// Gerencia a formação tática padrão selecionada pelo usuário/admin
+/// para cada número de jogadores de linha.
+class FormationManager {
+  static const String _prefPrefix = 'default_formation_';
+
+  /// Retorna a formação padrão salva para o número de jogadores [lineCount],
+  /// ou a formação padrão do sistema [formationRows] se nenhuma tiver sido salva.
+  static List<int> getPreferredFormation(int lineCount, [SharedPreferences? prefs]) {
+    if (prefs != null) {
+      final saved = prefs.getString('$_prefPrefix$lineCount');
+      if (saved != null && saved.isNotEmpty) {
+        final parsed = parseFormation(saved);
+        if (parsed != null && parsed.fold<int>(0, (a, b) => a + b) == lineCount) {
+          return parsed;
+        }
+      }
+    }
+    return formationRows(lineCount);
+  }
+
+  /// Salva a formação padrão no SharedPreferences.
+  static Future<void> setPreferredFormation(
+    int lineCount,
+    List<int> rows,
+    SharedPreferences prefs,
+  ) async {
+    await prefs.setString('$_prefPrefix$lineCount', formationRowsLabel(rows));
+  }
+
+  static List<int>? parseFormation(String label) {
+    try {
+      final parts = label.split('-').map(int.parse).toList();
+      if (parts.isEmpty || parts.any((p) => p <= 0)) return null;
+      return parts;
+    } catch (_) {
+      return null;
+    }
+  }
+}
