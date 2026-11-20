@@ -470,16 +470,14 @@ void main() {
       });
 
       test('case 2: comeback goal check with sequential 1-point goals', () {
-        // NOTE: In current implementation (lines 385-395), condition
-        // `beforeRed < beforeWhite && scoreRed > scoreWhite` is impossible with 1-point goals,
-        // so comebackGoalIndex evaluates to -1. Characterizing this actual behavior:
+        // Now properly detected: Branco leads 0-1, Vermelho ties 1-1, Vermelho scores 2-1 (comeback goal at index 2).
         final events = [
           {'type': 'goal', 'team': 'Branco', 'time': '01:00', 'playerId': 'p1'}, // 0-1
           {'type': 'goal', 'team': 'Vermelho', 'time': '02:00', 'playerId': 'p2'}, // 1-1
           {'type': 'goal', 'team': 'Vermelho', 'time': '03:00', 'playerId': 'p3'}, // 2-1
         ];
         final ctx = findSpecialGoals(events);
-        expect(ctx.comebackGoalIndex, equals(-1));
+        expect(ctx.comebackGoalIndex, equals(2));
         expect(ctx.clutchGoalIndex, equals(-1)); // at 03:00 out of 8 min (480s), clutchStart = 240s (04:00)
       });
 
@@ -495,10 +493,10 @@ void main() {
         final events = [
           {'type': 'goal', 'team': 'Vermelho', 'time': '01:00', 'playerId': 'r1'}, // 1-0
           {'type': 'goal', 'team': 'Branco', 'time': '02:00', 'playerId': 'w1'},   // 1-1
-          {'type': 'goal', 'team': 'Branco', 'time': '06:00', 'playerId': 'w2'},   // 1-2
+          {'type': 'goal', 'team': 'Branco', 'time': '06:00', 'playerId': 'w2'},   // 1-2 (comeback for Branco at index 2)
         ];
         final ctx = findSpecialGoals(events);
-        expect(ctx.comebackGoalIndex, equals(-1)); // Characterizing current -1 behavior
+        expect(ctx.comebackGoalIndex, equals(2));
         expect(ctx.clutchGoalIndex, equals(2));
       });
 
@@ -508,10 +506,10 @@ void main() {
           {'type': 'own_goal', 'team': 'Vermelho', 'time': '02:00', 'playerId': 'r1'}, // 0-2 (scored for Branco)
           {'type': 'goal', 'team': 'Vermelho', 'time': '03:00', 'playerId': 'r2'},     // 1-2
           {'type': 'goal', 'team': 'Vermelho', 'time': '04:00', 'playerId': 'r3'},     // 2-2
-          {'type': 'goal', 'team': 'Vermelho', 'time': '05:00', 'playerId': 'r4'},     // 3-2
+          {'type': 'goal', 'team': 'Vermelho', 'time': '05:00', 'playerId': 'r4'},     // 3-2 (comeback for Vermelho at index 4)
         ];
         final ctx = findSpecialGoals(events);
-        expect(ctx.comebackGoalIndex, equals(-1)); // Characterizing current -1 behavior
+        expect(ctx.comebackGoalIndex, equals(4));
         expect(ctx.clutchGoalIndex, equals(4)); // at 05:00 (300s >= 240s), diffBefore was 0 <= 1
       });
 

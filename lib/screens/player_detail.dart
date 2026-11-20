@@ -1797,6 +1797,23 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         'color': Colors.yellow,
       });
 
+    final int comebackGoals = advancedStats['comebackGoals'] ?? 0;
+    if (comebackGoals >= 3) {
+      badges.add({
+        'icon': 'assets/icons/taça.png',
+        'title': 'Rei da Virada',
+        'desc': '$comebackGoals Gols da Virada',
+        'color': AppColors.highlightGreen,
+      });
+    } else if (comebackGoals >= 1) {
+      badges.add({
+        'icon': 'assets/icons/taça.png',
+        'title': 'Poder de Reação',
+        'desc': '$comebackGoals Gol${comebackGoals > 1 ? "s" : ""} da Virada',
+        'color': Colors.tealAccent,
+      });
+    }
+
     return badges;
   }
 

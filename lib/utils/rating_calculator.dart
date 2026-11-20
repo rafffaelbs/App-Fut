@@ -383,12 +383,12 @@ GoalContext findSpecialGoals(
       goalIndices.add(i);
       if (comebackIndex == -1) {
         if (redScored &&
-            beforeRed < beforeWhite &&
+            whiteEverLed &&
             scoreRed > scoreWhite &&
             !redEverLed) {
           comebackIndex = i;
         } else if (!redScored &&
-            beforeWhite < beforeRed &&
+            redEverLed &&
             scoreWhite > scoreRed &&
             !whiteEverLed) {
           comebackIndex = i;
