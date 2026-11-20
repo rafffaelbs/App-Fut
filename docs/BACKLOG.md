@@ -56,7 +56,7 @@ Origem: `docs/DUVIDAS.md` (T0). Os testes de caracterização **travam o comport
 
 | # | Onde | O que acontece hoje | Pergunta |
 |---|---|---|---|
-| 1 | `findSpecialGoals` | `comebackIndex` é sempre -1: um gol de +1 nunca passa o rival, então a "virada" nunca é detectada | Empatar conta como virada? Qual é a regra? |
+| 1 | ✅ **Resolvido em 20/11/2026.** `findSpecialGoals` | `comebackIndex` antes era sempre -1 porque exigia antes < rival e depois > rival num único gol (+1). | Resolvido: agora rastreia se o rival liderou em algum momento prévio (`whiteEverLed` / `redEverLed`) e o gol atual coloca o time à frente pela primeira vez. Testado em `test/utils/rating_calculator_test.dart`. |
 | 2 | `kBonusTeamGoal = 0.1` | O comentário diz "desativado", mas o bônus está ativo | Só corrigir o comentário? |
 | 3 | `calculateGlobalStats` | Usa `calculateMatchRating` também para goleiros (e não `calculateGkMatchRating`) | Goleiro deveria usar a fórmula de goleiro? |
 | 4 | `calculateGlobalStats` | Passa `teamWinStreak: 0` fixo: o bônus de sequência de vitórias nunca é aplicado na nota global | Era para aplicar? |
@@ -115,3 +115,17 @@ Métodos com 0 chamadores que ficaram nas classes Supabase (ver `docs/ARCHITECTU
 - **Limpar os 14 avisos (`warning`) do `flutter analyze`:** DUVIDAS #53.
 - **Histórico da nota da comunidade** (guardar a nota anterior): ver §2.
 - **T-B5b (candidata):** apagar a partida parcial no servidor ao descartar (DUVIDAS #30).
+
+## 6. Novas Features e Ideias em Maturação (20/11/2026)
+
+- **Smart Auto-Draft / Sorteio Tático Inteligente por Overall:**
+  - *Contexto:* Hoje o app já possui sorteio balanceado com base em atributos e overalls. No entanto, peladas com formações fixas (ex.: 5x5, 7x7) demandam balanceamento setorial (distribuir zagueiros, meias e atacantes de peso similar, considerando que goleiros normalmente são fixos ou rotativos/convidados).
+  - *Ideia para maturação:* Permitir que ao sortear times para a sessão, o algoritmo atribua posições recomendadas na formação tática padrão configurada (ex: `1-2-1` no futsal ou `2-3-1` no society), minimizando desbalanceamento posicional e preservando a flexibilidade de goleiro convidado.
+
+- **Gerador de Cards para Redes Sociais (WhatsApp & Instagram Stories):**
+  - *Contexto:* Ao final da pelada, os participantes gostam de compartilhar quem ganhou, quem foi o artilheiro, melhor goleiro e a escalação do time campeão.
+  - *Ideia:* Utilizar `RepaintBoundary` + renderizador de imagem (ou biblioteca de print/canvas) com layouts modernos e temas escuros/dourados no padrão 9:16 (Stories) e 1:1 (WhatsApp), incluindo o Melhor Time da Pelada, pódio de notas e estatísticas cômicas ("Inimigo do Gol", "Açougueiro").
+
+- **Confirmação de Presença e Lista de Espera da Pelada:**
+  - *Contexto:* Organização pré-jogo onde mensais e diaristas confirmam presença durante a semana.
+  - *Ideia:* Tela de check-in vinculada à sessão, com limite de vagas na linha e no gol, e fila de espera automática que promove o próximo quando alguém desiste.

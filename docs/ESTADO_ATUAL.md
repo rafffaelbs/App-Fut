@@ -8,6 +8,19 @@
 
 ---
 
+## Atualização de 20/11/2026 (Estatísticas de Times, Validador Tático, Correção de Gols de Virada e Formações Padrão)
+
+> **Situação:** Novas funcionalidades avançadas de estatísticas coletivas implementadas e documentadas em `docs/FEATURE_ESTATISTICAS_TIMES.md`. A suíte conta agora com **354 testes passando** e zero erros no `dart analyze`.
+> 
+> As seguintes entregas foram concluídas:
+> - **Correção de Gols da Virada:** Correção matemática em `findSpecialGoals` com rastreamento de vantagem prévia (`whiteEverLed` / `redEverLed`). Novos badges "Poder de Reação" e "Rei da Virada" em `PlayerDetailScreen` e pódio na temporada.
+> - **Estatísticas de Times & Validador Tático:** Novo calculador `TeamStatsCalculator`, aba de "Times & Parcerias" em `SeasonStatsScreen`, validador de times em campo tático (`TeamPitchValidator`) de 2 a 11 atletas e histórico de confrontos e rivalidades.
+> - **Melhor Time da Pelada:** Nova aba em `RankingScreen` com mini campo tático e métricas da formação campeã da sessão.
+> - **Formações Táticas Padrão:** Presets táticos ampliados de 4x4 a 11x11, persistência via `FormationManager` e nova tela administrativa `ManageFormationsScreen`.
+> - **Opção Cards vs Chips & Correção de Avatares:** Correção do carregamento de avatares locais e remotos nos cards e chips, e inclusão de seletor `SegmentedButton` nas configurações (`SettingsScreen`).
+
+---
+
 ## Atualização de 15/11/2026 (Fase 2 e Tarefas Estéticas E1 concluídas)
 
 > **Situação:** A Fase 2 (site somente leitura no Cloudflare Pages) foi finalizada e publicada em `https://app-fut-site.pages.dev/fut`. A suíte conta agora com **320 testes passando** e zero erros no `flutter analyze`.
