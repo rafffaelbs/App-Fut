@@ -9,6 +9,7 @@ import 'admin_debug_screen.dart';
 import 'manage_members_screen.dart';
 import 'manage_seasons_screen.dart';
 import 'manage_join_requests_screen.dart';
+import 'manage_formations_screen.dart';
 import '../services/admin_action_gate.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -642,6 +643,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
+                  _buildNavigationTile(
+                    icon: Icons.sports_soccer,
+                    iconColor: AppColors.highlightGreen,
+                    title: 'Formações Táticas Padrão',
+                    subtitle: 'Definir formações do campinho por tamanho de time (4x4 a 11x11)',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ManageFormationsScreen(groupId: widget.groupId),
+                        ),
+                      );
+                    },
+                  ),
                   if (features.hasMembershipManagement)
                     _buildNavigationTile(
                       icon: Icons.how_to_reg,
@@ -714,21 +730,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     await prefs.setBool('require_gk', val);
                   },
                 ),
-                _buildSwitchCard(
-                  icon: Icons.badge_outlined,
-                  title: 'Formato dos Jogadores no Campo',
-                  subtitle:
-                      'Ligado: cards estilo FIFA. Desligado: chips com foto (padrão)',
-                  value: _useCards,
-                  onChanged: (val) async {
-                    setState(() => _useCards = val);
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('pitch_use_cards', val);
-                    await prefs.setBool('pitch_use_chips', !val);
-                  },
-                ),
+                _buildPitchDisplayFormatCard(),
               ],
             ),
+    );
+  }
+
+  Widget _buildPitchDisplayFormatCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.headerBlue,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.accentBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.style_outlined, color: AppColors.accentBlue, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Visualização no Campo Tático',
+                      style: TextStyle(
+                        color: AppColors.textWhite,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Escolha entre cards estilo FIFA ou chips circulares com foto.',
+                      style: TextStyle(color: AppColors.textDim, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('Chips'),
+                  icon: Icon(Icons.account_circle_outlined, size: 16),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Cards FIFA'),
+                  icon: Icon(Icons.view_carousel_outlined, size: 16),
+                ),
+              ],
+              selected: {_useCards},
+              onSelectionChanged: (set) async {
+                if (set.isNotEmpty) {
+                  final val = set.first;
+                  setState(() => _useCards = val);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('pitch_use_cards', val);
+                  await prefs.setBool('pitch_use_chips', !val);
+                }
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return AppColors.accentBlue;
+                  }
+                  return AppColors.deepBlue;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return Colors.white;
+                  }
+                  return AppColors.textDim;
+                }),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

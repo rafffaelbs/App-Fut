@@ -425,10 +425,18 @@ class _PlayerPhoto extends StatelessWidget {
         );
 
     final Widget image = (iconPath != null && iconPath!.isNotEmpty)
-        ? Image.asset(iconPath!,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => fallback())
+        ? (iconPath!.startsWith('http://') || iconPath!.startsWith('https://')
+            ? Image.network(
+                iconPath!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => fallback(),
+              )
+            : Image.asset(
+                iconPath!,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, _, _) => fallback(),
+              ))
         : fallback();
 
     return GestureDetector(
