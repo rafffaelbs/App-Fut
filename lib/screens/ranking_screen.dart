@@ -13,6 +13,9 @@ import '../theme/app_theme.dart';
 import '../widgets/shared/ranking_player_bits.dart';
 import '../widgets/shared/stars_badge.dart';
 import 'package:app_do_fut/app/app_services.dart';
+import '../models/match_model.dart';
+import '../utils/team_stats_calculator.dart';
+import '../utils/tactical_formation.dart';
 
 class RankingScreen extends StatefulWidget {
   final String groupId;
@@ -31,7 +34,10 @@ class RankingScreen extends StatefulWidget {
 class _RankingScreenState extends State<RankingScreen> {
   List<Map<String, dynamic>> leaderboard = [];
   List<Map<String, dynamic>> gkLeaderboard = [];
-  bool _showGkRanking = false;
+  int _selectedTab = 0; // 0: Linha, 1: Goleiros, 2: Melhor Time
+  TeamStats? _bestTeam;
+  Map<String, String> _playerNames = {};
+  Map<String, String?> _playerIcons = {};
   bool isLoading = true;
   bool _isSharingScreenshot = false;
 
@@ -132,6 +138,9 @@ class _RankingScreenState extends State<RankingScreen> {
     try {
       final matchList = await AppServices.instance.matches.getMatchesBySession(widget.tournamentId);
       if (matchList.isNotEmpty) {
+        _bestTeam = TeamStatsCalculator.computeBestSessionTeam(matchList);
+        _playerNames = idToNameMap;
+        _playerIcons = iconMap;
         history = matchList.map((p) => {
           'id': p.id,
           'date': p.startTime?.toIso8601String() ?? p.timestamp.toIso8601String(),
@@ -1569,20 +1578,20 @@ class _RankingScreenState extends State<RankingScreen> {
       ),
       body: Column(
         children: [
-          // ── Linha / Goleiros toggle ────────────────────────────
+          // ── Linha / Goleiros / Melhor Time toggle ────────────
           Container(
             color: AppColors.headerBlue,
             child: Row(
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _showGkRanking = false),
+                    onTap: () => setState(() => _selectedTab = 0),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: !_showGkRanking
+                            color: _selectedTab == 0
                                 ? AppColors.accentBlue
                                 : Colors.transparent,
                             width: 2,
@@ -1593,9 +1602,9 @@ class _RankingScreenState extends State<RankingScreen> {
                       child: Text(
                         'Linha',
                         style: TextStyle(
-                          color: !_showGkRanking
-                              ? AppColors.textWhite
-                              : Colors.white54,
+                          color: _selectedTab == 0
+                                ? AppColors.textWhite
+                                : Colors.white54,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1604,13 +1613,13 @@ class _RankingScreenState extends State<RankingScreen> {
                 ),
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _showGkRanking = true),
+                    onTap: () => setState(() => _selectedTab = 1),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: _showGkRanking
+                            color: _selectedTab == 1
                                 ? AppColors.accentBlue
                                 : Colors.transparent,
                             width: 2,
@@ -1621,11 +1630,50 @@ class _RankingScreenState extends State<RankingScreen> {
                       child: Text(
                         'Goleiros',
                         style: TextStyle(
-                          color: _showGkRanking
-                              ? AppColors.textWhite
-                              : Colors.white54,
+                          color: _selectedTab == 1
+                                ? AppColors.textWhite
+                                : Colors.white54,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _selectedTab = 2),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _selectedTab == 2
+                                ? AppColors.accentBlue
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.emoji_events,
+                            size: 15,
+                            color: _selectedTab == 2 ? Colors.amber : Colors.white54,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Melhor Time',
+                            style: TextStyle(
+                              color: _selectedTab == 2
+                                    ? AppColors.textWhite
+                                    : Colors.white54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1636,9 +1684,11 @@ class _RankingScreenState extends State<RankingScreen> {
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _showGkRanking
-                ? _buildGkRankingView()
-                : _buildFieldRankingView(),
+                : _selectedTab == 0
+                    ? _buildFieldRankingView()
+                    : _selectedTab == 1
+                        ? _buildGkRankingView()
+                        : _buildBestTeamView(),
           ),
         ],
       ),
@@ -2300,6 +2350,379 @@ class _RankingScreenState extends State<RankingScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBestTeamView() {
+    if (_bestTeam == null || _bestTeam!.matches == 0) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('🏆', style: TextStyle(fontSize: 40)),
+              SizedBox(height: 12),
+              Text(
+                'Nenhum time completou partidas suficientes',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'As estatísticas do melhor time serão exibidas assim que as partidas forem concluídas.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final team = _bestTeam!;
+    final lineCount = team.playerIds.length > 1 ? team.playerIds.length - 1 : 1;
+    final formation = formationRows(lineCount);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Card Principal
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.headerBlue,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.amber.withValues(alpha: 0.6), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.amber.withValues(alpha: 0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text('🏆', style: TextStyle(fontSize: 26)),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Melhor Time da Pelada',
+                          style: TextStyle(
+                            color: Colors.amber,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'A formação de linha mais vitoriosa do dia',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 12),
+
+              // Lista de Jogadores do Time Campeão
+              const Text(
+                'ESCALAÇÃO CAMPEÃ',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final pid in team.playerIds)
+                    _buildBestTeamPlayerChip(pid, team.playerGoals[pid] ?? 0),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Métricas da Pelada
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricMiniCard(
+                      label: 'Vitórias',
+                      value: '${team.wins}',
+                      sub: 'em ${team.matches} jogos (${team.winRate.toStringAsFixed(0)}%)',
+                      color: AppColors.highlightGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMetricMiniCard(
+                      label: 'Gols Pró',
+                      value: '${team.goalsFor}',
+                      sub: '${team.goalsForAvg.toStringAsFixed(1)} por partida',
+                      color: AppColors.accentBlue,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricMiniCard(
+                      label: 'Saldo de Gols',
+                      value: '${team.goalDiff >= 0 ? '+' : ''}${team.goalDiff}',
+                      sub: '${team.goalsAgainst} sofridos',
+                      color: team.goalDiff >= 0 ? AppColors.highlightGreen : Colors.redAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMetricMiniCard(
+                      label: 'Clean Sheets',
+                      value: '${team.cleanSheets}',
+                      sub: 'jogos sem sofrer gol',
+                      color: Colors.amber,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Mini Campinho Tático
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.headerBlue,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E3A6E)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.stadium, color: AppColors.highlightGreen, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Campinho Tático do Dia',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    formationRowsLabel(formation),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF184E28),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Center(
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final pid in team.playerIds)
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: AppColors.deepBlue,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.amber, width: 1.5),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              alignment: Alignment.center,
+                              child: _buildAvatarImage(pid, size: 38),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              constraints: const BoxConstraints(maxWidth: 60),
+                              child: Text(
+                                _playerNames[pid] ?? pid,
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatarImage(String pid, {double size = 38}) {
+    final icon = _playerIcons[pid];
+    final initial = (_playerNames[pid] ?? pid).isNotEmpty
+        ? (_playerNames[pid] ?? pid).substring(0, 1).toUpperCase()
+        : '?';
+
+    if (icon != null && icon.isNotEmpty) {
+      if (icon.startsWith('http://') || icon.startsWith('https://')) {
+        return Image.network(
+          icon,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildFallbackInitial(initial),
+        );
+      } else {
+        return Image.asset(
+          icon,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildFallbackInitial(initial),
+        );
+      }
+    }
+    return _buildFallbackInitial(initial);
+  }
+
+  Widget _buildFallbackInitial(String initial) {
+    return Text(
+      initial,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+      ),
+    );
+  }
+
+  Widget _buildBestTeamPlayerChip(String pid, int goals) {
+    final name = _playerNames[pid] ?? pid;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.deepBlue,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF1E3A6E)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSubtle,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.amber, width: 1),
+            ),
+            clipBehavior: Clip.antiAlias,
+            alignment: Alignment.center,
+            child: _buildAvatarImage(pid, size: 20),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+          if (goals > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '⚽ $goals',
+                style: const TextStyle(
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricMiniCard({
+    required String label,
+    required String value,
+    required String sub,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.deepBlue,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF1E3A6E)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(sub, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+        ],
       ),
     );
   }

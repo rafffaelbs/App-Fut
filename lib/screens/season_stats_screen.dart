@@ -15,6 +15,7 @@ import 'package:app_do_fut/widgets/stats/evolution_chart.dart';
 import 'package:app_do_fut/widgets/stats/full_ranking_sheet.dart';
 import 'package:app_do_fut/widgets/stats/stat_board_card.dart';
 import 'package:app_do_fut/widgets/stats/stat_row.dart';
+import 'package:app_do_fut/widgets/stats/team_stats_view.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -51,6 +52,7 @@ enum StatKey {
   cards,
   hatTricks,
   clutchGoals,
+  comebackGoals,
   gkWins,
   gkCleanSheets,
   gkGoalsConcededAvg,
@@ -92,6 +94,7 @@ class PlayerStatsAgg {
   int redCards = 0;
   int hatTricks = 0;
   int clutchGoals = 0;
+  int comebackGoals = 0;
 
   // Goalkeeper
   int gkGames = 0;
@@ -140,6 +143,8 @@ class PlayerStatsAgg {
         return hatTricks.toDouble();
       case StatKey.clutchGoals:
         return clutchGoals.toDouble();
+      case StatKey.comebackGoals:
+        return comebackGoals.toDouble();
       case StatKey.gkWins:
         return gkWins.toDouble();
       case StatKey.gkCleanSheets:
@@ -179,6 +184,7 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
   List<SeasonModel> _allSeasons = [];
   List<PlayerStatsAgg> stats = [];
   List<DuoStat> dynamicDuos = [];
+  int _statsTab = 0; // 0 = Individual, 1 = Times & Parcerias
 
   // Filtro
   String _selectedPeriodKey = 'all'; // 'all', 'last', 'month', 'year', 'custom', or seasonId
@@ -416,6 +422,28 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
       matchGoals.forEach((id, count) {
         if (count >= 3) map[id]?.hatTricks += 1;
       });
+
+      // Detecção de Gols da Virada
+      final feEvents = p.events.map<Map<String, dynamic>>((ev) {
+        final isRed = p.lineups.any((l) => l.playerId == ev.playerId && l.isRed) ||
+            (ev.team?.toLowerCase().contains('red') ?? false) ||
+            (ev.team?.toLowerCase().contains('vermelho') ?? false);
+        return {
+          'type': ev.eventType,
+          'team': isRed ? 'Vermelho' : 'Branco',
+          'time': ev.minute ?? '00:00',
+          'playerId': ev.playerId,
+        };
+      }).toList();
+
+      final GoalContext special = findSpecialGoals(feEvents);
+      if (special.comebackGoalIndex >= 0 &&
+          special.comebackGoalIndex < feEvents.length) {
+        final pid = feEvents[special.comebackGoalIndex]['playerId'];
+        if (pid != null && pid.isNotEmpty) {
+          map[pid]?.comebackGoals += 1;
+        }
+      }
 
       for (final e in p.lineups) {
         map.putIfAbsent(e.playerId, () => PlayerStatsAgg(e.player ?? playersMap[e.playerId] ?? PlayerModel(id: e.playerId, name: e.playerId)));
@@ -1682,6 +1710,204 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
     );
   }
 
+  Widget _buildViewTypeToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _Vs.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _Vs.border),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _statsTab = 0),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _statsTab == 0 ? _Vs.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person,
+                      size: 18,
+                      color: _statsTab == 0 ? Colors.white : _Vs.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Individual',
+                      style: TextStyle(
+                        color: _statsTab == 0 ? Colors.white : _Vs.textMuted,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _statsTab = 1),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _statsTab == 1 ? _Vs.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.groups_rounded,
+                      size: 18,
+                      color: _statsTab == 1 ? Colors.white : _Vs.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Times & Parcerias',
+                      style: TextStyle(
+                        color: _statsTab == 1 ? Colors.white : _Vs.textMuted,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComicTrophiesSection() {
+    // 1. Inimigo do Gol (mais partidas com 0 gols)
+    final zeroGoalPlayers = stats.where((s) => s.matches > 0 && s.goals == 0).toList()
+      ..sort((a, b) => b.matches.compareTo(a.matches));
+    final inimigo = zeroGoalPlayers.isNotEmpty ? zeroGoalPlayers.first : null;
+
+    // 2. Pé Torto / Traidor (mais gols contra)
+    final ownGoalPlayers = stats.where((s) => s.ownGoals > 0).toList()
+      ..sort((a, b) => b.ownGoals.compareTo(a.ownGoals));
+    final peTorto = ownGoalPlayers.isNotEmpty ? ownGoalPlayers.first : null;
+
+    // 3. Açougueiro / Xerife (mais cartões)
+    final cardPlayers = stats.where((s) => (s.yellowCards + s.redCards) > 0).toList()
+      ..sort((a, b) => (b.yellowCards + b.redCards).compareTo(a.yellowCards + a.redCards));
+    final acougueiro = cardPlayers.isNotEmpty ? cardPlayers.first : null;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _Vs.panel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _Vs.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Text('🎭', style: TextStyle(fontSize: 20)),
+              SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Troféus da Resenha',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Estatísticas descontraídas pós-jogo',
+                    style: TextStyle(color: _Vs.textMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildComicTile(
+            emoji: '🛑',
+            title: 'Inimigo do Gol (Seca)',
+            description: inimigo != null
+                ? '${inimigo.player.name} (${inimigo.matches} ${inimigo.matches == 1 ? 'partida' : 'partidas'} na seca)'
+                : 'Nenhum jogador na seca! Todo mundo marcou 🎉',
+            color: Colors.orangeAccent,
+          ),
+          const Divider(color: Colors.white10, height: 16),
+          _buildComicTile(
+            emoji: '🤡',
+            title: 'Pé Torto / Traidor',
+            description: peTorto != null
+                ? '${peTorto.player.name} (${peTorto.ownGoals} ${peTorto.ownGoals == 1 ? 'gol contra' : 'gols contra'})'
+                : 'Ninguém marcou contra! Pontaria calibrada 🎯',
+            color: Colors.redAccent,
+          ),
+          const Divider(color: Colors.white10, height: 16),
+          _buildComicTile(
+            emoji: '🥩',
+            title: 'Açougueiro / Xerife',
+            description: acougueiro != null
+                ? '${acougueiro.player.name} (${acougueiro.cards} ${acougueiro.cards == 1 ? 'cartão' : 'cartões'})'
+                : 'Pelada da paz! Nenhum cartão tomado 🕊️',
+            color: Colors.amber,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComicTile({
+    required String emoji,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+          ),
+          child: Text(emoji, style: const TextStyle(fontSize: 18)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -1700,147 +1926,169 @@ class _SeasonStatsScreenState extends State<SeasonStatsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
             _buildFilterBar(),
+            const SizedBox(height: 12),
+            _buildViewTypeToggle(),
             const SizedBox(height: 16),
 
-            // 1. Rankings (General Ranking com Pódio Top 3, Top 4-8 e Ver Todos)
-            _buildGeneralRankingSection(),
-            const SizedBox(height: 24),
+            if (_statsTab == 1) ...[
+              TeamStatsView(
+                players: _allPlayers,
+                matches: _filteredPartidas,
+                playerMaps: _playerMaps,
+              ),
+            ] else ...[
+              // 1. Rankings (General Ranking com Pódio Top 3, Top 4-8 e Ver Todos)
+              _buildGeneralRankingSection(),
+              const SizedBox(height: 24),
 
-            // Divisor: Desempenho Geral & Quadros
-            const Divider(color: _Vs.border),
-            const SizedBox(height: 12),
-            const Row(
-              children: [
-                Icon(Icons.insights, color: _Vs.accentLight, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Desempenho Geral & Quadros',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              // Divisor: Desempenho Geral & Quadros
+              const Divider(color: _Vs.border),
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  Icon(Icons.insights, color: _Vs.accentLight, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Desempenho Geral & Quadros',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
+                ],
+              ),
+              const SizedBox(height: 14),
 
-            // Evolução de Desempenho (6 meses fixos, ignora o filtro de período)
-            EvolutionChartCard(
-              players: _playerMapList,
-              matches: _allMatches,
-              now: _now,
-            ),
-            const SizedBox(height: 16),
+              // Evolução de Desempenho (6 meses fixos, ignora o filtro de período)
+              EvolutionChartCard(
+                players: _playerMapList,
+                matches: _allMatches,
+                now: _now,
+              ),
+              const SizedBox(height: 16),
 
-            // Quadros: Gols Contra, Nota Média, Taxa de Vitórias, Duplas
-            _buildBoards(),
-            const SizedBox(height: 24),
+              // Quadros: Gols Contra, Nota Média, Taxa de Vitórias, Duplas
+              _buildBoards(),
+              const SizedBox(height: 24),
 
-            // Divisor: Pódios por Categoria
-            const Divider(color: _Vs.border),
-            const SizedBox(height: 12),
-            const Row(
-              children: [
-                Icon(Icons.military_tech, color: _Vs.accentLight, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Pódios por Categoria',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              // Divisor: Troféus da Resenha
+              const Divider(color: _Vs.border),
+              const SizedBox(height: 12),
+              _buildComicTrophiesSection(),
+              const SizedBox(height: 24),
+
+              // Divisor: Pódios por Categoria
+              const Divider(color: _Vs.border),
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  Icon(Icons.military_tech, color: _Vs.accentLight, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pódios por Categoria',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Pódios Principais
+              _buildPodiumSection(
+                title: 'Gols + Assistências',
+                key: StatKey.ga,
+                label: 'G+A',
+              ),
+              _buildPodiumSection(
+                title: 'Artilharia',
+                key: StatKey.goals,
+                label: 'Gols',
+              ),
+              _buildPodiumSection(
+                title: 'Assistências',
+                key: StatKey.assists,
+                label: 'Assist.',
+              ),
+              _buildPodiumSection(
+                title: 'Mais Partidas Jogadas',
+                key: StatKey.matches,
+                label: 'Partidas',
+              ),
+              _buildPodiumSection(
+                title: 'Mais Cartões',
+                key: StatKey.cards,
+                label: 'Cartões',
+              ),
+              _buildPodiumSection(
+                title: 'Hat Tricks',
+                key: StatKey.hatTricks,
+                label: 'HT',
+              ),
+              _buildPodiumSection(
+                title: 'Gols Decisivos',
+                subtitle: 'Gols de desempate no último minuto da partida',
+                key: StatKey.clutchGoals,
+                label: 'Decisivos',
+              ),
+              _buildPodiumSection(
+                title: 'Gols da Virada',
+                subtitle: 'Gols que colocaram o time na frente após estar perdendo',
+                key: StatKey.comebackGoals,
+                label: 'Viradas',
+              ),
+
+              // Goalkeepers (Walls)
+              if (hasGkData) ...[
+                const SizedBox(height: 12),
+                const Divider(color: _Vs.border),
+                const SizedBox(height: 12),
+                const Row(
+                  children: [
+                    Text('🧤', style: TextStyle(fontSize: 20)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Paredões (Goleiros)',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildPodiumSection(
+                  title: 'Luva de Ouro (Nota)',
+                  key: StatKey.gkRating,
+                  label: 'Nota',
+                  isGoalkeeper: true,
+                  isFloat: true,
+                ),
+                _buildPodiumSection(
+                  title: 'Mais Vitórias (Goleiros)',
+                  key: StatKey.gkWins,
+                  label: 'Vitórias',
+                  isGoalkeeper: true,
+                ),
+                _buildPodiumSection(
+                  title: 'Clean Sheets',
+                  key: StatKey.gkCleanSheets,
+                  label: 'Clean Sheets',
+                  isGoalkeeper: true,
+                ),
+                _buildPodiumSection(
+                  title: 'Gols Sofridos (Média)',
+                  key: StatKey.gkGoalsConcededAvg,
+                  label: 'Gols/Jogo',
+                  isGoalkeeper: true,
+                  isFloat: true,
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
+            ],
 
-          // 7 Pódios Principais
-          _buildPodiumSection(
-            title: 'Gols + Assistências',
-            key: StatKey.ga,
-            label: 'G+A',
-          ),
-          _buildPodiumSection(
-            title: 'Artilharia',
-            key: StatKey.goals,
-            label: 'Gols',
-          ),
-          _buildPodiumSection(
-            title: 'Assistências',
-            key: StatKey.assists,
-            label: 'Assist.',
-          ),
-          _buildPodiumSection(
-            title: 'Mais Partidas Jogadas',
-            key: StatKey.matches,
-            label: 'Partidas',
-          ),
-          _buildPodiumSection(
-            title: 'Mais Cartões',
-            key: StatKey.cards,
-            label: 'Cartões',
-          ),
-          _buildPodiumSection(
-            title: 'Hat Tricks',
-            key: StatKey.hatTricks,
-            label: 'HT',
-          ),
-          _buildPodiumSection(
-            title: 'Gols Decisivos',
-            subtitle: 'Gols de desempate no último minuto da partida',
-            key: StatKey.clutchGoals,
-            label: 'Decisivos',
-          ),
-
-          // Goalkeepers (Walls)
-          if (hasGkData) ...[
-            const SizedBox(height: 12),
-            const Divider(color: _Vs.border),
-            const SizedBox(height: 12),
-            const Row(
-              children: [
-                Text('🧤', style: TextStyle(fontSize: 20)),
-                SizedBox(width: 8),
-                Text(
-                  'Paredões (Goleiros)',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildPodiumSection(
-              title: 'Luva de Ouro (Nota)',
-              key: StatKey.gkRating,
-              label: 'Nota',
-              isGoalkeeper: true,
-              isFloat: true,
-            ),
-            _buildPodiumSection(
-              title: 'Mais Vitórias (Goleiros)',
-              key: StatKey.gkWins,
-              label: 'Vitórias',
-              isGoalkeeper: true,
-            ),
-            _buildPodiumSection(
-              title: 'Clean Sheets',
-              key: StatKey.gkCleanSheets,
-              label: 'Clean Sheets',
-              isGoalkeeper: true,
-            ),
-            _buildPodiumSection(
-              title: 'Gols Sofridos (Média)',
-              key: StatKey.gkGoalsConcededAvg,
-              label: 'Gols/Jogo',
-              isGoalkeeper: true,
-              isFloat: true,
-            ),
+            const SizedBox(height: 32),
           ],
-
-          const SizedBox(height: 32),
-        ],
-      ),
+        ),
       ),
     );
   }
